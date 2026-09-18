@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useLanguage } from "@/lib/contexts/language";
 import { useAuth } from "@/lib/contexts/auth";
+import { GoogleButton } from "@/components/auth/GoogleButton";
 import { Globe, RefreshCw, Eye, EyeOff } from "lucide-react";
 
 export default function SignUpPage() {
@@ -147,6 +148,16 @@ export default function SignUpPage() {
             {loading ? t("signing_up") : t("create_account")}
           </button>
         </form>
+
+        {/* Google sign-up */}
+        <div className="mt-5">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="flex-1 border-t border-afya-border" aria-hidden="true" />
+            <span className="text-xs text-afya-muted">{t("or_label")}</span>
+            <div className="flex-1 border-t border-afya-border" aria-hidden="true" />
+          </div>
+          <GoogleButton />
+        </div>
 
         <p className="text-center text-sm text-afya-muted mt-5">
           {t("already_have_account")}{" "}

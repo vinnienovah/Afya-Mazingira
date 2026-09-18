@@ -10,8 +10,12 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
-  password_hash: text("password_hash").notNull(),
-  password_salt: text("password_salt").notNull(),
+  // Nullable: Google-authenticated users have no local password.
+  password_hash: text("password_hash"),
+  password_salt: text("password_salt"),
+  google_id: text("google_id").unique(),
+  avatar_url: text("avatar_url"),
+  auth_provider: text("auth_provider").notNull().default("password"), // "password" | "google"
   language: text("language").notNull().default("en"),
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
