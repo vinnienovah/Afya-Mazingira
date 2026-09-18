@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useLanguage } from "@/lib/contexts/language";
 import { useAuth } from "@/lib/contexts/auth";
+import { GoogleButton } from "@/components/auth/GoogleButton";
 import { Globe, RefreshCw, Eye, EyeOff } from "lucide-react";
 
 const DEMO_EMAIL = "demo@afyahewa.dev";
@@ -20,6 +21,15 @@ export default function SignInPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
+
+  // Read the OAuth redirect's ?error= without useSearchParams (avoids a
+  // Suspense boundary requirement for this static auth page).
+  useEffect(() => {
+    const oauthError = new URLSearchParams(window.location.search).get("error");
+    if (oauthError === "google_auth_failed") setError(t("error_google_auth"));
+    else if (oauthError === "google_not_configured") setError(t("error_google_not_configured"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -172,6 +182,16 @@ export default function SignInPage() {
             {loading ? t("signing_in") : t("sign_in")}
           </button>
         </form>
+
+        {/* Google sign-in */}
+        <div className="mt-5">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="flex-1 border-t border-afya-border" aria-hidden="true" />
+            <span className="text-xs text-afya-muted">{t("or_label")}</span>
+            <div className="flex-1 border-t border-afya-border" aria-hidden="true" />
+          </div>
+          <GoogleButton />
+        </div>
 
         {/* Demo account */}
         <div className="mt-5">

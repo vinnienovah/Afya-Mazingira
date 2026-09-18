@@ -10,5 +10,7 @@ export async function GET() {
     email: user.email,
     language: user.language,
     created_at: user.created_at,
+    avatar_url: user.avatar_url,
+    auth_provider: user.auth_provider,
   });
 }

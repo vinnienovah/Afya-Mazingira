@@ -20,7 +20,12 @@ export async function POST(req: NextRequest) {
     const { email, password } = parsed.data;
 
     const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
-    if (!user || !verifyPassword(password, user.password_hash, user.password_salt)) {
+    if (!user || !user.password_hash || !user.password_salt) {
+      // Either no account, or the account was created via Google sign-in
+      // and has no local password to check against.
+      return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
+    }
+    if (!verifyPassword(password, user.password_hash, user.password_salt)) {
       return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
     }
 

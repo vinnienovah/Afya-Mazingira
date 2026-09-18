@@ -8,6 +8,8 @@ export interface AuthUser {
   email: string;
   language: string;
   created_at: string;
+  avatar_url?: string | null;
+  auth_provider?: string;
 }
 
 interface AuthContextValue {

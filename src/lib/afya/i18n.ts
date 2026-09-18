@@ -332,6 +332,9 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     demo_account: "Demo Account",
     use_demo: "Use Demo Account",
     or_label: "or",
+    continue_with_google: "Continue with Google",
+    error_google_auth: "Google sign-in failed. Please try again.",
+    error_google_not_configured: "Google sign-in isn't set up yet.",
     protected_route: "Sign in to access this page",
     notifications_demo: "Demo: Notification rules configured",
 
@@ -768,6 +771,9 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     demo_account: "Akaunti ya Onyo",
     use_demo: "Tumia Akaunti ya Onyo",
     or_label: "au",
+    continue_with_google: "Endelea na Google",
+    error_google_auth: "Kuingia na Google kumeshindikana. Tafadhali jaribu tena.",
+    error_google_not_configured: "Kuingia na Google bado hakujawekwa.",
     protected_route: "Ingia ili kupata ukurasa huu",
     notifications_demo: "Onyo: Kanuni za arifa zimesanidiwa",
 
