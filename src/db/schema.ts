@@ -17,8 +17,22 @@ export const users = pgTable("users", {
   avatar_url: text("avatar_url"),
   auth_provider: text("auth_provider").notNull().default("password"), // "password" | "google"
   language: text("language").notNull().default("en"),
+  email_verified: boolean("email_verified").notNull().default(false),
+  email_verified_at: timestamp("email_verified_at", { withTimezone: true }),
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ─── Email verification tokens ─────────────────────────────────────────────────
+export const emailVerificationTokens = pgTable("email_verification_tokens", {
+  id: serial("id").primaryKey(),
+  token: text("token").notNull().unique(),
+  user_id: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  expires_at: timestamp("expires_at", { withTimezone: true }).notNull(),
+  consumed_at: timestamp("consumed_at", { withTimezone: true }),
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("evt_user_idx").on(t.user_id),
+]);
 
 export const sessions = pgTable("sessions", {
   id: serial("id").primaryKey(),

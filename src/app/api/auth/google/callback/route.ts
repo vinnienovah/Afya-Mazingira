@@ -33,11 +33,15 @@ export async function GET(req: NextRequest) {
     if (!user) {
       const [byEmail] = await db.select().from(users).where(eq(users.email, profile.email)).limit(1);
       if (byEmail) {
+        // Google has already verified this address, even if the existing
+        // password account had not been verified yet.
         [user] = await db
           .update(users)
           .set({
             google_id: profile.sub,
             avatar_url: profile.picture ?? byEmail.avatar_url,
+            email_verified: true,
+            email_verified_at: byEmail.email_verified_at ?? new Date(),
           })
           .where(eq(users.id, byEmail.id))
           .returning();
@@ -50,6 +54,8 @@ export async function GET(req: NextRequest) {
             google_id: profile.sub,
             avatar_url: profile.picture ?? null,
             auth_provider: "google",
+            email_verified: true,
+            email_verified_at: new Date(),
           })
           .returning();
         await db.insert(userPreferences).values({ user_id: user.id });

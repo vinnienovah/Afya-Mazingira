@@ -28,6 +28,9 @@ export async function POST(req: NextRequest) {
     if (!verifyPassword(password, user.password_hash, user.password_salt)) {
       return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
     }
+    if (!user.email_verified) {
+      return NextResponse.json({ error: "email_not_verified", email: user.email }, { status: 403 });
+    }
 
     const token = await createSession(user.id);
     const res = NextResponse.json({ id: user.id, name: user.name, email: user.email });
