@@ -7,16 +7,19 @@ export async function GET() {
     communication_layer: "ready",
     providers: {
       gemini: !!process.env.GEMINI_API_KEY,
+      groq: !!process.env.GROQ_API_KEY,
       openai: !!process.env.OPENAI_API_KEY,
       anthropic: !!process.env.LLM_API_KEY,
       deterministic_fallback: true,
     },
     preferred_provider: process.env.GEMINI_API_KEY
       ? "gemini"
-      : process.env.OPENAI_API_KEY
-        ? "openai"
-        : process.env.LLM_API_KEY
-          ? "anthropic"
-          : "deterministic",
+      : process.env.GROQ_API_KEY
+        ? "groq"
+        : process.env.OPENAI_API_KEY
+          ? "openai"
+          : process.env.LLM_API_KEY
+            ? "anthropic"
+            : "deterministic",
   });
 }

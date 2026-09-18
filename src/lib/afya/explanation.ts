@@ -291,7 +291,7 @@ const STRUCTURED_PROMPT_TEMPLATE = (factsJson: string, userQuestion: string | nu
   `Use plain language. If a best window exists, mention best_window_time_range exactly. ` +
   `Do not add disclaimers about being an AI.`;
 
-export type ExplanationProvider = "gemini" | "openai" | "anthropic" | "deterministic";
+export type ExplanationProvider = "gemini" | "groq" | "openai" | "anthropic" | "deterministic";
 export type ExplanationMode = "standard" | "plain";
 
 // ─── Deterministic plain-language templates ──────────────────────────────────
@@ -415,7 +415,7 @@ const EXPLANATION_SCHEMA = {
 
 /**
  * Call the configured communication providers in order:
- * Gemini → OpenAI → legacy Anthropic → deterministic reviewed template.
+ * Gemini → Groq (free-tier) → OpenAI → legacy Anthropic → deterministic template.
  * This is the ONLY code path that interfaces with a generative model.
  * Scientific outputs have already been calculated and validated upstream.
  */
@@ -466,6 +466,11 @@ export async function generateExplanation(
       name: "gemini",
       configured: !!process.env.GEMINI_API_KEY,
       run: () => generateWithGemini(systemPrompt, userPrompt),
+    },
+    {
+      name: "groq",
+      configured: !!process.env.GROQ_API_KEY,
+      run: () => generateWithGroq(systemPrompt, userPrompt),
     },
     {
       name: "openai",
@@ -531,6 +536,37 @@ async function generateWithGemini(systemPrompt: string, userPrompt: string): Pro
   };
   const raw = data.candidates?.[0]?.content?.parts?.[0]?.text;
   return parseStructuredExplanation(raw);
+}
+
+async function generateWithGroq(systemPrompt: string, userPrompt: string): Promise<string> {
+  // Free-tier fallback: Groq-hosted open-weight model, OpenAI-compatible API.
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${process.env.GROQ_API_KEY!}`,
+    },
+    body: JSON.stringify({
+      model: "openai/gpt-oss-120b",
+      temperature: 0.1,
+      max_tokens: 420,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: `${systemPrompt}\nRespond with JSON only: {"explanation": "..."}.`,
+        },
+        { role: "user", content: userPrompt },
+      ],
+    }),
+    signal: AbortSignal.timeout(12_000),
+  });
+
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const data = (await response.json()) as {
+    choices?: { message?: { content?: string } }[];
+  };
+  return parseStructuredExplanation(data.choices?.[0]?.message?.content);
 }
 
 async function generateWithOpenAI(systemPrompt: string, userPrompt: string): Promise<string> {
