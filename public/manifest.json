@@ -1,0 +1,48 @@
+{
+  "name": "AFYA MAZINGIRA",
+  "short_name": "AFYA MZ",
+  "description": "Hyperlocal Environmental Risk & Early Action Intelligence — JKUAT/Juja, Kenya",
+  "start_url": "/situation",
+  "display": "standalone",
+  "background_color": "#F7F6F1",
+  "theme_color": "#103D2C",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Situation",
+      "short_name": "Situation",
+      "url": "/situation",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Plan Activity",
+      "short_name": "Plan",
+      "url": "/plan",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}
