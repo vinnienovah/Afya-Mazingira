@@ -126,6 +126,9 @@ export default function OperationsPage() {
         {situation?.demo_mode && (
           <span className="text-[11px] text-afya-muted/60 italic">{t("demo_notice")}</span>
         )}
+        {situation?.data_source === "CONDUIT_ARCHIVE" && (
+          <span className="text-[11px] text-afya-muted/60 italic">{t("archive_notice")}</span>
+        )}
       </div>
 
       {/* Status row */}

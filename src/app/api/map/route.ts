@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRegionalOutlook } from "@/lib/afya/map-data";
 import { getSatelliteAcquisitionsLive } from "@/lib/afya/sources-external";
+import { runPipeline } from "@/lib/afya/pipeline";
 
 // Regional outlook + satellite acquisition metadata. Satellite layers must not
 // refresh at 15-minute frequency (spec §51) — a 30-minute cache matches their
@@ -8,7 +9,15 @@ import { getSatelliteAcquisitionsLive } from "@/lib/afya/sources-external";
 export const revalidate = 1800;
 
 export async function GET() {
-  const counties = getRegionalOutlook();
+  // Real current pipeline output drives the JKUAT/Kiambu county specifically
+  // (Conduit live -> CSV archive -> demo, same source-of-truth as /api/situation).
+  const situation = runPipeline();
+  const counties = await getRegionalOutlook({
+    countyName: "Kiambu",
+    wbgt: situation.current.wbgt_c,
+    rainObserved: situation.current.rain_observed,
+    isRealData: situation.data_source !== "DEMO",
+  });
   const satellites = getSatelliteAcquisitionsLive();
   return NextResponse.json(
     { counties, satellites },

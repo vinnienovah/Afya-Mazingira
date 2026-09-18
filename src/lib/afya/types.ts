@@ -138,7 +138,7 @@ export interface SituationResult {
   generated_at: string;
   location: string;
   demo_mode: boolean;
-  data_source: "CONDUIT_LIVE" | "DEMO";
+  data_source: "CONDUIT_LIVE" | "CONDUIT_ARCHIVE" | "DEMO";
   quality: DataQuality;
   current: CurrentObservation;
   state: EnvironmentalState;

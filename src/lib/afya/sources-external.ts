@@ -7,8 +7,10 @@
 import type { Era5Context, SentinelContext } from "./types";
 import { generateEra5Context, generateSentinelContext } from "./demo-observations";
 import { getSatelliteAcquisitions, type SatelliteAcquisition } from "./map-data";
+import { hasCopernicusCreds, cdseToken, ndviStatisticsForBbox } from "./copernicus";
 
 const JKUAT = { lat: -1.0931, lng: 37.0149 };
+const JKUAT_NDVI_BBOX: [number, number, number, number] = [37.0, -1.11, 37.03, -1.08];
 
 // ═══ ERA5-Land regional context ═════════════════════════════════════════════
 // Production CDS path (async job → NetCDF, CDS_API_KEY in .env) requires the
@@ -184,10 +186,6 @@ interface LiveSat {
   s3: { acquired: string } | null;
 }
 
-function hasCopernicusCreds(): boolean {
-  return !!(process.env.COPERNICUS_CLIENT_ID && process.env.COPERNICUS_CLIENT_SECRET);
-}
-
 export function getSentinelContextLive(): SentinelContext {
   if (hasCopernicusCreds()) {
     if (satCache) {
@@ -219,27 +217,6 @@ function satContextFrom(d: LiveSat): SentinelContext {
     sentinel3_acquired: d.s3?.acquired ?? null,
     sentinel3_lst_c: null, // real LST requires SLSTR thermal statistics — never estimated
   };
-}
-
-async function cdseToken(): Promise<string> {
-  const body = new URLSearchParams({
-    grant_type: "client_credentials",
-    client_id: process.env.COPERNICUS_CLIENT_ID!,
-    client_secret: process.env.COPERNICUS_CLIENT_SECRET!,
-  }).toString();
-  const res = await fetch(
-    "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body,
-      signal: AbortSignal.timeout(20_000),
-    },
-  );
-  if (!res.ok) throw new Error(`CDSE token HTTP ${res.status}`);
-  const json = (await res.json()) as { access_token?: string };
-  if (!json.access_token) throw new Error("CDSE token missing");
-  return json.access_token;
 }
 
 async function catalogSearch(token: string, collection: string, limit: number): Promise<CatalogFeature[]> {
@@ -285,7 +262,11 @@ async function refreshSatellite(): Promise<void> {
 
     // Real NDVI mean from the latest clear Sentinel-2 acquisition (best effort)
     const s2ForNdvi = s2Clear[0] ?? null;
-    const ndvi = s2ForNdvi ? await ndviStatistics(token, s2ForNdvi).catch(() => null) : null;
+    const s2ForNdviDay = (s2ForNdvi?.properties?.datetime ?? "").slice(0, 10);
+    const ndviMean =
+      s2ForNdvi && /^\d{4}-\d{2}-\d{2}$/.test(s2ForNdviDay)
+        ? await ndviStatisticsForBbox(token, JKUAT_NDVI_BBOX, s2ForNdviDay).catch(() => null)
+        : null;
     // Context provenance must match the scene the NDVI came from
     const s2ContextSource = s2ForNdvi ?? s2[0] ?? null;
 
@@ -296,7 +277,7 @@ async function refreshSatellite(): Promise<void> {
         s2: s2ContextSource
           ? {
               acquired: (s2ContextSource.properties?.datetime ?? "").slice(0, 10),
-              ndvi: ndvi?.mean ?? null,
+              ndvi: ndviMean,
             }
           : null,
         s3: s3[0] ? { acquired: (s3[0].properties?.datetime ?? "").slice(0, 10) } : null,
@@ -330,45 +311,3 @@ function toAcquisition(
   };
 }
 
-async function ndviStatistics(
-  token: string,
-  feature: CatalogFeature,
-): Promise<{ mean: number; acquired: string } | null> {
-  const day = (feature.properties?.datetime ?? "").slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
-  const from = `${day}T00:00:00Z`;
-  const to = `${day}T23:59:59Z`;
-  const body = {
-    input: {
-      bounds: {
-        properties: { crs: "http://www.opengis.net/def/crs/EPSG/0/4326" },
-        bbox: [37.0, -1.11, 37.03, -1.08],
-      },
-      data: [{ type: "sentinel-2-l2a", dataFilter: { timeRange: { from, to } } }],
-    },
-    aggregation: {
-      timeRange: { from, to },
-      aggregationInterval: { of: "P1D", with: "P1D" },
-      evalscript:
-        "//VERSION=3\n" +
-        'function setup(){return{input:["B04","B08","dataMask"],output:[{id:"default",bands:["NDVI"]}]}}\n' +
-        "function evaluatePixel(s){var d=s.B04+s.B08;return{default:[d===0?0:(s.B08-s.B04)/d]}}\n" +
-        "function updateOutput(scenes,inputMetadata,outputMetadata){}",
-    },
-  };
-  const res = await fetch("https://sh.dataspace.copernicus.eu/api/v1/statistics", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(45_000),
-  });
-  if (!res.ok) throw new Error(`statistics HTTP ${res.status}`);
-  const json = (await res.json()) as {
-    data?: {
-      outputs?: Record<string, { bands?: Record<string, { stats?: { mean?: number } }> }>;
-    }[];
-  };
-  const mean = json.data?.[0]?.outputs?.default?.bands?.NDVI?.stats?.mean;
-  if (mean == null || !Number.isFinite(mean)) return null;
-  return { mean, acquired: day };
-}
