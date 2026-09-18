@@ -121,3 +121,7 @@ export const PROVENANCE_LABELS: Record<string, { en: string; sw: string; icon: s
 // ─── Demo Conduit coordinates ────────────────────────────────────────────────
 export const JKUAT_COORDS = { lat: -1.0931, lng: 37.0149 };
 export const JKUAT_NAME = "JKUAT / Juja Conduit Station";
+
+// ─── Demo account (public, documented credential — always auto-verified) ─────
+export const DEMO_EMAIL = "demo@afyahewa.dev";
+export const DEMO_PASSWORD = "afyahewa2026";
