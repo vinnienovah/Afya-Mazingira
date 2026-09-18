@@ -112,6 +112,9 @@ export default function SituationPage() {
             {situation.demo_mode && (
               <span className="text-[11px] text-white/50 italic">{t("demo_notice")}</span>
             )}
+            {situation.data_source === "CONDUIT_ARCHIVE" && (
+              <span className="text-[11px] text-white/50 italic">{t("archive_notice")}</span>
+            )}
           </div>
 
           {/* State name — large */}

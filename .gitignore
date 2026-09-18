@@ -11,4 +11,5 @@ next-env.d.ts
 *.log
 .DS_Store
 data/raw/
+data/*.csv
 ml/artifacts/

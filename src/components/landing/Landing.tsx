@@ -169,16 +169,18 @@ function LiveStatus({ copy }: { copy: Record<string, string> }) {
   const qualityColor =
     data.quality.status === "GOOD" ? "#006B3C" : data.quality.status === "DEGRADED" ? "#F2B705" : "#C62828";
 
+  const sourceBadge =
+    data.data_source === "CONDUIT_LIVE"
+      ? { dot: "bg-afya-green", text: "text-afya-green", label: lang === "sw" ? "MOJA KWA MOJA · CONDUIT" : "LIVE · CONDUIT" }
+      : data.data_source === "CONDUIT_ARCHIVE"
+        ? { dot: "bg-[#247B78]", text: "text-[#247B78]", label: lang === "sw" ? "KUMBUKUMBU YA KITUO" : "STATION ARCHIVE" }
+        : { dot: "bg-afya-gold", text: "text-afya-gold", label: "DEMO MODE" };
+
   return (
     <div className="inline-flex flex-wrap items-center gap-x-4 gap-y-2 rounded-full border border-white/15 bg-white/5 px-4 py-2.5 backdrop-blur-sm" role="status" aria-label={copy.live_label}>
       <span className="inline-flex items-center gap-2">
-        <span
-          className={`w-2 h-2 rounded-full live-pulse ${data.demo_mode ? "bg-afya-gold" : "bg-afya-green"}`}
-          aria-hidden="true"
-        />
-        <span className={`text-[11px] font-bold tracking-wider ${data.demo_mode ? "text-afya-gold" : "text-afya-green"}`}>
-          {data.demo_mode ? "DEMO MODE" : "LIVE · CONDUIT"}
-        </span>
+        <span className={`w-2 h-2 rounded-full live-pulse ${sourceBadge.dot}`} aria-hidden="true" />
+        <span className={`text-[11px] font-bold tracking-wider ${sourceBadge.text}`}>{sourceBadge.label}</span>
       </span>
       <span className="text-sm font-semibold text-white">
         {lang === "sw" ? stateMeta.name_sw : stateMeta.name}

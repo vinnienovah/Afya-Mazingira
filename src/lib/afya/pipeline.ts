@@ -35,14 +35,16 @@ export function runPipeline(options: PipelineOptions = {}): SituationResult {
     durationMinutes = 60,
   } = options;
 
-  // ── Step 1: Data ingestion (live adapter when configured, else demo) ─────
+  // ── Step 1: Data ingestion (live → CSV archive → synthetic demo) ─────────
   const bundle = getObservationSeries(anchorIso, lookbackHours);
   const series: DemoObservation[] = bundle.series;
   const isDemo = bundle.source === "demo";
   const anchor = bundle.anchorIso || anchorIso;
-  // For live data the effective "now" is the real clock so observation age is
-  // reported honestly; for demo/replay it is the (possibly simulated) anchor.
-  const effectiveNow = bundle.source === "live" ? new Date().toISOString() : anchor;
+  // For anything standing in for "now" (live, or the CSV archive's latest
+  // available row) the effective "now" is the real clock so observation age
+  // is reported honestly; for a deliberate historical replay or synthetic
+  // demo it is the (possibly simulated) anchor itself.
+  const effectiveNow = bundle.realtime ? new Date().toISOString() : anchor;
 
   // ── Step 2: Quality control ────────────────────────────────────────────────
   const quality: DataQuality = evaluateQuality(series, effectiveNow);
@@ -51,7 +53,7 @@ export function runPipeline(options: PipelineOptions = {}): SituationResult {
   // stale data as actionable).
   const horizonEndMs = new Date(anchor).getTime() + 6 * 3600 * 1000;
   if (
-    bundle.source === "live" &&
+    bundle.realtime &&
     horizonEndMs <= new Date(effectiveNow).getTime() &&
     quality.status !== "POOR"
   ) {
@@ -157,7 +159,7 @@ export function runPipeline(options: PipelineOptions = {}): SituationResult {
     generated_at: anchor,
     location: "JKUAT/Juja Conduit station",
     demo_mode: isDemo,
-    data_source: isDemo ? "DEMO" : "CONDUIT_LIVE",
+    data_source: bundle.source === "live" ? "CONDUIT_LIVE" : bundle.source === "csv" ? "CONDUIT_ARCHIVE" : "DEMO",
     quality,
     current,
     state: {

@@ -51,19 +51,23 @@ export default function TopBar() {
         <QualityDot status={situation.quality.status} freshnessMinutes={situation.quality.freshness_minutes} />
       )}
 
-      {/* Demo mode badge */}
-      {situation?.demo_mode && (
+      {/* Data source badge: live / recorded archive / demo */}
+      {situation?.data_source === "DEMO" && (
         <span className="hidden sm:inline-flex items-center gap-1 rounded-full border border-afya-gold/50 bg-afya-gold/10 px-2.5 py-1 text-[11px] font-semibold text-[#8a6d00]">
           <span className="w-1.5 h-1.5 rounded-full bg-afya-gold inline-block" aria-hidden="true" />
           {t("demo_mode")}
         </span>
       )}
-
-      {/* Live Conduit badge */}
-      {situation && !situation.demo_mode && (
+      {situation?.data_source === "CONDUIT_ARCHIVE" && (
+        <span className="hidden sm:inline-flex items-center gap-1 rounded-full border border-[#247B78]/40 bg-[#247B78]/10 px-2.5 py-1 text-[11px] font-semibold text-[#247B78]">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#247B78] inline-block" aria-hidden="true" />
+          {t("conduit_archive_badge")}
+        </span>
+      )}
+      {situation?.data_source === "CONDUIT_LIVE" && (
         <span className="hidden sm:inline-flex items-center gap-1 rounded-full border border-afya-green/40 bg-afya-green/10 px-2.5 py-1 text-[11px] font-semibold text-afya-green">
           <span className="w-1.5 h-1.5 rounded-full bg-afya-green inline-block live-pulse" aria-hidden="true" />
-          LIVE · CONDUIT
+          {t("conduit_live_badge")}
         </span>
       )}
 

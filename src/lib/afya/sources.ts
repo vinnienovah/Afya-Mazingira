@@ -1,15 +1,21 @@
 // ─── Data source adapters ────────────────────────────────────────────────────
-// Production path  : real Conduit POST → clean → 15-min normalized grid
-// Demo path        : seeded synthetic generator with the SAME contract
-// Both paths produce DemoObservation[] so the pipeline is source-agnostic.
+// Preference order: real-time Conduit API → recorded Conduit CSV archive →
+// seeded synthetic generator (last resort only). All three paths produce
+// DemoObservation[] so the pipeline is source-agnostic.
 // Live mode activates automatically when CONDUIT_API_KEY + CONDUIT_EMAIL are set.
 
 import { generateDemoSeries, type DemoObservation } from "./demo-observations";
+import { getCsvSeries } from "./csv-source";
 
 export interface SeriesBundle {
   series: DemoObservation[];
-  source: "live" | "demo";
+  source: "live" | "csv" | "demo";
   anchorIso: string;
+  // true when this series should be judged for freshness against the real
+  // wall clock (live, or the CSV archive's latest available row standing in
+  // for "now"); false for a deliberate historical replay or synthetic demo,
+  // where freshness is judged relative to the anchor itself.
+  realtime: boolean;
 }
 
 const LIVE_TTL_MS = 12 * 60 * 1000; // refresh every 12 min
@@ -26,7 +32,9 @@ function hasConduitCreds(): boolean {
  * Get the observation series for the pipeline.
  * - If Conduit credentials exist and the anchor is near "now", prefer live data
  *   (serving the cached bundle while a background refresh runs).
- * - Otherwise (and for historical replay anchors) use the demo series.
+ * - Otherwise, prefer the recorded Conduit CSV archive (data/*.csv) — real
+ *   station data beats synthetic data even when it isn't real-time.
+ * - Only synthesize a demo series when neither real source covers the anchor.
  */
 export function getObservationSeries(anchorIso: string, lookbackHours = 30): SeriesBundle {
   const anchorMs = new Date(anchorIso).getTime();
@@ -41,10 +49,21 @@ export function getObservationSeries(anchorIso: string, lookbackHours = 30): Ser
     }
   }
 
+  const csv = getCsvSeries(anchorIso, lookbackHours);
+  if (csv) {
+    return {
+      series: csv.series,
+      source: "csv",
+      anchorIso: csv.series[csv.series.length - 1].ts,
+      realtime: csv.realtime,
+    };
+  }
+
   return {
     series: generateDemoSeries(anchorIso, lookbackHours),
     source: "demo",
     anchorIso,
+    realtime: false,
   };
 }
 
@@ -88,6 +107,7 @@ async function refreshLive(): Promise<void> {
       series: grid,
       source: "live",
       anchorIso: grid[grid.length - 1].ts,
+      realtime: true,
       fetchedAt: Date.now(),
     };
   })();
@@ -116,7 +136,7 @@ const CONTINUOUS = [
   "heat_idx", "wet_bulb_temp", "wet_bulb_globe_temp",
 ] as const;
 
-function cleanAndGrid(rows: Record<string, unknown>[]): DemoObservation[] {
+export function cleanAndGrid(rows: Record<string, unknown>[]): DemoObservation[] {
   // 1. Parse timestamps, keep last per ts, sort ascending
   const byTs = new Map<number, Record<string, unknown>>();
   for (const r of rows) {
