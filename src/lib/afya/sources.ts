@@ -51,7 +51,10 @@ export function getObservationSeries(anchorIso: string, lookbackHours = 30): Ser
 // ─── Live Conduit ingestion ──────────────────────────────────────────────────
 
 async function refreshLive(): Promise<void> {
-  if (inflight) return inflight;
+  if (inflight) {
+    await inflight.catch(() => {});
+    return;
+  }
   inflight = (async () => {
     const url = process.env.CONDUIT_URL ?? "https://conduit.jhubafrica.com/data.php";
     // todate is effectively exclusive of the current day — request tomorrow

@@ -47,7 +47,10 @@ export function getEra5ContextLive(
 }
 
 async function refreshEra5(): Promise<void> {
-  if (era5Inflight) return era5Inflight;
+  if (era5Inflight) {
+    await era5Inflight.catch(() => {});
+    return;
+  }
   era5Inflight = (async () => {
     // ERA5 publishes with ~5-day latency — request a guaranteed-available window
     const end = new Date(Date.now() - 5 * 86400_000);
@@ -257,7 +260,10 @@ async function catalogSearch(token: string, collection: string, limit: number): 
 }
 
 async function refreshSatellite(): Promise<void> {
-  if (satInflight) return satInflight;
+  if (satInflight) {
+    await satInflight.catch(() => {});
+    return;
+  }
   satInflight = (async () => {
     const token = await cdseToken();
     const [s2All, s3All] = await Promise.all([
