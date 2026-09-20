@@ -355,6 +355,22 @@ npm run dev          # http://localhost:3000
 
 ---
 
+## Deployment
+
+Live at **[afya-mazingira.vercel.app](https://afya-mazingira.vercel.app)**, deployed on **Vercel** with **Neon Postgres** (provisioned via the Vercel Marketplace integration — no separate Neon account needed).
+
+The GitHub repository is connected to the Vercel project, so every push to `main` auto-deploys to production, and every pull request gets its own preview deployment with a unique URL.
+
+To deploy your own instance:
+
+1. Import the repo at [vercel.com/new](https://vercel.com/new)
+2. Add the Neon Postgres integration from the Vercel Marketplace (or bring your own `DATABASE_URL`)
+3. Add the remaining environment variables from `.env.example` in the project's Settings → Environment Variables
+4. Run `npx drizzle-kit push` once against the production `DATABASE_URL` to create the schema
+5. Set `NEXT_PUBLIC_APP_URL` to your assigned `*.vercel.app` domain (or custom domain) and redeploy — it's used to build the Google OAuth redirect URI and email verification links
+
+---
+
 ## Environment Variables
 
 Everything is **server-side only** — never in the browser bundle. All optional.
