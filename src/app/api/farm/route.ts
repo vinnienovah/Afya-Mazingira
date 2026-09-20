@@ -3,6 +3,10 @@ import { z } from "zod";
 import { runPipeline } from "@/lib/afya/pipeline";
 import { buildFarmAdvisory } from "@/lib/afya/farm-engine";
 
+// Safety net for the (usually much faster) real ERA5/Sentinel fetches in
+// runPipeline — Vercel's default function timeout is short.
+export const maxDuration = 30;
+
 const FarmSchema = z.object({
   crop: z.string().default("maize"),
   stage: z.enum(["establishment", "vegetative", "flowering", "maturity"]).default("vegetative"),
@@ -21,7 +25,7 @@ export async function POST(req: NextRequest) {
 
     // Farmers plan field work across the working day, so evaluate a
     // longer activity window than the default situation call.
-    const situation = runPipeline({ activityKey: "field_work", durationMinutes: 120 });
+    const situation = await runPipeline({ activityKey: "field_work", durationMinutes: 120 });
     const advisory = buildFarmAdvisory(situation, crop, stage);
 
     return NextResponse.json({

@@ -27,7 +27,7 @@ export interface PipelineOptions {
   durationMinutes?: number;
 }
 
-export function runPipeline(options: PipelineOptions = {}): SituationResult {
+export async function runPipeline(options: PipelineOptions = {}): Promise<SituationResult> {
   const {
     anchorIso = new Date().toISOString(),
     lookbackHours = 30,
@@ -111,9 +111,13 @@ export function runPipeline(options: PipelineOptions = {}): SituationResult {
   );
 
   // ── Step 7: Context (live adapters with graceful fallback) ─────────────────
-  const era5 = getEra5ContextLive(anchor, currentObs.temp_sht, currentObs.humidity_sht);
+  // Skip the real fetch entirely for a genuine historical replay anchor — a
+  // fresh ERA5/Sentinel read is only meaningful for "now" (spec §40).
+  const [era5, sentinel] = await Promise.all([
+    getEra5ContextLive(anchor, currentObs.temp_sht, currentObs.humidity_sht, bundle.realtime),
+    getSentinelContextLive(bundle.realtime),
+  ]);
   const chirps = generateChirpsContext(anchor);
-  const sentinel = getSentinelContextLive();
 
   // ── Step 8: Risk / exposure ────────────────────────────────────────────────
   const thermalRisk = computeThermalRisk(f3h.value, 0);
@@ -206,13 +210,15 @@ export interface ReplayStep {
   situation: SituationResult;
 }
 
-export function runHistoricalReplay(dateStr: string): ReplayStep[] {
+export async function runHistoricalReplay(dateStr: string): Promise<ReplayStep[]> {
+  // Simulate 06:00 through 18:00 EAT on the given day. A genuinely historical
+  // anchor is never "realtime" (see runPipeline), so each of these resolves
+  // without any real network fetch — sequential awaiting stays fast.
   const steps: ReplayStep[] = [];
-  // Simulate 06:00 through 18:00 EAT on the given day
   for (let eatHour = 6; eatHour <= 18; eatHour++) {
     const utcHour = eatHour - 3;
     const anchorIso = `${dateStr}T${String(Math.max(0, utcHour)).padStart(2, "0")}:00:00Z`;
-    const situation = runPipeline({ anchorIso });
+    const situation = await runPipeline({ anchorIso });
     steps.push({ sim_time: anchorIso, situation });
   }
   return steps;

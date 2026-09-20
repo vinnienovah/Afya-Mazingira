@@ -1,8 +1,12 @@
 // ─── External context adapters (ERA5-Land regional + Copernicus Sentinel) ────
-// Live retrieval with background caching + graceful fallback (spec §40).
-// All getters are SYNCHRONOUS: they serve the cached live value when available,
-// trigger a background refresh when stale, and serve the demo fixture until
-// live data arrives. Scientific logic never blocks on external APIs.
+// Live retrieval with caching + graceful fallback (spec §40). All getters are
+// async: they serve the cached live value when it's still fresh, otherwise
+// await a real refresh directly before falling back to the demo fixture only
+// if that refresh fails. (An earlier fire-and-forget-background-refresh
+// version of this file assumed a long-running process; on Vercel a function
+// can be frozen the instant its response is sent, so a background refresh
+// never reliably got to finish — every cold invocation would silently serve
+// the synthetic fixture forever, even with real credentials configured.)
 
 import type { Era5Context, SentinelContext } from "./types";
 import { generateEra5Context, generateSentinelContext } from "./demo-observations";
@@ -35,16 +39,29 @@ interface Era5Row {
   pressure_hpa: number;
 }
 
-export function getEra5ContextLive(
+/**
+ * `nearNow` gates whether we bother attempting a real fetch at all: for a
+ * genuine historical replay anchor, "real recent ERA5" isn't a meaningful
+ * concept, so we go straight to the synthetic (but anchor-consistent)
+ * generator rather than wasting a network round trip.
+ *
+ * This is `await`ed rather than fire-and-forget-with-instant-fallback: on a
+ * serverless platform (Vercel) a function's execution can be frozen the
+ * moment its response is sent, so a background refresh kicked off here has
+ * no reliable chance to finish and populate the cache for next time — every
+ * cold invocation would otherwise silently serve the synthetic fallback
+ * forever, even with real credentials configured.
+ */
+export async function getEra5ContextLive(
   anchorIso: string,
   localTempC: number,
   localHum: number,
-): Era5Context {
-  if (era5Cache) {
-    if (Date.now() - era5Cache.at > ERA5_TTL) void refreshEra5();
-    return era5FromRows(era5Cache.rows, anchorIso, localTempC, localHum);
+  nearNow: boolean = true,
+): Promise<Era5Context> {
+  if (nearNow && (!era5Cache || Date.now() - era5Cache.at > ERA5_TTL)) {
+    await refreshEra5(); // swallows its own errors; leaves era5Cache unset/stale on failure
   }
-  void refreshEra5();
+  if (era5Cache) return era5FromRows(era5Cache.rows, anchorIso, localTempC, localHum);
   return generateEra5Context(anchorIso, localTempC, localHum);
 }
 
@@ -75,7 +92,7 @@ async function refreshEra5(): Promise<void> {
       timezone: "UTC",
     });
     const res = await fetch(`https://archive-api.open-meteo.com/v1/era5?${params}`, {
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(6_000),
     });
     if (!res.ok) throw new Error(`ERA5 HTTP ${res.status}`);
     const json = (await res.json()) as {
@@ -186,25 +203,24 @@ interface LiveSat {
   s3: { acquired: string } | null;
 }
 
-export function getSentinelContextLive(): SentinelContext {
-  if (hasCopernicusCreds()) {
-    if (satCache) {
-      if (Date.now() - satCache.at > SAT_TTL) void refreshSatellite();
-      return satContextFrom(satCache.data);
-    }
-    void refreshSatellite();
+// Both `await` the refresh rather than firing it in the background — see the
+// comment on getEra5ContextLive for why that pattern doesn't reliably work
+// on a serverless platform, where the function can be frozen right after its
+// response is sent, before a background fetch gets a chance to finish.
+
+export async function getSentinelContextLive(nearNow: boolean = true): Promise<SentinelContext> {
+  if (nearNow && hasCopernicusCreds() && (!satCache || Date.now() - satCache.at > SAT_TTL)) {
+    await refreshSatellite();
   }
+  if (satCache) return satContextFrom(satCache.data);
   return generateSentinelContext();
 }
 
-export function getSatelliteAcquisitionsLive(): SatelliteAcquisition[] {
-  if (hasCopernicusCreds()) {
-    if (satCache) {
-      if (Date.now() - satCache.at > SAT_TTL) void refreshSatellite();
-      return satCache.data.acquisitions;
-    }
-    void refreshSatellite();
+export async function getSatelliteAcquisitionsLive(nearNow: boolean = true): Promise<SatelliteAcquisition[]> {
+  if (nearNow && hasCopernicusCreds() && (!satCache || Date.now() - satCache.at > SAT_TTL)) {
+    await refreshSatellite();
   }
+  if (satCache) return satCache.data.acquisitions;
   return getSatelliteAcquisitions();
 }
 
@@ -229,7 +245,7 @@ async function catalogSearch(token: string, collection: string, limit: number): 
   url.searchParams.set("limit", String(limit));
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(25_000),
+    signal: AbortSignal.timeout(5_000),
   });
   if (!res.ok) throw new Error(`catalog ${collection} HTTP ${res.status}`);
   const json = (await res.json()) as { features?: CatalogFeature[] };

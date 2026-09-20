@@ -6,6 +6,10 @@ import { getSessionFromCookies } from "@/lib/auth/logic";
 import { runPipeline } from "@/lib/afya/pipeline";
 import { findBestTime } from "@/lib/afya/best-time-engine";
 
+// Safety net for the (usually much faster) real ERA5/Sentinel fetches in
+// runPipeline — Vercel's default function timeout is short.
+export const maxDuration = 30;
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const planId = parseInt(id, 10);
@@ -21,7 +25,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (!plan) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  const situation = runPipeline({ activityKey: plan.activity_type, durationMinutes: plan.duration_minutes });
+  const situation = await runPipeline({ activityKey: plan.activity_type, durationMinutes: plan.duration_minutes });
   const result = findBestTime(
     plan.activity_type,
     plan.duration_minutes,

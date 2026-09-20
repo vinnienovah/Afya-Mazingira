@@ -140,7 +140,7 @@ async function fetchRegionalWeather(counties: LoadedCounty[]): Promise<(CountyWe
     `&current=temperature_2m,relative_humidity_2m&hourly=temperature_2m,relative_humidity_2m` +
     `&daily=precipitation_sum&forecast_days=1&timezone=Africa%2FNairobi`;
 
-  const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+  const res = await fetch(url, { signal: AbortSignal.timeout(8_000) });
   if (!res.ok) throw new Error(`Open-Meteo regional HTTP ${res.status}`);
   const json = (await res.json()) as OpenMeteoLocation[] | OpenMeteoLocation;
   const list = Array.isArray(json) ? json : [json]; // single-county requests aren't array-wrapped

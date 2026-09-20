@@ -4,6 +4,11 @@ import { runPipeline } from "@/lib/afya/pipeline";
 import { generateExplanation, buildExplanationFacts } from "@/lib/afya/explanation";
 import type { Lang } from "@/lib/afya/types";
 
+// Safety net for the (usually much faster) real ERA5/Sentinel fetches in
+// runPipeline, plus the LLM call itself — Vercel's default function timeout
+// is short.
+export const maxDuration = 30;
+
 const ExplainSchema = z.object({
   lang: z.enum(["en", "sw"]).default("en"),
   question: z.string().max(500).optional(),
@@ -23,7 +28,7 @@ export async function POST(req: NextRequest) {
 
     const { lang, question, force_fallback, mode } = parsed.data;
 
-    const situation = runPipeline();
+    const situation = await runPipeline();
     const facts = buildExplanationFacts(situation);
     const result = await generateExplanation(
       situation,

@@ -91,7 +91,7 @@ async function refreshLive(): Promise<void> {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body,
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(8_000),
     });
     if (!res.ok) throw new Error(`Conduit HTTP ${res.status}`);
 

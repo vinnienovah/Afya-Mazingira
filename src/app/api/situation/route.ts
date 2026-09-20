@@ -5,10 +5,13 @@ import { runPipeline } from "@/lib/afya/pipeline";
 // Conduit when credentials exist, seeded demo otherwise). The pipeline itself
 // is cheap; freshness matters more than caching here.
 export const dynamic = "force-dynamic";
+// Safety net for the (usually much faster) real ERA5/Sentinel fetches in
+// runPipeline — Vercel's default function timeout is short.
+export const maxDuration = 30;
 
 export async function GET() {
   try {
-    const situation = runPipeline();
+    const situation = await runPipeline();
     return NextResponse.json(situation, {
       headers: { "Cache-Control": "public, max-age=60, stale-while-revalidate=840" },
     });
