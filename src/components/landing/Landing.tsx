@@ -149,6 +149,58 @@ const NON_GOALS = [
   { en: "Universal “safe” or “dangerous” thresholds", sw: "Viwango vya “salama” au “hatari” vya kila mahali" },
 ];
 
+// ─── Section background photography (Unsplash, resized via their own CDN
+// params — no attribution required under the Unsplash license) ─────────────
+const SECTION_IMAGES = {
+  problem: "https://images.unsplash.com/photo-1611418612389-3e442c6c8a26",
+  pipeline: "https://images.unsplash.com/photo-1789414615226-5b479d9b52ea",
+  features: "https://images.unsplash.com/photo-1620901433789-1d2f85a93653",
+  provenance: "https://images.unsplash.com/photo-1770370419338-f9a813302baa",
+  nongoals: "https://images.unsplash.com/photo-1502088513349-3ff6482aa816",
+} as const;
+
+function bgUrl(url: string) {
+  return `${url}?w=1600&q=65&auto=format&fit=crop`;
+}
+
+/** A full-bleed photo band with a tinted gradient overlay, kicker/title/sub
+ * sitting on top in light text. Used to give each section a distinct visual
+ * identity instead of one plain white section after another; any dense
+ * foreground content (cards, lists) stays below on its own clean surface. */
+function SectionBanner({
+  image,
+  overlay,
+  kicker,
+  title,
+  sub,
+  titleId,
+}: {
+  image: string;
+  overlay: string;
+  kicker: string;
+  title: string;
+  sub?: string;
+  titleId: string;
+}) {
+  return (
+    <div className="relative overflow-hidden">
+      <div
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: `url(${bgUrl(image)})` }}
+        aria-hidden="true"
+      />
+      <div className="absolute inset-0" style={{ background: overlay }} aria-hidden="true" />
+      <div className="relative mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-afya-gold">{kicker}</p>
+        <h2 id={titleId} className="mt-3 max-w-3xl text-3xl font-bold tracking-tight text-white sm:text-4xl">
+          {title}
+        </h2>
+        {sub && <p className="mt-4 max-w-2xl text-base leading-relaxed text-white/80">{sub}</p>}
+      </div>
+    </div>
+  );
+}
+
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 // ─── Live station chip (real data, graceful degradation) ─────────────────────
@@ -304,14 +356,17 @@ export default function Landing() {
       </section>
 
       {/* ─── The interpretation gap ──────────────────────────────────────── */}
-      <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24" aria-labelledby="problem-title">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-afya-green">{c.problem_kicker}</p>
-        <h2 id="problem-title" className="mt-3 max-w-3xl text-3xl font-bold tracking-tight text-afya-charcoal sm:text-4xl">
-          {c.problem_title}
-        </h2>
-        <p className="mt-4 max-w-2xl text-base leading-relaxed text-afya-muted">{c.problem_sub}</p>
-
-        <div className="mt-10 grid gap-5 lg:grid-cols-2">
+      <section aria-labelledby="problem-title">
+        <SectionBanner
+          image={SECTION_IMAGES.problem}
+          overlay="linear-gradient(160deg, rgba(53,38,10,0.90) 0%, rgba(24,18,8,0.88) 100%)"
+          kicker={c.problem_kicker}
+          title={c.problem_title}
+          sub={c.problem_sub}
+          titleId="problem-title"
+        />
+        <div className="mx-auto max-w-6xl px-4 pb-16 pt-10 sm:px-6 sm:pb-24">
+        <div className="grid gap-5 lg:grid-cols-2">
           {/* Conventional dashboard */}
           <div className="rounded-2xl border border-afya-border bg-white/60 p-6 sm:p-7">
             <h3 className="text-sm font-semibold text-afya-muted">{c.problem_card_a_title}</h3>
@@ -373,16 +428,20 @@ export default function Landing() {
             <p className="mt-5 text-sm italic text-afya-muted">{c.problem_card_b_note}</p>
           </div>
         </div>
+        </div>
       </section>
 
       {/* ─── Pipeline ────────────────────────────────────────────────────── */}
-      <section className="border-y border-afya-border/60 bg-white" aria-labelledby="pipeline-title">
-        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-afya-green">{c.pipeline_kicker}</p>
-          <h2 id="pipeline-title" className="mt-3 max-w-3xl text-3xl font-bold tracking-tight text-afya-charcoal sm:text-4xl">
-            {c.pipeline_title}
-          </h2>
-          <ol className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label={c.pipeline_kicker}>
+      <section className="border-y border-afya-border/60" aria-labelledby="pipeline-title">
+        <SectionBanner
+          image={SECTION_IMAGES.pipeline}
+          overlay="linear-gradient(160deg, rgba(16,61,44,0.90) 0%, rgba(11,46,32,0.88) 100%)"
+          kicker={c.pipeline_kicker}
+          title={c.pipeline_title}
+          titleId="pipeline-title"
+        />
+        <div className="mx-auto max-w-6xl px-4 pb-16 pt-10 sm:px-6 sm:pb-24">
+          <ol className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label={c.pipeline_kicker}>
             {PIPELINE.map((step, i) => (
               <li
                 key={step.en}
@@ -453,12 +512,16 @@ export default function Landing() {
       </section>
 
       {/* ─── Features ────────────────────────────────────────────────────── */}
-      <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24" aria-labelledby="features-title">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-afya-green">{c.features_kicker}</p>
-        <h2 id="features-title" className="mt-3 text-3xl font-bold tracking-tight text-afya-charcoal sm:text-4xl">
-          {c.features_title}
-        </h2>
-        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <section aria-labelledby="features-title">
+        <SectionBanner
+          image={SECTION_IMAGES.features}
+          overlay="linear-gradient(160deg, rgba(20,45,20,0.90) 0%, rgba(12,28,14,0.88) 100%)"
+          kicker={c.features_kicker}
+          title={c.features_title}
+          titleId="features-title"
+        />
+        <div className="mx-auto max-w-6xl px-4 pb-16 pt-10 sm:px-6 sm:pb-24">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {FEATURES.map((f) => (
             <Link
               key={f.en}
@@ -477,17 +540,21 @@ export default function Landing() {
             </Link>
           ))}
         </div>
+        </div>
       </section>
 
       {/* ─── Provenance ──────────────────────────────────────────────────── */}
-      <section className="border-y border-afya-border/60 bg-white" aria-labelledby="provenance-title">
-        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-afya-green">{c.provenance_kicker}</p>
-          <h2 id="provenance-title" className="mt-3 text-3xl font-bold tracking-tight text-afya-charcoal sm:text-4xl">
-            {c.provenance_title}
-          </h2>
-          <p className="mt-4 max-w-2xl text-base text-afya-muted">{c.provenance_sub}</p>
-          <div className="mt-10 grid gap-4 sm:grid-cols-2">
+      <section className="border-y border-afya-border/60" aria-labelledby="provenance-title">
+        <SectionBanner
+          image={SECTION_IMAGES.provenance}
+          overlay="linear-gradient(160deg, rgba(8,20,40,0.90) 0%, rgba(5,12,26,0.88) 100%)"
+          kicker={c.provenance_kicker}
+          title={c.provenance_title}
+          sub={c.provenance_sub}
+          titleId="provenance-title"
+        />
+        <div className="mx-auto max-w-6xl px-4 pb-16 pt-10 sm:px-6 sm:pb-24">
+          <div className="grid gap-4 sm:grid-cols-2">
             {PROVENANCE.map((p) => (
               <div key={p.source} className="flex gap-4 rounded-2xl border border-afya-border bg-afya-canvas p-5">
                 <span
@@ -514,13 +581,17 @@ export default function Landing() {
       </section>
 
       {/* ─── Non-goals ───────────────────────────────────────────────────── */}
-      <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24" aria-labelledby="nongoals-title">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-afya-gold">{c.nongoals_kicker}</p>
-        <h2 id="nongoals-title" className="mt-3 text-3xl font-bold tracking-tight text-afya-charcoal sm:text-4xl">
-          {c.nongoals_title}
-        </h2>
-        <p className="mt-4 max-w-2xl text-base text-afya-muted">{c.nongoals_sub}</p>
-        <ul className="mt-8 grid gap-3 sm:grid-cols-2">
+      <section aria-labelledby="nongoals-title">
+        <SectionBanner
+          image={SECTION_IMAGES.nongoals}
+          overlay="linear-gradient(160deg, rgba(35,45,20,0.90) 0%, rgba(20,26,12,0.88) 100%)"
+          kicker={c.nongoals_kicker}
+          title={c.nongoals_title}
+          sub={c.nongoals_sub}
+          titleId="nongoals-title"
+        />
+        <div className="mx-auto max-w-6xl px-4 pb-16 pt-10 sm:px-6 sm:pb-24">
+        <ul className="grid gap-3 sm:grid-cols-2">
           {NON_GOALS.map((g) => (
             <li key={g.en} className="flex items-start gap-3 rounded-xl border border-afya-gold/25 bg-afya-gold/5 px-4 py-3.5">
               <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-afya-gold/20 text-afya-gold" aria-hidden="true">
@@ -530,6 +601,7 @@ export default function Landing() {
             </li>
           ))}
         </ul>
+        </div>
       </section>
 
       {/* ─── Final CTA ───────────────────────────────────────────────────── */}
