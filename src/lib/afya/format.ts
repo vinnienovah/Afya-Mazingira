@@ -56,7 +56,9 @@ export function fmtAgo(minutes: number, lang: "en" | "sw" = "en"): string {
   if (minutes < 2) return lang === "sw" ? "sasa hivi" : "just now";
   if (minutes < 60) return lang === "sw" ? `dakika ${minutes} zilizopita` : `${minutes} min ago`;
   const hours = Math.floor(minutes / 60);
-  return lang === "sw" ? `saa ${hours} zilizopita` : `${hours}h ago`;
+  if (hours < 48) return lang === "sw" ? `saa ${hours} zilizopita` : `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return lang === "sw" ? `siku ${days} zilizopita` : `${days}d ago`;
 }
 
 /** Convert a JST/any offset ISO to EAT (UTC+3) local hour decimal. */
