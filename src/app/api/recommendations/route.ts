@@ -6,6 +6,10 @@ import { getSessionFromCookies } from "@/lib/auth/logic";
 import { db } from "@/db";
 import { activityRecommendations } from "@/db/schema";
 
+// Safety net for the (usually much faster) real ERA5/Sentinel fetches in
+// runPipeline — Vercel's default function timeout is short.
+export const maxDuration = 30;
+
 const RecommendSchema = z.object({
   activity: z.string().min(1),
   duration_minutes: z.number().int().min(5).max(480),
@@ -21,7 +25,7 @@ export async function POST(req: NextRequest) {
 
     const { activity, duration_minutes, window_start, window_end } = parsed.data;
 
-    const situation = runPipeline({
+    const situation = await runPipeline({
       activityKey: activity,
       durationMinutes: duration_minutes,
     });

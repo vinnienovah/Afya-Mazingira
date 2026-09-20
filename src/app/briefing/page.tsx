@@ -6,6 +6,10 @@ import { STATES, RISK_META } from "@/lib/afya/constants";
 import { fmtTime, fmtWindow, fmtDate, fmtAgo } from "@/lib/afya/format";
 import type { Lang } from "@/lib/afya/types";
 import { StateChip } from "@/components/ui/StateChip";
+
+// Safety net for the (usually much faster) real ERA5/Sentinel fetches in
+// runPipeline — Vercel's default function timeout is short.
+export const maxDuration = 30;
 import { RiskChip } from "@/components/ui/RiskChip";
 import BriefingActions from "@/components/briefing/BriefingActions";
 import {
@@ -27,7 +31,7 @@ export default async function BriefingPage() {
   const lang: Lang = cookieStore.get("afya_lang")?.value === "sw" ? "sw" : "en";
   const t = (k: string) => tr(lang, k);
 
-  const situation = runPipeline();
+  const situation = await runPipeline();
   const {
     state, current, forecast, quality, risk, best_time,
     expected_peak, state_history_24h, contributors,

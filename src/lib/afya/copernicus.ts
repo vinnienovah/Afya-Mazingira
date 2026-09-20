@@ -27,7 +27,7 @@ export async function cdseToken(): Promise<string> {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body,
-        signal: AbortSignal.timeout(20_000),
+        signal: AbortSignal.timeout(5_000),
       },
     );
     if (!res.ok) throw new Error(`CDSE token HTTP ${res.status}`);
@@ -90,7 +90,7 @@ export async function ndviStatisticsForBbox(
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(6_000),
   });
   if (!res.ok) throw new Error(`statistics HTTP ${res.status}`);
   const json = (await res.json()) as {

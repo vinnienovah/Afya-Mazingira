@@ -6,6 +6,10 @@ import { getSessionFromCookies } from "@/lib/auth/logic";
 import { runPipeline } from "@/lib/afya/pipeline";
 import { STATES } from "@/lib/afya/constants";
 
+// Safety net for the (usually much faster) real ERA5/Sentinel fetches in
+// runPipeline — Vercel's default function timeout is short.
+export const maxDuration = 30;
+
 export async function POST(req: NextRequest) {
   const user = await getSessionFromCookies();
   if (!user) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
@@ -17,7 +21,7 @@ export async function POST(req: NextRequest) {
     .where(eq(pushSubscriptions.user_id, user.id));
 
   const hasVapid = !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
-  const situation = runPipeline();
+  const situation = await runPipeline();
 
   // Build a useful environmental notification payload
   const notificationPayload = {
