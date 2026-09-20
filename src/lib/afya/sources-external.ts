@@ -8,8 +8,8 @@
 // never reliably got to finish — every cold invocation would silently serve
 // the synthetic fixture forever, even with real credentials configured.)
 
-import type { Era5Context, SentinelContext } from "./types";
-import { generateEra5Context, generateSentinelContext } from "./demo-observations";
+import type { Era5Context, SentinelContext, ChirpsContext } from "./types";
+import { generateEra5Context, generateSentinelContext, generateChirpsContext } from "./demo-observations";
 import { getSatelliteAcquisitions, type SatelliteAcquisition } from "./map-data";
 import { hasCopernicusCreds, cdseToken, ndviStatisticsForBbox } from "./copernicus";
 
@@ -71,9 +71,12 @@ async function refreshEra5(): Promise<void> {
     return;
   }
   era5Inflight = (async () => {
-    // ERA5 publishes with ~5-day latency — request a guaranteed-available window
+    // ERA5 publishes with ~5-day latency — request a guaranteed-available window.
+    // 30 days wide (not just enough for the diurnal-match) so the same hourly
+    // precipitation rows can also back a real 7d/30d rainfall accumulation
+    // (see getRainfallContext) instead of a fabricated stand-in for CHIRPS.
     const end = new Date(Date.now() - 5 * 86400_000);
-    const start = new Date(end.getTime() - 8 * 86400_000);
+    const start = new Date(end.getTime() - 30 * 86400_000);
     const params = new URLSearchParams({
       latitude: String(JKUAT.lat),
       longitude: String(JKUAT.lng),
@@ -181,6 +184,94 @@ function dewpoint(tC: number, rh: number): number {
   const b = 243.04;
   const alpha = Math.log(Math.max(rh, 1) / 100) + (a * tC) / (b + tC);
   return (b * alpha) / (a - alpha);
+}
+
+// ═══ Rainfall accumulation (real, from the same ERA5 hourly precipitation) ══
+// The technical spec calls for CHIRPS satellite rainfall; a genuine point
+// extraction from CHIRPS's gridded product needs raster tooling this Node
+// adapter doesn't have. Real ERA5-Land precipitation serves the same purpose
+// (regional rainfall accumulation) and is already being fetched for the
+// temperature/humidity context above — so this reuses those same hourly
+// rows instead of fabricating fixed numbers, which is what happened before.
+
+export async function getRainfallContext(anchorIso: string, nearNow: boolean = true): Promise<ChirpsContext> {
+  if (nearNow && (!era5Cache || Date.now() - era5Cache.at > ERA5_TTL)) {
+    await refreshEra5();
+  }
+  if (era5Cache) return rainfallFromRows(era5Cache.rows, anchorIso);
+  return generateChirpsContext(anchorIso);
+}
+
+export interface Era5SeriesPoint {
+  time: string;
+  temp_c: number;
+  rh: number;
+  precip_mm: number;
+}
+
+/** Raw hourly ERA5 rows for charting — ensures the cache is warm first. */
+export async function getEra5Series(): Promise<Era5SeriesPoint[]> {
+  if (!era5Cache || Date.now() - era5Cache.at > ERA5_TTL) await refreshEra5();
+  return (era5Cache?.rows ?? []).map((r) => ({
+    time: r.time,
+    temp_c: r.temp_c,
+    rh: r.rh,
+    precip_mm: r.precip_mm,
+  }));
+}
+
+/** Real daily rainfall totals (UTC calendar days) for a bar-chart timeline. */
+export async function getDailyRainfallSeries(): Promise<{ date: string; mm: number }[]> {
+  if (!era5Cache || Date.now() - era5Cache.at > ERA5_TTL) await refreshEra5();
+  const rows = era5Cache?.rows ?? [];
+  const byDay = new Map<string, number>();
+  for (const r of rows) {
+    const day = r.time.slice(0, 10);
+    byDay.set(day, (byDay.get(day) ?? 0) + Math.max(0, r.precip_mm));
+  }
+  return [...byDay.entries()]
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    .map(([date, mm]) => ({ date, mm: Math.round(mm * 10) / 10 }));
+}
+
+function rainfallFromRows(rows: Era5Row[], anchorIso: string): ChirpsContext {
+  if (!rows.length) return generateChirpsContext(anchorIso);
+
+  // Sum hourly precip into UTC calendar days, sorted ascending.
+  const byDay = new Map<string, number>();
+  for (const r of rows) {
+    const day = r.time.slice(0, 10);
+    byDay.set(day, (byDay.get(day) ?? 0) + Math.max(0, r.precip_mm));
+  }
+  const days = [...byDay.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  if (days.length < 5) return generateChirpsContext(anchorIso);
+
+  const totals = days.map(([, mm]) => mm);
+  const lastIdx = days.length - 1;
+  const last7 = totals.slice(Math.max(0, lastIdx - 6), lastIdx + 1);
+  const last30 = totals.slice(Math.max(0, lastIdx - 29), lastIdx + 1);
+  const sum = (arr: number[]) => arr.reduce((a, b) => a + b, 0);
+
+  const todayMm = totals[lastIdx];
+  const percentile = Math.round(
+    (last30.filter((v) => v <= todayMm).length / last30.length) * 100,
+  );
+
+  let drySpell = 0;
+  for (let i = lastIdx; i >= 0 && totals[i] < 0.1; i--) drySpell++;
+  let wetSpell = 0;
+  for (let i = lastIdx; i >= 0 && totals[i] >= 0.1; i--) wetSpell++;
+
+  const r1 = (n: number) => Math.round(n * 10) / 10;
+  return {
+    chirps_mm: r1(todayMm),
+    chirps_7d_mm: r1(sum(last7)),
+    chirps_30d_mm: r1(sum(last30)),
+    chirps_percentile: percentile,
+    chirps_dry_spell_days: drySpell,
+    chirps_wet_spell_days: wetSpell,
+    valid_date: days[lastIdx][0],
+  };
 }
 
 // ═══ Copernicus Data Space — Sentinel-2 / Sentinel-3 ════════════════════════

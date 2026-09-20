@@ -10,6 +10,7 @@ import { RiskChip } from "@/components/ui/RiskChip";
 import { QualityDot } from "@/components/ui/QualityDot";
 import MeasurementStrip from "@/components/ui/MeasurementStrip";
 import StateTimeline from "@/components/charts/StateTimeline";
+import ClimateVariablesPanel from "@/components/charts/ClimateVariablesPanel";
 import AiPanel from "@/components/ai/AiPanel";
 import { SkeletonCard } from "@/components/ui/Skeleton";
 import { AlertTriangle, Cpu, Globe, CloudRain, Satellite, Database, TrendingUp, Info } from "lucide-react";
@@ -141,6 +142,9 @@ export default function IntelligencePage() {
         <CardTitle>{t("current_measurements")}</CardTitle>
         <MeasurementStrip obs={current} freshnessMinutes={quality.freshness_minutes} />
       </Card>
+
+      {/* Climate variables dashboard — real Conduit + ERA5 time series */}
+      <ClimateVariablesPanel />
 
       {/* State history */}
       <Card>
