@@ -446,7 +446,9 @@ AFYA MAZINGIRA is *decision support, not certainty*. Kept explicit in the produc
 - PostGIS for spatial queries and true recorded-day replay
 - Multi-station Conduit network support per the spec’s scaling story
 - Scheduled (cron) observation ingestion + ERA5/CDS Python sidecar for the spec-prescribed NetCDF path
+- Genuine CHIRPS point extraction: the current rainfall context uses real ERA5-Land precipitation (the same data already fetched for the temperature/humidity context) as an honest substitute — CHIRPS itself isn't a queryable API but a gridded product distributed as raw GeoTIFFs, so a real integration means fetching + raster-decoding those files (e.g. via `geotiff.js`, since GDAL isn't available in this serverless runtime) rather than a simple endpoint swap
 - OG/Twitter share image & dark mode
+- Date range picker for the Climate Variables dashboard (currently always shows the latest available window; the historical Replay page already supports picking a date for state/risk simulation, but the raw variable charts don't yet)
 
 ---
 
