@@ -11,5 +11,9 @@ next-env.d.ts
 *.log
 .DS_Store
 data/raw/
-data/*.csv
 ml/artifacts/
+.vercel
+.env*
+.agents/
+.claude/
+skills-lock.json
