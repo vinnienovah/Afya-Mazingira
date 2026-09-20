@@ -2,9 +2,9 @@ import type {
   SituationResult, CurrentObservation, StateId, DataQuality,
   RiskAssessment, Contributor, BestTimeResult,
 } from "./types";
-import { generateChirpsContext, type DemoObservation } from "./demo-observations";
+import type { DemoObservation } from "./demo-observations";
 import { getObservationSeries } from "./sources";
-import { getEra5ContextLive, getSentinelContextLive } from "./sources-external";
+import { getEra5ContextLive, getSentinelContextLive, getRainfallContext } from "./sources-external";
 import { computeFeatures } from "./feature-engine";
 import { classifyState, buildStateHistory, stateSince, getNextTransition } from "./state-engine";
 import { predictHorizon, buildForecastSeries, findExpectedPeak } from "./forecast-engine";
@@ -113,11 +113,11 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
   // ── Step 7: Context (live adapters with graceful fallback) ─────────────────
   // Skip the real fetch entirely for a genuine historical replay anchor — a
   // fresh ERA5/Sentinel read is only meaningful for "now" (spec §40).
-  const [era5, sentinel] = await Promise.all([
+  const [era5, sentinel, chirps] = await Promise.all([
     getEra5ContextLive(anchor, currentObs.temp_sht, currentObs.humidity_sht, bundle.realtime),
     getSentinelContextLive(bundle.realtime),
+    getRainfallContext(anchor, bundle.realtime),
   ]);
-  const chirps = generateChirpsContext(anchor);
 
   // ── Step 8: Risk / exposure ────────────────────────────────────────────────
   const thermalRisk = computeThermalRisk(f3h.value, 0);
