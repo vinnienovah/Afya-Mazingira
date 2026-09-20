@@ -35,7 +35,7 @@ export default async function BriefingPage() {
   const {
     state, current, forecast, quality, risk, best_time,
     expected_peak, state_history_24h, contributors,
-    era5, chirps, sentinel, demo_mode,
+    era5, chirps, sentinel, data_source,
   } = situation;
 
   const stateMeta = STATES[state.state_id];
@@ -105,9 +105,9 @@ export default async function BriefingPage() {
               <p className="text-xs font-semibold">{t("location")}</p>
               <p className="text-xs text-white/60">{fmtDate(now)} · {fmtTime(now)} EAT</p>
               <p className="mt-1 text-[10px] font-bold tracking-wide">
-                {demo_mode
-                  ? <span className="text-afya-gold">DEMO MODE</span>
-                  : <span className="text-afya-green">LIVE · CONDUIT</span>}
+                {data_source === "DEMO" && <span className="text-afya-gold">DEMO MODE</span>}
+                {data_source === "CONDUIT_ARCHIVE" && <span className="text-[#247B78]">STATION ARCHIVE</span>}
+                {data_source === "CONDUIT_LIVE" && <span className="text-afya-green">LIVE · CONDUIT</span>}
               </p>
             </div>
           </div>

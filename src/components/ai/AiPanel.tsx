@@ -29,7 +29,7 @@ interface Message {
   role: "user" | "assistant";
   text: string;
   source?: "llm" | "deterministic";
-  provider?: "gemini" | "openai" | "anthropic" | "deterministic";
+  provider?: "gemini" | "groq" | "openai" | "anthropic" | "deterministic";
   mode?: Mode;
   question?: string; // the question that produced this answer (for re-asking)
 }
@@ -194,6 +194,9 @@ export default function AiPanel({ context = "situation", initialQuestions }: AiP
                 <div className="mt-2 pt-2 border-t border-afya-border/60 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[10px] text-afya-muted/70">
                   {msg.source === "llm" && msg.provider === "gemini" && (
                     <span>✦ Gemini · {t("ai_disclaimer")}</span>
+                  )}
+                  {msg.source === "llm" && msg.provider === "groq" && (
+                    <span>✦ Groq · {t("ai_disclaimer")}</span>
                   )}
                   {msg.source === "llm" && msg.provider === "openai" && (
                     <span>✦ OpenAI · {t("ai_disclaimer")}</span>
