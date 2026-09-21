@@ -106,7 +106,7 @@ async function refresh(feed: "jhub" | "chords"): Promise<void> {
     const rows = feed === "jhub"
       // todate is exclusive of the current day, so ask for tomorrow to include today.
       ? await fetchConduitRaw(new Date(now - 3 * 86400_000), new Date(now + 86400_000))
-      : await fetchChordsRaw(new Date(now - LIVE_LOOKBACK_MS), new Date(now));
+      : (await fetchChordsRaw(new Date(now - LIVE_LOOKBACK_MS), new Date(now))).rows;
 
     const { series, duplicates } = cleanAndGridWithStats(rows);
     if (series.length < 20) throw new Error(`too few valid observations from ${feed}`);
@@ -197,9 +197,44 @@ export async function getConduitRange(fromIso: string, toIso: string): Promise<D
   return cleanAndGrid(allRows);
 }
 
-// The CHORDS portal's public live feed
+// The CHORDS portal's public live feeds
 
-const CHORDS_URL = process.env.CHORDS_LIVE_URL ?? "https://3d-fewsnet.icdp.ucar.edu/instruments/61/live";
+const CHORDS_PORTAL_URL = "https://3d-fewsnet.icdp.ucar.edu";
+export const CONDUIT_INSTRUMENT_ID = 61;
+
+// Stations the health checks can be asked for. The nearby ones each had
+// observations in the previous 24 hours when checked on 21 September 2026.
+// Nyeri Wambugu Farm (13) had none. KMD HQ Nairobi (1) was live but reports
+// its rain gauge under another name, which the checks would read as silent.
+export const CHORDS_STATIONS = [
+  { id: CONDUIT_INSTRUMENT_ID, name: "Conduit@Empathy1" },
+  { id: 10, name: "KALRO Thika" },
+  { id: 39, name: "Machakos Stoni Athi" },
+  { id: 11, name: "Embu" },
+] as const;
+
+export type ChordsStation = (typeof CHORDS_STATIONS)[number];
+
+/** The allowlisted station for an `instrument` query value, or null. */
+export function findChordsStation(instrument: string): ChordsStation | null {
+  return CHORDS_STATIONS.find((s) => String(s.id) === instrument) ?? null;
+}
+
+/**
+ * The live-feed URL for one window of a CHORDS instrument. CHORDS_LIVE_URL,
+ * when set, replaces the feed of Conduit@Empathy1 only.
+ */
+export function chordsWindowUrl(
+  instrument: number,
+  start: number,
+  end: number,
+  conduitLiveUrl = process.env.CHORDS_LIVE_URL,
+): string {
+  const base = instrument === CONDUIT_INSTRUMENT_ID && conduitLiveUrl
+    ? conduitLiveUrl
+    : `${CHORDS_PORTAL_URL}/instruments/${instrument}/live`;
+  return `${base}?start=${start}&end=${end}`;
+}
 
 // The live endpoint averages whatever window it is given into about a dozen
 // points, so three-hour windows come back as 15-minute means.
@@ -219,14 +254,25 @@ const CHORDS_FIELDS: Record<string, string> = {
 // 15 it is the rain that fell in that quarter hour.
 const CHORDS_RAIN_FIELDS = new Set(["rg", "rg2"]);
 
-async function fetchChordsWindow(start: number, end: number): Promise<Record<string, unknown>[]> {
-  const res = await fetch(`${CHORDS_URL}?start=${start}&end=${end}`, {
+interface ChordsRows {
+  rows: Record<string, unknown>[];
+  // Our names for the channels the instrument lists, whether or not they
+  // carried any points.
+  channels: string[];
+}
+
+async function fetchChordsWindow(start: number, end: number, instrument: number): Promise<ChordsRows> {
+  const res = await fetch(chordsWindowUrl(instrument, start, end), {
     headers: { "User-Agent": "AfyaMazingira/1.0" },
     signal: AbortSignal.timeout(8_000),
   });
   if (!res.ok) throw new Error(`CHORDS HTTP ${res.status}`);
-  const json = (await res.json()) as { multivariable_points?: Record<string, [number, number][]> };
+  const json = (await res.json()) as {
+    multivariable_points?: Record<string, [number, number][]>;
+    multivariable_names?: string[];
+  };
   const points = json.multivariable_points ?? {};
+  const channels = (json.multivariable_names ?? []).map((short) => CHORDS_FIELDS[short]).filter(Boolean);
 
   const byTime = new Map<number, Record<string, unknown>>();
   for (const [short, series] of Object.entries(points)) {
@@ -238,24 +284,37 @@ async function fetchChordsWindow(start: number, end: number): Promise<Record<str
       byTime.set(ms, row);
     }
   }
-  return [...byTime.values()];
+  return { rows: [...byTime.values()], channels };
 }
 
-async function fetchChordsRaw(from: Date, to: Date): Promise<Record<string, unknown>[]> {
+async function fetchChordsRaw(from: Date, to: Date, instrument = CONDUIT_INSTRUMENT_ID): Promise<ChordsRows> {
   const windows: [number, number][] = [];
   for (let start = from.getTime(); start < to.getTime(); start += CHORDS_WINDOW_MS) {
     windows.push([start, Math.min(start + CHORDS_WINDOW_MS, to.getTime())]);
   }
-  const results = await Promise.allSettled(windows.map(([s, e]) => fetchChordsWindow(s, e)));
+  const results = await Promise.allSettled(windows.map(([s, e]) => fetchChordsWindow(s, e, instrument)));
   // Neighbouring windows share their edge point; that is our overlap, not a
   // repeat from the station, so it is merged here rather than counted later.
   const byTs = new Map<string, Record<string, unknown>>();
+  const channels = new Set<string>();
   for (const r of results) {
     if (r.status !== "fulfilled") continue;
-    for (const row of r.value) byTs.set(String(row.ts), { ...byTs.get(String(row.ts)), ...row });
+    r.value.channels.forEach((c) => channels.add(c));
+    for (const row of r.value.rows) byTs.set(String(row.ts), { ...byTs.get(String(row.ts)), ...row });
   }
   if (!byTs.size) throw new Error("CHORDS returned no observations");
-  return [...byTs.values()];
+  return { rows: [...byTs.values()], channels: [...channels] };
+}
+
+/**
+ * The cleaned 15-minute grid for the last 30 hours of an instrument on the
+ * portal, built the same way as the live series for Conduit@Empathy1, with
+ * the channels the instrument lists. Throws when the portal has nothing.
+ */
+export async function getChordsSeries(instrument: number): Promise<{ series: DemoObservation[]; channels: string[] }> {
+  const now = Date.now();
+  const { rows, channels } = await fetchChordsRaw(new Date(now - LIVE_LOOKBACK_MS), new Date(now), instrument);
+  return { series: cleanAndGrid(rows), channels };
 }
 
 // Cleaning and the 15-minute grid
