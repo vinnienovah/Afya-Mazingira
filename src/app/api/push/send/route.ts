@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
   try {
     const webpush = await import("web-push");
     webpush.setVapidDetails(
-      process.env.VAPID_EMAIL ?? "mailto:afya@afyahewa.dev",
+      process.env.VAPID_EMAIL ?? "https://afya-mazingira.vercel.app",
       process.env.VAPID_PUBLIC_KEY!,
       process.env.VAPID_PRIVATE_KEY!,
     );

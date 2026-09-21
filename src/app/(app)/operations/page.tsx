@@ -17,64 +17,33 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { assessActivity, type PlannedActivity } from "@/lib/afya/operations";
 
-interface OperationalActivity {
-  id: number;
-  name: string;
-  start_hour: number;
-  end_hour: number;
-  activity_type: string;
-  affected: boolean;
-  recommendation_en: string;
-  recommendation_sw: string;
-}
-
-const DEMO_ACTIVITIES: OperationalActivity[] = [
-  {
-    id: 1, name: "Outdoor Sports Training", start_hour: 14, end_hour: 16,
-    activity_type: "sports", affected: true,
-    recommendation_en: "Shift to 16:30–18:00 to avoid peak thermal exposure",
-    recommendation_sw: "Hamisha hadi 16:30–18:00 ili kuepuka kilele cha kupatwa na joto",
-  },
-  {
-    id: 2, name: "Field Maintenance Work", start_hour: 9, end_hour: 12,
-    activity_type: "outdoor_work", affected: false,
-    recommendation_en: "Morning conditions acceptable. Monitor for changes.",
-    recommendation_sw: "Hali za asubuhi zinakubalika. Fuatilia mabadiliko.",
-  },
-  {
-    id: 3, name: "Campus Event Setup", start_hour: 13, end_hour: 17,
-    activity_type: "outdoor_event", affected: true,
-    recommendation_en: "Afternoon setup in high exposure period. Consider canopy provision.",
-    recommendation_sw: "Uandaaji wa mchana katika kipindi cha kupatwa na joto. Fikiria uandaaji wa kivuli.",
-  },
-  {
-    id: 4, name: "Agricultural Field Work", start_hour: 7, end_hour: 11,
-    activity_type: "field_work", affected: false,
-    recommendation_en: "Early morning work is well-timed for current conditions.",
-    recommendation_sw: "Kazi za asubuhi mapema zimepangwa vizuri.",
-  },
+// A starting list so the page is not empty. Each one is judged live against
+// the forecast below; the names and hours are examples, not a real schedule.
+const EXAMPLE_ACTIVITIES: PlannedActivity[] = [
+  { id: 1, name: "Outdoor Sports Training", start_hour: 14, end_hour: 16, activity_type: "sports" },
+  { id: 2, name: "Field Maintenance Work", start_hour: 9, end_hour: 12, activity_type: "outdoor_work" },
+  { id: 3, name: "Campus Event Setup", start_hour: 13, end_hour: 17, activity_type: "outdoor_event" },
+  { id: 4, name: "Agricultural Field Work", start_hour: 7, end_hour: 11, activity_type: "field_work" },
 ];
 
 export default function OperationsPage() {
   const { situation, isLoading, error } = useSituation();
   const { t, lang } = useLanguage();
-  const [activities, setActivities] = useState<OperationalActivity[]>(DEMO_ACTIVITIES);
+  const [activities, setActivities] = useState<PlannedActivity[]>(EXAMPLE_ACTIVITIES);
   const [newActivity, setNewActivity] = useState("");
   const [newStart, setNewStart] = useState(9);
   const [newEnd, setNewEnd] = useState(12);
 
   function addActivity() {
     if (!newActivity.trim()) return;
-    const act: OperationalActivity = {
+    const act: PlannedActivity = {
       id: Date.now(),
       name: newActivity,
       start_hour: newStart,
       end_hour: newEnd,
       activity_type: "general",
-      affected: false,
-      recommendation_en: "Evaluate against current forecast.",
-      recommendation_sw: "Tathmini dhidi ya utabiri wa sasa.",
     };
     setActivities((a) => [...a, act]);
     setNewActivity("");
@@ -302,22 +271,26 @@ export default function OperationsPage() {
           <Card>
             <div className="flex items-center justify-between mb-3">
               <CardTitle className="mb-0">{t("planned_activities")}</CardTitle>
-              <span className="text-xs text-afya-muted">{activities.length} {lang === "sw" ? "shughuli" : "activities"}</span>
+              <span className="text-xs text-afya-muted">
+                {activities.length} {lang === "sw" ? "shughuli · mifano, ongeza zako" : "activities · examples, add your own"}
+              </span>
             </div>
             <div className="space-y-2.5">
-              {activities.map((act) => (
+              {activities.map((act) => {
+                const check = situation ? assessActivity(act, situation.forecast_series, Date.parse(situation.generated_at)) : null;
+                return (
                 <div
                   key={act.id}
                   className={cn(
                     "rounded-xl border px-4 py-3",
-                    act.affected ? "border-afya-orange/40 bg-afya-orange/5" : "border-afya-border",
+                    check?.affected ? "border-afya-orange/40 bg-afya-orange/5" : "border-afya-border",
                   )}
                 >
                   <div className="flex items-start gap-3 flex-wrap">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-sm text-afya-charcoal">{act.name}</span>
-                        {act.affected && (
+                        {check?.affected && (
                           <span className="rounded-full bg-afya-orange/10 text-afya-orange text-[10px] font-bold px-2 py-0.5">
                             {lang === "sw" ? "INAATHIRIWA" : "AFFECTED"}
                           </span>
@@ -328,7 +301,7 @@ export default function OperationsPage() {
                         {String(act.start_hour).padStart(2, "0")}:00–{String(act.end_hour).padStart(2, "0")}:00
                       </div>
                       <p className="text-xs text-afya-muted mt-1 leading-relaxed">
-                        {lang === "sw" ? act.recommendation_sw : act.recommendation_en}
+                        {check ? (lang === "sw" ? check.text_sw : check.text_en) : null}
                       </p>
                     </div>
                     <div className="flex gap-1 shrink-0">
@@ -349,7 +322,8 @@ export default function OperationsPage() {
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Add new activity */}
