@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useLanguage } from "@/lib/contexts/language";
-import { CROP_PROFILES, type GrowthStage, type FarmAdvisory } from "@/lib/afya/farm-engine";
+import { CROP_PROFILES, type GrowthStage, type FarmAdvisory, type MmRange } from "@/lib/afya/farm-engine";
 import { fmtWindow, fmtTime } from "@/lib/afya/format";
 import { Card, CardTitle, CardMeta } from "@/components/ui/Card";
 import { Skeleton, SkeletonCard } from "@/components/ui/Skeleton";
@@ -25,6 +25,8 @@ const ACTION_STYLE: Record<string, { bg: string; border: string; text: string; d
   IRRIGATE_NOW: { bg: "bg-[#C62828]/8", border: "border-[#C62828]/40", text: "text-[#C62828]", dot: "#C62828" },
   IRRIGATE_SOON: { bg: "bg-[#E27832]/8", border: "border-[#E27832]/40", text: "text-[#E27832]", dot: "#E27832" },
   HOLD_RAIN_EXPECTED: { bg: "bg-[#3786B5]/8", border: "border-[#3786B5]/40", text: "text-[#3786B5]", dot: "#3786B5" },
+  // Gold headline text is too faint on its own tint, so this one stays charcoal.
+  CHECK_SOIL: { bg: "bg-[#F2B705]/8", border: "border-[#F2B705]/40", text: "text-afya-charcoal", dot: "#F2B705" },
   NO_IRRIGATION: { bg: "bg-[#006B3C]/8", border: "border-[#006B3C]/40", text: "text-[#006B3C]", dot: "#006B3C" },
 };
 
@@ -98,6 +100,8 @@ export default function FarmPage() {
   const wb = adv?.water_balance;
   const irr = adv?.irrigation;
   const actionStyle = irr ? ACTION_STYLE[irr.action] : ACTION_STYLE.NO_IRRIGATION;
+  const fmtRange = (r: MmRange) =>
+    r.low === r.high ? `${r.low}` : `${r.low} ${lang === "sw" ? "hadi" : "to"} ${r.high}`;
 
   return (
     <div className="max-w-5xl mx-auto space-y-5">
@@ -208,14 +212,24 @@ export default function FarmPage() {
               </div>
 
               <h2 className={cn("text-3xl sm:text-4xl font-bold mb-2", actionStyle.text)}>
-                {t(`farm_action_${irr.action.toLowerCase()}`)}
+                {irr.action === "CHECK_SOIL"
+                  ? lang === "sw"
+                    ? "Kagua udongo kwanza"
+                    : "Check the soil first"
+                  : t(`farm_action_${irr.action.toLowerCase()}`)}
               </h2>
 
-              {irr.depth_mm > 0 ? (
+              {irr.depth_range_mm ? (
                 <p className="text-afya-charcoal text-base mb-4">
                   {t("farm_apply")}{" "}
-                  <strong className="text-xl tabular-nums">{irr.depth_mm} mm</strong>
-                  <span className="text-afya-muted"> · {irr.litres_per_m2} {t("farm_litres_m2")}</span>
+                  <strong className="text-xl tabular-nums">{fmtRange(irr.depth_range_mm)} mm</strong>
+                  <span className="text-afya-muted"> · {fmtRange(irr.depth_range_mm)} {t("farm_litres_m2")}</span>
+                </p>
+              ) : irr.action === "CHECK_SOIL" ? (
+                <p className="text-afya-charcoal text-base mb-4">
+                  {lang === "sw"
+                    ? "Mvua ya siku 7 zilizopita ilizidi mahitaji ya maji ya zao, lakini data ya kikanda ya unyevu wa udongo inaonyesha kuwa eneo la mizizi limekauka sana. Data hiyo huenda isionyeshe hali halisi ya shamba lako, kwa hivyo kagua udongo kwa mkono na umwagilie tu ikiwa udongo ni mkavu chini ya uso."
+                    : "Rain over the last 7 days was more than the crop needed, but the regional soil-moisture layer reads the root zone as heavily depleted. That layer may not reflect your field, so check the soil by hand and irrigate only if it is dry below the surface."}
                 </p>
               ) : (
                 <p className="text-afya-muted text-base mb-4">{t("farm_no_water_needed")}</p>
@@ -230,6 +244,15 @@ export default function FarmPage() {
                   </li>
                 ))}
               </ul>
+
+              <div className="mt-4 flex items-start gap-2" role="note">
+                <Info className="w-3.5 h-3.5 text-afya-muted shrink-0 mt-0.5" strokeWidth={1.8} aria-hidden="true" />
+                <p className="text-xs text-afya-muted leading-relaxed">
+                  {lang === "sw"
+                    ? "Haya ni makadirio tu. Yamehesabiwa kutoka unyevu wa udongo wa kikanda (ERA5-Land) na udongo wa mfinyanzi unaopatikana kwa kawaida JKUAT, si kipimo cha shamba lako, kwa hivyo kagua udongo kwa mkono kabla ya kumwagilia."
+                    : "Indicative only. Worked out from regional soil moisture (ERA5-Land) and a clay soil typical of JKUAT, not a reading from your field, so check the soil by hand before irrigating."}
+                </p>
+              </div>
             </div>
           </div>
 
