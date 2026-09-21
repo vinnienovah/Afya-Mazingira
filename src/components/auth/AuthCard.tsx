@@ -7,7 +7,6 @@ import { useLanguage } from "@/lib/contexts/language";
 import { useAuth } from "@/lib/contexts/auth";
 import { GoogleButton } from "@/components/auth/GoogleButton";
 import { PasswordStrengthMeter } from "@/components/auth/PasswordStrength";
-import { DEMO_EMAIL, DEMO_PASSWORD } from "@/lib/afya/constants";
 import { Globe, RefreshCw, Eye, EyeOff, CheckCircle2, AlertCircle, Mail } from "lucide-react";
 
 type Mode = "signin" | "signup";
@@ -34,7 +33,6 @@ export function AuthCard({ initialMode }: { initialMode: Mode }) {
   const [error, setError] = useState<string | null>(null);
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [demoLoading, setDemoLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendSent, setResendSent] = useState(false);
 
@@ -113,34 +111,6 @@ export function AuthCard({ initialMode }: { initialMode: Mode }) {
       }
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function fillDemo() {
-    setEmail(DEMO_EMAIL);
-    setPassword(DEMO_PASSWORD);
-    setDemoLoading(true);
-    setError(null);
-    try {
-      let res = await fetch("/api/auth/sign-in", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: DEMO_EMAIL, password: DEMO_PASSWORD }),
-        credentials: "include",
-      });
-      if (!res.ok) {
-        res = await fetch("/api/auth/sign-up", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: "Demo User", email: DEMO_EMAIL, password: DEMO_PASSWORD, lang }),
-          credentials: "include",
-        });
-      }
-      if (!res.ok) { setError(t("error_auth")); return; }
-      await refresh();
-      router.push("/situation");
-    } finally {
-      setDemoLoading(false);
     }
   }
 
@@ -400,28 +370,6 @@ export function AuthCard({ initialMode }: { initialMode: Mode }) {
                     </div>
                     <GoogleButton />
                   </div>
-
-                  {/* Demo account (sign-in mode only) */}
-                  {mode === "signin" && (
-                    <div className="mt-5">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="flex-1 border-t border-afya-border" aria-hidden="true" />
-                        <span className="text-xs text-afya-muted">{t("or_label")}</span>
-                        <div className="flex-1 border-t border-afya-border" aria-hidden="true" />
-                      </div>
-                      <button
-                        onClick={fillDemo}
-                        disabled={demoLoading}
-                        className="w-full rounded-xl border-2 border-afya-gold/50 bg-afya-gold/8 px-6 py-3.5 text-sm font-bold text-[#7a5c00] hover:bg-afya-gold/15 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-                      >
-                        {demoLoading && <RefreshCw className="w-4 h-4 animate-spin" strokeWidth={2} aria-hidden="true" />}
-                        {t("use_demo")}
-                      </button>
-                      <p className="text-xs text-afya-muted/60 text-center mt-2">
-                        {lang === "sw" ? "Hii itaunda au kuingia kwenye akaunti ya onyo" : "This will sign in to or create a demo account"}
-                      </p>
-                    </div>
-                  )}
 
                   <p className="text-center text-sm text-afya-muted mt-5">
                     {mode === "signin" ? (

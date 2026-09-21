@@ -6,7 +6,7 @@ import {
   Tooltip, ReferenceLine, ResponsiveContainer, ReferenceArea,
 } from "recharts";
 import { useLanguage } from "@/lib/contexts/language";
-import type { ForecastPoint, StateSegment } from "@/lib/afya/types";
+import type { ForecastPoint, StateSegment, StateId } from "@/lib/afya/types";
 import { STATES } from "@/lib/afya/constants";
 import { fmtTime } from "@/lib/afya/format";
 
@@ -124,6 +124,20 @@ export default function ForecastChart({ forecastSeries, measuredSeries = [], sta
 
   // State history bands
   const stateBands = useMemo(() => stateHistory, [stateHistory]);
+
+  // Legend shows each distinct state once, not once per band segment —
+  // a 9h window can revisit the same state several times.
+  const distinctStates = useMemo(() => {
+    const seen = new Set<StateId>();
+    const out: StateId[] = [];
+    for (const seg of stateBands) {
+      if (!seen.has(seg.state_id)) {
+        seen.add(seg.state_id);
+        out.push(seg.state_id);
+      }
+    }
+    return out;
+  }, [stateBands]);
 
   const minVal = useMemo(() => {
     const all = chartData.flatMap((d) => [
@@ -297,14 +311,14 @@ export default function ForecastChart({ forecastSeries, measuredSeries = [], sta
         </ComposedChart>
       </ResponsiveContainer>
 
-      {/* State band legend */}
-      {stateBands.length > 0 && (
+      {/* State band legend — one entry per distinct state, not per segment */}
+      {distinctStates.length > 0 && (
         <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2" aria-hidden="true">
-          {stateBands.map((seg) => {
-            const meta = STATES[seg.state_id];
+          {distinctStates.map((stateId) => {
+            const meta = STATES[stateId];
             if (!meta) return null;
             return (
-              <span key={`legend-${seg.start}`} className="flex items-center gap-1 text-[10px] text-afya-muted">
+              <span key={`legend-${stateId}`} className="flex items-center gap-1 text-[10px] text-afya-muted">
                 <span
                   className="w-3 h-2 rounded-sm inline-block"
                   style={{ backgroundColor: `${meta.color}30` }}

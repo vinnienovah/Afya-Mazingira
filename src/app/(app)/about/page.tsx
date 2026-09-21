@@ -86,7 +86,7 @@ export default function AboutPage() {
             { step: "2", en: "Quality control and validation", sw: "Udhibiti wa ubora na uthibitisho" },
             { step: "3", en: "Feature engineering", sw: "Uhandisi wa vipengele" },
             { step: "4", en: "Climate Reflex state classification", sw: "Uainishaji wa hali ya Climate Reflex" },
-            { step: "5", en: "+1/+3/+6h WBGT forecasting", sw: "Utabiri wa WBGT wa +1/+3/+6saa" },
+            { step: "5", en: "+1/+3/+6/+9h WBGT forecasting", sw: "Utabiri wa WBGT wa +1/+3/+6/+9saa" },
             { step: "6", en: "Risk / exposure interpretation", sw: "Ufafanuzi wa hatari / kupatwa" },
             { step: "7", en: "Best-Time activity recommendation", sw: "Pendekezo la shughuli la Wakati-Bora" },
             { step: "8", en: "Explainable output (EN + SW)", sw: "Hitimisho linaloweza kuelezeka (EN + SW)" },
