@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { LayoutDashboard, TrendingUp, CalendarCheck, MapIcon, MoreHorizontal } from "lucide-react";
 import { useLanguage } from "@/lib/contexts/language";
 import { useState } from "react";
-import { BrainCircuit, Building2, History, Bell, User, Info, X, Sprout, BookOpen, LineChart } from "lucide-react";
+import { BrainCircuit, Building2, Bell, User, Info, X, Sprout, BookOpen, LineChart } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const PRIMARY = [
@@ -20,7 +20,6 @@ const OVERFLOW = [
   { href: "/climate",       icon: LineChart,    key: "nav_climate" },
   { href: "/intelligence",  icon: BrainCircuit, key: "nav_intelligence" },
   { href: "/operations",    icon: Building2,    key: "nav_operations" },
-  { href: "/replay",        icon: History,      key: "nav_replay" },
   { href: "/stories",       icon: BookOpen,     key: "nav_stories" },
   { href: "/notifications", icon: Bell,         key: "nav_notifications" },
   { href: "/profile",       icon: User,         key: "nav_profile" },
