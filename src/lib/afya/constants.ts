@@ -101,6 +101,20 @@ export function wbgtToRisk(wbgt: number, activityOffset = 0): RiskLevel {
   return "VERY_HIGH";
 }
 
+/**
+ * Shade-only WBGT approximation (Australian Bureau of Meteorology formula),
+ * from real temperature + humidity alone — used wherever we have a real
+ * regional forecast (ERA5-Land / Open-Meteo) but no ground-station globe/
+ * wet-bulb sensor. A genuine, published approximation, not a fabricated
+ * number — but coarser than the sensor-grade WBGT the Conduit station
+ * computes directly, so it's always labeled REGIONAL_MODEL, never MEASURED.
+ */
+export function approxWbgtShade(tempC: number, rhPct: number): number {
+  const es = 6.105 * Math.exp((17.27 * tempC) / (237.7 + tempC));
+  const e = (rhPct / 100) * es;
+  return 0.567 * tempC + 0.393 * e + 3.94;
+}
+
 // ─── Model versions ───────────────────────────────────────────────────────────
 export const MODEL_VERSIONS = {
   "1h": { algorithm: "ExtraTrees", version: "1.0.0", mae: 0.57 },

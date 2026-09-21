@@ -5,6 +5,7 @@ import { findBestTime } from "@/lib/afya/best-time-engine";
 import { getSessionFromCookies } from "@/lib/auth/logic";
 import { db } from "@/db";
 import { activityRecommendations } from "@/db/schema";
+import type { DataQuality, ForecastPoint } from "@/lib/afya/types";
 
 // Safety net for the (usually much faster) real ERA5/Sentinel fetches in
 // runPipeline — Vercel's default function timeout is short.
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
       durationMinutes: duration_minutes,
     });
 
-    const result = findBestTime(
+    let result = findBestTime(
       activity,
       duration_minutes,
       window_start,
@@ -38,6 +39,33 @@ export async function POST(req: NextRequest) {
       situation.forecast_series,
       situation.quality,
     );
+    let source: "ground" | "regional" = "ground";
+
+    // The ground (Conduit-anchored) forecast only ever covers ~9h ahead, and
+    // is refused outright when quality is POOR — neither supports planning
+    // "tomorrow" or planning through a station outage. Fall back to the real
+    // Open-Meteo regional forecast (see getRegionalForecastSeries), which
+    // covers the next 3 days regardless of the ground station's state.
+    if (!result && situation.regional_outlook.length) {
+      const regionalSeries: ForecastPoint[] = situation.regional_outlook.map((p) => ({
+        time: p.time,
+        value: p.wbgt_like,
+        // ±2°C: a deliberately wider band than the ground model's, reflecting
+        // the real added uncertainty of a shade-only regional proxy standing
+        // in for sensor-grade WBGT.
+        lower: p.wbgt_like - 2,
+        upper: p.wbgt_like + 2,
+        horizon_minutes: 0,
+      }));
+      const regionalQuality: DataQuality = {
+        status: "GOOD",
+        freshness_minutes: 0,
+        flags: [],
+        updated_at: new Date().toISOString(),
+      };
+      result = findBestTime(activity, duration_minutes, window_start, window_end, regionalSeries, regionalQuality);
+      if (result) source = "regional";
+    }
 
     if (!result) {
       if (situation.quality.status === "POOR") {
@@ -65,11 +93,12 @@ export async function POST(req: NextRequest) {
           reasons: result.recommended.reasons,
           quality: situation.quality.status,
           uncertainty: situation.risk.uncertainty,
+          source,
         },
       }).catch(() => { /* non-blocking */ });
     }
 
-    return NextResponse.json({ result, situation: {
+    return NextResponse.json({ result, source, situation: {
       state: situation.state,
       quality: situation.quality,
       risk: situation.risk,

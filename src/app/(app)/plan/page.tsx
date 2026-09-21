@@ -28,10 +28,11 @@ interface SavedPlan {
   updated_at: string;
 }
 
-// Helper: build today's available ISO strings in EAT
-function todayAt(hourEAT: number, minuteEAT = 0): string {
+// Helper: build an available-time ISO string in EAT, optionally for a future day
+function todayAt(hourEAT: number, minuteEAT = 0, dayOffset = 0): string {
   const now = new Date();
   const eat = new Date(now.getTime() + 3 * 3600 * 1000);
+  eat.setUTCDate(eat.getUTCDate() + dayOffset);
   eat.setUTCHours(hourEAT, minuteEAT, 0, 0);
   return new Date(eat.getTime() - 3 * 3600 * 1000).toISOString();
 }
@@ -45,11 +46,13 @@ export default function PlanPage() {
   const [duration, setDuration] = useState(90);
   const [startHour, setStartHour] = useState(8);
   const [endHour, setEndHour] = useState(18);
+  const [dayOffset, setDayOffset] = useState(0); // 0 = today, 1 = tomorrow
   const [planName, setPlanName] = useState("");
 
   // Result state
   const [result, setResult] = useState<BestTimeResult | null>(null);
   const [quality, setQuality] = useState<string | null>(null);
+  const [source, setSource] = useState<"ground" | "regional" | null>(null);
   const [evaluating, setEvaluating] = useState(false);
   const [evalError, setEvalError] = useState<string | null>(null);
 
@@ -81,9 +84,10 @@ export default function PlanPage() {
   async function evaluate() {
     setEvaluating(true);
     setResult(null);
+    setSource(null);
     setEvalError(null);
-    const windowStart = todayAt(startHour);
-    const windowEnd = todayAt(endHour);
+    const windowStart = todayAt(startHour, 0, dayOffset);
+    const windowEnd = todayAt(endHour, 0, dayOffset);
     try {
       const res = await fetch("/api/recommendations", {
         method: "POST",
@@ -102,6 +106,7 @@ export default function PlanPage() {
       } else {
         setResult(data.result);
         setQuality(data.situation?.quality ?? null);
+        setSource(data.source ?? "ground");
       }
     } catch {
       setEvalError(t("error_generic"));
@@ -122,8 +127,8 @@ export default function PlanPage() {
           activity_type: activity,
           activity_label: lang === "sw" ? profileMeta.label_sw : profileMeta.label_en,
           duration_minutes: duration,
-          available_start: todayAt(startHour),
-          available_end: todayAt(endHour),
+          available_start: todayAt(startHour, 0, dayOffset),
+          available_end: todayAt(endHour, 0, dayOffset),
           last_result: result,
         }),
         credentials: "include",
@@ -232,6 +237,26 @@ export default function PlanPage() {
 
           <Card>
             <CardTitle>{t("when_available")}</CardTitle>
+            <div className="flex gap-2 mb-3">
+              {[0, 1].map((offset) => (
+                <button
+                  key={offset}
+                  onClick={() => setDayOffset(offset)}
+                  aria-pressed={dayOffset === offset}
+                  className={cn(
+                    "flex-1 rounded-xl border px-3 py-2 text-sm font-semibold transition-all",
+                    dayOffset === offset
+                      ? "border-afya-green bg-afya-green text-white"
+                      : "border-afya-border text-afya-charcoal hover:border-afya-green/50",
+                  )}
+                >
+                  {offset === 0 ? t("plan_day_today") : t("plan_day_tomorrow")}
+                </button>
+              ))}
+            </div>
+            {dayOffset === 1 && (
+              <p className="text-xs text-afya-muted mb-3">{t("plan_day_tomorrow_note")}</p>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-afya-muted block mb-1.5">{t("start_time")}</label>
@@ -318,6 +343,20 @@ export default function PlanPage() {
           {/* Result */}
           {!evaluating && result && (
             <>
+              {/* Regional-fallback notice — shown whenever the recommendation
+                  came from the real regional forecast (Open-Meteo), not the
+                  Conduit ground station: either because the station's own
+                  9h-ahead forecast can't reach this far (tomorrow), or
+                  because the station has gone quiet for longer than its own
+                  forecast horizon. Still a real forecast, just a coarser,
+                  wider-uncertainty one. */}
+              {source === "regional" && (
+                <div className="rounded-xl border border-afya-gold/40 bg-afya-gold/8 px-4 py-3 flex gap-2" role="status">
+                  <AlertTriangle className="w-4 h-4 text-afya-gold shrink-0 mt-0.5" strokeWidth={1.8} aria-hidden="true" />
+                  <p className="text-sm text-afya-charcoal">{t("plan_regional_notice")}</p>
+                </div>
+              )}
+
               {/* Best window hero */}
               <div
                 className="rounded-2xl overflow-hidden"

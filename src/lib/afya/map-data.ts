@@ -20,7 +20,7 @@
 import fs from "fs";
 import path from "path";
 import type { Geometry } from "geojson";
-import { wbgtToRisk } from "./constants";
+import { wbgtToRisk, approxWbgtShade } from "./constants";
 import { hasCopernicusCreds, cdseToken, ndviStatisticsForBbox, type Bbox } from "./copernicus";
 
 export interface CountyFeature {
@@ -186,12 +186,6 @@ interface OpenMeteoLocation {
 }
 
 /** Shade-only WBGT approximation (Australian Bureau of Meteorology formula). */
-function approxWbgtShade(tempC: number, rhPct: number): number {
-  const es = 6.105 * Math.exp((17.27 * tempC) / (237.7 + tempC));
-  const e = (rhPct / 100) * es;
-  return 0.567 * tempC + 0.393 * e + 3.94;
-}
-
 // ─── NDVI (real, per-county Copernicus Sentinel-2 statistics) ──────────────
 
 const NDVI_TTL_MS = 6 * 3600_000;
