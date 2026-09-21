@@ -50,13 +50,39 @@ The station (Conduit@Empathy1, JKUAT, lat -1.0997, lon 37.0145, 1,523 m) is the 
 
 **Cleaning.** Every source goes onto one 15-minute grid. Repeated timestamps are removed and counted. The station's missing-value code (-999.9) is treated as missing. Gaps up to 30 minutes are interpolated; longer ones are carried forward so the engines keep running, and every such value is marked as filled in. Data quality is GOOD, DEGRADED (over an hour old, or a critical reading filled in) or POOR (over three hours old), and POOR suppresses recommendations.
 
-**Station health first.** Before any reading is used it passes the quality rules of the Conduit Sentinel specification, scaled to 15-minute data: plausible ranges, sudden jumps, readings stuck for hours, the three thermometers disagreeing, a sensor silent all day, the two rain gauges disagreeing, and the firmware's derived values. `npm run station-report` runs them over the whole archive; the **Station Health** page shows that report and the same checks on the last 24 hours. Over the 465 days on record:
+**Conduit Sentinel: station health first.** Conduit Sentinel is the quality-control core of the project: a set of rules, audits and a daily health score written for this station's exports and applied here to the 15-minute data. Every reading passes it before the app uses it.
+
+| Check | What it flags |
+|---|---|
+| R01 to R04 | Temperatures outside -5 to 45 °C, humidity at or below 0 %, pressure outside 800 to 900 hPa (the station is at 1,523 m), impossible wind or gusts |
+| R06 | Light readings below the sensor's dark floor of 240 counts |
+| R07 | Temperature jumping more than 5 °C in 15 minutes |
+| R08 | The same value for 2 hours (temperature, humidity) or 3 hours (pressure, non-zero wind) |
+| R09 | The three thermometers disagreeing by more than 2 °C |
+| R11 | One rain gauge recording 0.4 mm or more in a day while the other records nothing |
+| R12 | A sensor silent for a whole day |
+| R13 | The gust-direction column copying the gust speed |
+| R16 | The firmware WBGT more than 1.5 °C below the wet bulb |
+| A01, A03, A05 | Audits: the firmware wet bulb against Stull (2011), the firmware WBGT against the wet bulb, and the three thermometers against each other |
+| Daily score | 100, less 10 for each sensor group that is bad, 2 for each that is suspect, and 1 for every 14.4 minutes without data |
+
+Where it lives: the rules in `src/lib/afya/sentinel.ts`; `npm run station-report` runs them over the whole archive into `src/lib/afya/model/station-health.json`; `/api/station-health` serves that report and the same checks live on the last 24 hours; the **Station Health** page shows both; `tests/sentinel.test.ts` tests them.
+
+What it changes in the app:
+
+- a sensor group that fails the rules over the last 24 hours lowers data quality, which widens the forecast band or suppresses recommendations;
+- the firmware WBGT fails audit A03, so WBGT is computed from the wet bulb and air temperature instead;
+- the firmware wet bulb passes audit A01, so the app uses it;
+- rain gauge 2 fails R11 on many rainy days, so rainfall totals come from ERA5-Land;
+- values filled in over gaps are never judged as good and never used to fit the models.
+
+Over the 465 days on record:
 
 - the station is healthy most of the time: a mean daily score of 98.8 out of 100, no day below 80, and only two gaps longer than an hour;
-- the firmware WBGT is more than 1.5 °C below the wet bulb in 42.9 % of readings (62 % at night), so the app does not use it;
-- rain gauge 2 recorded nothing on 53 days when gauge 1 measured rain, so rainfall totals come from ERA5-Land;
+- the firmware WBGT is more than 1.5 °C below the wet bulb in 42.9 % of readings (62 % at night);
+- rain gauge 2 recorded nothing on 53 days when gauge 1 measured rain;
 - the gust-direction column is a copy of the gust speed on every day;
-- the firmware wet bulb agrees with Stull (2011) to 0.032 °C, so the app uses it.
+- the firmware wet bulb agrees with Stull (2011) to 0.032 °C.
 
 These go on the page as findings to report to JHUB. The same checks also run live, unchanged, on other 3D-PAWS stations on the CHORDS portal: the page's station selector adds KALRO Thika, Machakos Stoni Athi and Embu, the nearby stations that were reporting on 21 September 2026.
 
@@ -95,7 +121,7 @@ The forecast beats "no change" in every month at every horizon. In the hot seaso
 
 `npm run fit` refits both models from the archive through the same cleaning and feature code the app runs.
 
-**Farm advisory.** Station air temperature drives Hargreaves reference evapotranspiration and FAO-56 crop water demand, combined with ERA5-Land rainfall and soil moisture.
+**Farm advisory.** Station air temperature drives Hargreaves reference evapotranspiration and FAO-56 crop water demand, balanced against ERA5-Land rainfall and soil moisture for a clay soil typical of JKUAT (about 43 % clay per SoilGrids; water limits from FAO-56 Table 19). The irrigation depth is given as a range rounded to 5 mm. When the last week's rain exceeded crop demand but the regional soil-moisture layer reads the root zone as dry, the advice is to check the soil by hand first. The page marks the advice as indicative.
 
 **Regional outlook.** Kiambu, where the station stands, uses the station pipeline. The other ten counties use ERA5-Land and Open-Meteo through the same shade WBGT (with Stull's wet bulb), labelled as regional.
 
@@ -106,10 +132,10 @@ The forecast beats "no change" in every month at every horizon. In the hot seaso
 | **Situation** | The current state, readings, data quality, the +1/+3/+6/+9 h forecast with each horizon's tested error, the best window for an activity, and the AI explanation |
 | **Forecast** | Measured WBGT with the 15-minute forecast and its band, shaded by state |
 | **Plan Activity** | Best-time search for an activity, duration and time window, with reasons, an alternative and saved plans |
-| **Farm Advisory** | Irrigation depth in mm and litres per m², spray and field-work windows, crop heat stress and planting outlook for 7 crops and 4 growth stages |
+| **Farm Advisory** | Irrigate, hold, or check the soil first, with the depth as a range in mm; spray and field-work windows, crop heat stress and planting outlook for 7 crops and 4 growth stages; marked indicative |
 | **Risk Map** | Leaflet on OpenStreetMap: 11 county boundaries with outlook, heat, rain and vegetation layers and a time slider; station-backed versus regional marked on each |
 | **Dashboard** | Live climate variables, a climate history explorer over any date range, and historical replay: step through a past day with the future hidden, then reveal what the station recorded |
-| **Station Health** | Sensor-group status for the last 24 hours, the daily health score since June 2025, firmware and thermometer audits, the rules, and findings to report to JHUB |
+| **Station Health** | Conduit Sentinel: sensor-group status for the last 24 hours at JKUAT or three nearby CHORDS stations, the daily health score since June 2025, firmware and thermometer audits, the rules, and findings to report to JHUB |
 | **Why?** | Data quality flags, the state timeline, the fitted model table with test-month scores, and the regional context |
 | **Operations** | A day's planned activities, each judged against the forecast with a cooler window suggested when there is one |
 | **Flood Risk** | Current rainfall and soil saturation by county. Conditions only; not a flood forecast |
@@ -134,18 +160,20 @@ Also: sign-in with email and password or Google, email verification, saved plans
 ## 7. Architecture
 
 ```
-Conduit API  ---+
-CHORDS live  ---+--> 15-minute grid --> data quality --> features --+--> state (k-means)
-Archive CSV  ---+    (duplicates counted,                           |
-                      gaps marked, shade WBGT)                      +--> forecast (ridge, per step)
-                                                                            |
-                                     risk band per activity <---------------+
-                                     best-time window, farm advisory, alerts
-                                                  |
-ERA5-Land, Open-Meteo, Sentinel-2 ---> regional context and county map
-                                                  |
-                                     pages, briefing, email, push
-                                     language model rewording, checked against the computed facts
+Conduit API --+
+CHORDS live --+--> 15-minute grid --> Sentinel checks --> features --+--> state (k-means)
+Archive CSV --+    duplicates counted   and data quality             |
+                   gaps marked                                       +--> forecast (ridge, per step)
+                   shade WBGT                                                  |
+                                                                               v
+                                  risk band per activity, best daylight window,
+                                  farm advisory, alerts
+                                               |
+ERA5-Land, Open-Meteo, Sentinel-2 --> regional context and county map
+                                               |
+                                               v
+                                  pages, briefing, email, push; language model
+                                  rewording, checked against the computed facts
 ```
 
 Code: `src/lib/afya/` holds the engines (`sources`, `sentinel`, `data-quality`, `feature-engine`, `state-engine`, `forecast-engine`, `risk-engine`, `best-time-engine`, `farm-engine`, `explanation`), `src/lib/afya/model/` the fitted models, `src/app/` the pages and API routes, `scripts/` the model fit, the station report and the database seed, `tests/` the tests.
@@ -259,6 +287,7 @@ MIT. See [LICENSE](LICENSE). Station and reanalysis data remain under their prov
 - **The forecast under-warns more in the hot season.** Tested month by month, it put the hour in too low a risk band 17.1 % of the time from January to March 2026, against 7.8 % in other months. Treat hot-season forecasts near a band boundary as the higher band.
 - **Rain probability is a rule of thumb** (falling pressure and high humidity raise it), not fitted: the station's rain gauges are too sparse to fit it on.
 - **Rainfall context is ERA5-Land,** not CHIRPS.
+- **Farm advice is indicative.** It uses ERA5-Land's top soil layer at about 9 km and typical clay-soil values, not a measurement in the field.
 - **When ERA5-Land or the satellite catalogue cannot be reached** (and in historical replay, which does not fetch past context), their panels show "-" instead of numbers and data quality carries a `regional_context_unavailable` flag. No stand-in values are shown as data.
 - **The flood page shows conditions,** rainfall and soil saturation, not a flood forecast.
 - **The Conduit API can lag by most of a day;** the CHORDS feed covers for it, but carries no rain readings, so live rain is only seen when the Conduit API is current. Rainfall totals always come from ERA5-Land.
