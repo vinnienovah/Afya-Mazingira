@@ -1,4 +1,4 @@
-// ─── AFYA HEWA DB Seed ────────────────────────────────────────────────────────
+// Afya Mazingira database seed
 // Run after drizzle-kit push. Seeds model metadata and demo ERA5/CHIRPS context.
 
 import { config } from "dotenv";
@@ -13,7 +13,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const db = drizzle(pool);
 
 async function seed() {
-  console.log("Seeding AFYA HEWA database…");
+  console.log("Seeding the Afya Mazingira database…");
 
   // Model metadata
   await db.insert(modelMetadata).values([

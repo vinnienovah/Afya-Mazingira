@@ -6,16 +6,16 @@ import { CLIMATE_LOCATIONS } from "@/lib/afya/constants";
 import type { DemoObservation } from "@/lib/afya/demo-observations";
 
 // Climate History dashboard: an arbitrary date-range, chooseable-granularity
-// view — separate from the always-"now" Climate Variables panel on the
+// view, separate from the always-"now" Climate Variables panel on the
 // Intelligence page (/api/climate-series). Two datasets:
-//   - conduit: real station data, JKUAT only — the CSV archive for anything
+//   - conduit: real station data, JKUAT only, the CSV archive for anything
 //     older than its last row, topped up with a real live-API fetch for the
 //     gap between the archive and `to` when the range reaches that far.
 //   - era5: real ERA5-Land reanalysis, any of the supported locations (it's
 //     a global gridded product, so this works everywhere, unlike Conduit).
 export const dynamic = "force-dynamic";
 // Wide Conduit ranges are fetched in chunked batches (the live API rejects
-// any single request over ~a month) — a full year can mean several batches.
+// any single request over ~a month), a full year can mean several batches.
 export const maxDuration = 55;
 
 const MAX_RANGE_DAYS = 366;
@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
       const coverage = getCsvCoverage();
 
       // Top up with a real live fetch for the gap between the archive's last
-      // row and the requested end date, when the range reaches that far —
+      // row and the requested end date, when the range reaches that far,
       // clamped to the requested `from` too, so a range that starts after
       // the archive's coverage doesn't pull in earlier archive-gap rows.
       let liveRows: DemoObservation[] = [];

@@ -8,7 +8,7 @@ import type { Lang } from "@/lib/afya/types";
 import { StateChip } from "@/components/ui/StateChip";
 
 // Safety net for the (usually much faster) real ERA5/Sentinel fetches in
-// runPipeline — Vercel's default function timeout is short.
+// runPipeline, Vercel's default function timeout is short.
 export const maxDuration = 30;
 import { RiskChip } from "@/components/ui/RiskChip";
 import BriefingActions from "@/components/briefing/BriefingActions";
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
     "One-page printable operational summary of the current JKUAT/Juja environmental situation, forecast, Best-Time window and data provenance.",
 };
 
-// Live pipeline on every request — the briefing is a live document.
+// Live pipeline on every request, the briefing is a live document.
 export const dynamic = "force-dynamic";
 
 export default async function BriefingPage() {
@@ -66,7 +66,7 @@ export default async function BriefingPage() {
       icon: <Wind className="h-4 w-4" strokeWidth={1.8} />,
     },
     {
-      name: "CHIRPS",
+      name: "ERA5-Land rainfall",
       tag: t("historical_label"),
       detail: `${chirps.chirps_7d_mm.toFixed(1)} mm / 7d · ${chirps.chirps_30d_mm.toFixed(1)} mm / 30d`,
       color: "#247B78",
@@ -75,7 +75,7 @@ export default async function BriefingPage() {
     {
       name: "Sentinel-2 / Sentinel-3",
       tag: t("satellite_label"),
-      detail: `${sentinel.sentinel2_acquired ?? "—"} · ${sentinel.sentinel3_acquired ?? "—"}`,
+      detail: `${sentinel.sentinel2_acquired ?? "-"} · ${sentinel.sentinel3_acquired ?? "-"}`,
       color: "#68756F",
       icon: <Satellite className="h-4 w-4" strokeWidth={1.8} />,
     },
@@ -140,18 +140,18 @@ export default async function BriefingPage() {
           {[
             {
               en: "Expected peak", sw: "Kilele kinachotarajiwa",
-              value: expected_peak ? fmtTime(expected_peak.time) : "—",
-              sub: expected_peak ? `${expected_peak.wbgt_c.toFixed(1)}°C WBGT` : "—",
+              value: expected_peak ? fmtTime(expected_peak.time) : "-",
+              sub: expected_peak ? `${expected_peak.wbgt_c.toFixed(1)}°C WBGT` : "-",
             },
             {
               en: "+3h forecast", sw: "Utabiri +saa 3",
-              value: f3h ? `${f3h.value.toFixed(1)}°C` : "—",
-              sub: f3h ? `${f3h.lower.toFixed(1)}–${f3h.upper.toFixed(1)}°C` : "—",
+              value: f3h ? `${f3h.value.toFixed(1)}°C` : "-",
+              sub: f3h ? `${f3h.lower.toFixed(1)}–${f3h.upper.toFixed(1)}°C` : "-",
             },
             {
               en: "Next transition", sw: "Mabadiliko yanayotarajiwa",
-              value: transition ? (lang === "sw" ? STATES[transition.state_id].name_sw : STATES[transition.state_id].name) : "—",
-              sub: transition ? `~${Math.round(transition.probability * 100)}%` : "—",
+              value: transition ? (lang === "sw" ? STATES[transition.state_id].name_sw : STATES[transition.state_id].name) : "-",
+              sub: transition ? `~${Math.round(transition.probability * 100)}%` : "-",
             },
             {
               en: "Current WBGT", sw: "WBGT ya sasa",

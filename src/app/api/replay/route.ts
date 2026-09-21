@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { runHistoricalReplay } from "@/lib/afya/pipeline";
 
-// Safety net — a replay runs the pipeline for 13 simulated hours.
+// Safety net, a replay runs the pipeline for 13 simulated hours.
 export const maxDuration = 30;
 
 const ReplaySchema = z.object({

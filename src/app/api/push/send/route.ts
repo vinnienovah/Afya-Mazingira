@@ -7,7 +7,7 @@ import { runPipeline } from "@/lib/afya/pipeline";
 import { STATES } from "@/lib/afya/constants";
 
 // Safety net for the (usually much faster) real ERA5/Sentinel fetches in
-// runPipeline — Vercel's default function timeout is short.
+// runPipeline, Vercel's default function timeout is short.
 export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
@@ -27,10 +27,10 @@ export async function POST(req: NextRequest) {
   const notificationPayload = {
     title: "AFYA MAZINGIRA",
     body: `Environmental state: ${STATES[situation.state.state_id].name}. ` +
-      `Expected peak WBGT ${situation.expected_peak?.wbgt_c ?? "—"}°C. ` +
+      `Expected peak WBGT ${situation.expected_peak?.wbgt_c ?? "-"}°C. ` +
       `Best window: ${situation.best_time
         ? `${new Date(situation.best_time.recommended.start).toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Nairobi" })}`
-        : "—"}.`,
+        : "-"}.`,
     icon: "/icons/icon-192.png",
     badge: "/icons/icon-72.png",
     data: { url: "/situation" },

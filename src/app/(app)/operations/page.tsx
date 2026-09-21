@@ -153,7 +153,7 @@ export default function OperationsPage() {
         {/* +3h outlook */}
         <Card>
           <div className="text-xs text-afya-muted mb-1">{t("horizon_3h")}</div>
-          <div className="text-2xl font-bold text-afya-charcoal">{f3h ? `${f3h.value.toFixed(1)}°C` : "—"}</div>
+          <div className="text-2xl font-bold text-afya-charcoal">{f3h ? `${f3h.value.toFixed(1)}°C` : "-"}</div>
           {f3h && (
             <div className="text-[11px] text-afya-muted mt-0.5">
               {f3h.lower.toFixed(1)}–{f3h.upper.toFixed(1)}°C · {situation?.risk.thermal}

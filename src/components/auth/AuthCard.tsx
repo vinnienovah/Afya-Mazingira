@@ -56,7 +56,7 @@ export function AuthCard({ initialMode }: { initialMode: Mode }) {
     router.replace(next === "signin" ? "/sign-in" : "/sign-up", { scroll: false });
   }
 
-  // ─── Real-time validation ───────────────────────────────────────────────
+  // Real-time validation
   const emailValid = email.length === 0 ? null : EMAIL_RE.test(email);
   const passwordValid = mode === "signup" ? password.length >= 8 : password.length > 0;
   const confirmValid = mode === "signup" ? confirmPassword.length > 0 && confirmPassword === password : true;

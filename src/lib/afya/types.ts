@@ -1,5 +1,5 @@
-// ─── AFYA MAZINGIRA shared domain types ──────────────────────────────────────────
-// Language-neutral. No UI strings here — only scientific values and categories.
+// AFYA MAZINGIRA shared domain types
+// Language-neutral. No UI strings here, only scientific values and categories.
 
 export type QualityStatus = "GOOD" | "DEGRADED" | "POOR";
 export type RiskLevel = "LOW" | "ELEVATED" | "HIGH" | "VERY_HIGH";
@@ -155,12 +155,12 @@ export interface SituationResult {
   chirps: ChirpsContext;
   sentinel: SentinelContext;
   // Real Open-Meteo forecast (not the ERA5 archive), independent of the
-  // Conduit station's freshness — the only channel that still supports
+  // Conduit station's freshness, the only channel that still supports
   // planning once the ground-truth forecast has aged past its own horizon.
   regional_outlook: { time: string; wbgt_like: number }[];
 }
 
-// ─── Candidate window for the Best-Time engine ───────────────────────────────
+// Candidate window for the Best-Time engine
 export interface CandidateWindow {
   start: string; // ISO
   end: string;

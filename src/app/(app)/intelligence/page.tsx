@@ -79,7 +79,7 @@ export default function IntelligencePage() {
     {
       icon: <Database className="w-5 h-5 text-afya-rain" />,
       title_en: "HOW CERTAIN?", title_sw: "NI UHAKIKA KUPI?",
-      body_en: `Data quality: ${quality.status}. Forecast uncertainty: ${risk.uncertainty.toLowerCase()}. Interval for +3h: ${f3h?.lower.toFixed(1)}–${f3h?.upper.toFixed(1)}°C. ${quality.status !== "GOOD" ? "Confidence is reduced — strong recommendations are suppressed." : ""}`,
+      body_en: `Data quality: ${quality.status}. Forecast uncertainty: ${risk.uncertainty.toLowerCase()}. Interval for +3h: ${f3h?.lower.toFixed(1)}–${f3h?.upper.toFixed(1)}°C. ${quality.status !== "GOOD" ? "Confidence is reduced, strong recommendations are suppressed." : ""}`,
       body_sw: `Ubora wa data: ${quality.status}. Utata wa utabiri: ${risk.uncertainty.toLowerCase()}. Kipindi cha +saa 3: ${f3h?.lower.toFixed(1)}–${f3h?.upper.toFixed(1)}°C.`,
     },
   ];
@@ -122,7 +122,7 @@ export default function IntelligencePage() {
           <CardTitle>{t("thermal_exposure")}</CardTitle>
           <RiskChip level={risk.thermal} size="lg" />
           <div className="mt-3 text-xs text-afya-muted">
-            {lang === "sw" ? "Hatari kutokana na utabiri wa +saa 3" : "Risk from +3h forecast"}: {f3h ? `${f3h.value.toFixed(1)}°C` : "—"}
+            {lang === "sw" ? "Hatari kutokana na utabiri wa +saa 3" : "Risk from +3h forecast"}: {f3h ? `${f3h.value.toFixed(1)}°C` : "-"}
           </div>
         </Card>
         <Card>
@@ -148,7 +148,7 @@ export default function IntelligencePage() {
 
       {/* Live climate variables now live on the consolidated Dashboard
           (/climate) alongside Climate History and Historical Replay,
-          rather than duplicated here — this page stays focused on
+          rather than duplicated here, this page stays focused on
           why/explanation. */}
       <Link
         href="/climate"
@@ -255,7 +255,7 @@ export default function IntelligencePage() {
         </div>
       </Card>
 
-      {/* CHIRPS context */}
+      {/* Rainfall context (ERA5-Land) */}
       <Card>
         <div className="flex items-center gap-2 mb-4">
           <CloudRain className="w-5 h-5 text-afya-rain" strokeWidth={1.8} aria-hidden="true" />
@@ -273,7 +273,7 @@ export default function IntelligencePage() {
             <div key={i} className="rounded-lg border border-afya-border bg-afya-canvas/50 px-3 py-2">
               <div className="text-[10px] text-afya-muted">{lang === "sw" ? item.l_sw : item.l_en}</div>
               <div className="text-sm font-bold text-afya-charcoal">{item.v}</div>
-              <div className="text-[9px] text-afya-muted/60 font-semibold uppercase">{t("historical_label")} · CHIRPS</div>
+              <div className="text-[9px] text-afya-muted/60 font-semibold uppercase">{t("historical_label")} · ERA5-Land</div>
             </div>
           ))}
         </div>
@@ -290,10 +290,10 @@ export default function IntelligencePage() {
           <div className="rounded-lg border border-afya-border bg-afya-canvas/50 px-4 py-3">
             <div className="text-xs font-bold text-afya-green mb-1">Sentinel-2</div>
             <div className="text-sm font-bold text-afya-charcoal mb-1">
-              NDVI {sentinel.sentinel2_ndvi_mean !== null ? sentinel.sentinel2_ndvi_mean.toFixed(2) : "—"}
+              NDVI {sentinel.sentinel2_ndvi_mean !== null ? sentinel.sentinel2_ndvi_mean.toFixed(2) : "-"}
             </div>
             <div className="text-[10px] text-afya-muted space-y-0.5">
-              <div>{t("acquired")}: {sentinel.sentinel2_acquired ?? "—"}</div>
+              <div>{t("acquired")}: {sentinel.sentinel2_acquired ?? "-"}</div>
               <div>{t("native_resolution")}: 10 m</div>
               <div className="font-semibold text-afya-muted/70 uppercase">{t("satellite_label")}</div>
             </div>
@@ -302,10 +302,10 @@ export default function IntelligencePage() {
           <div className="rounded-lg border border-afya-border bg-afya-canvas/50 px-4 py-3">
             <div className="text-xs font-bold text-afya-rain mb-1">Sentinel-3</div>
             <div className="text-sm font-bold text-afya-charcoal mb-1">
-              LST {sentinel.sentinel3_lst_c !== null ? `${sentinel.sentinel3_lst_c.toFixed(1)}°C` : "—"}
+              LST {sentinel.sentinel3_lst_c !== null ? `${sentinel.sentinel3_lst_c.toFixed(1)}°C` : "-"}
             </div>
             <div className="text-[10px] text-afya-muted space-y-0.5">
-              <div>{t("acquired")}: {sentinel.sentinel3_acquired ?? "—"}</div>
+              <div>{t("acquired")}: {sentinel.sentinel3_acquired ?? "-"}</div>
               <div>{t("native_resolution")}: ~1 km</div>
               <div className="font-semibold text-afya-muted/70 uppercase">{t("satellite_label")}</div>
             </div>

@@ -1,7 +1,7 @@
 import type { RiskLevel, UncertaintyCategory } from "./types";
 import { wbgtToRisk, riskRank } from "./constants";
 
-// ─── Risk / Exposure Engine ───────────────────────────────────────────────────
+// Risk / Exposure Engine
 // Thermal exposure risk is activity-aware.
 // No universal health score. No medical claims.
 

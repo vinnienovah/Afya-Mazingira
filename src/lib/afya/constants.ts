@@ -1,6 +1,6 @@
 import type { RiskLevel, StateId } from "./types";
 
-// ─── Climate Reflex environmental states ─────────────────────────────────────
+// Climate Reflex environmental states
 export const STATES: Record<
   StateId,
   { name: string; name_sw: string; color: string; bg: string; light: string; text: string }
@@ -42,7 +42,7 @@ export const STATES: Record<
 export const STATE_CYCLE: StateId[] = [0, 1, 2, 3, 0];
 
 
-// ─── Risk levels ──────────────────────────────────────────────────────────────
+// Risk levels
 export const RISK_ORDER: RiskLevel[] = ["LOW", "ELEVATED", "HIGH", "VERY_HIGH"];
 
 export const RISK_META: Record<
@@ -59,7 +59,7 @@ export function riskRank(level: RiskLevel): number {
   return RISK_META[level].rank;
 }
 
-// ─── Activity profiles ────────────────────────────────────────────────────────
+// Activity profiles
 export interface ActivityProfile {
   key: string;
   label_en: string;
@@ -129,7 +129,7 @@ export function shadeWbgtFromHumidity(tempC: number, rhPct: number): number {
   return shadeWbgt(tempC, stullWetBulb(tempC, rhPct));
 }
 
-// ─── Provenance labels ────────────────────────────────────────────────────────
+// Provenance labels
 export const PROVENANCE_LABELS: Record<string, { en: string; sw: string; icon: string }> = {
   MEASURED: { en: "MEASURED", sw: "ILIPIMEWA", icon: "●" },
   PREDICTED: { en: "PREDICTED", sw: "ILITABIRIWA", icon: "◇" },
@@ -139,13 +139,13 @@ export const PROVENANCE_LABELS: Record<string, { en: string; sw: string; icon: s
   DERIVED: { en: "AFYA MAZINGIRA DERIVED", sw: "IMECHAKATWA NA AFYA MAZINGIRA", icon: "◇" },
 };
 
-// ─── Demo Conduit coordinates ────────────────────────────────────────────────
+// Demo Conduit coordinates
 export const JKUAT_COORDS = { lat: -1.0931, lng: 37.0149 };
 export const JKUAT_NAME = "JKUAT / Juja Conduit Station";
 
-// ─── Climate History dashboard locations ─────────────────────────────────────
+// Climate History dashboard locations
 // JKUAT (real Conduit station) plus the same 11 counties the regional outlook
-// map covers (centroids — see public/geo/counties.geojson) — used to pick a
+// map covers (centroids, see public/geo/counties.geojson), used to pick a
 // location for the ERA5-Land historical series, since ERA5 works anywhere.
 export const CLIMATE_LOCATIONS: { key: string; name: string; name_sw: string; lat: number; lng: number }[] = [
   { key: "jkuat", name: "JKUAT / Juja", name_sw: "JKUAT / Juja", lat: -1.0931, lng: 37.0149 },

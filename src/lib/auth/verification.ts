@@ -1,4 +1,4 @@
-// ─── Email verification tokens + delivery (Resend) ───────────────────────────
+// Email verification tokens + delivery (Resend)
 // Follows the same graceful-degradation convention as the other external
 // adapters in this codebase: when RESEND_API_KEY is absent, accounts are
 // auto-verified (dev / demo mode) instead of leaving sign-up unusable.
@@ -64,7 +64,7 @@ export async function consumeVerificationToken(token: string): Promise<{ userId:
   return { userId: row.user_id };
 }
 
-// ─── Resend delivery ──────────────────────────────────────────────────────────
+// Resend delivery
 
 export async function sendVerificationEmail(
   to: string,
@@ -73,7 +73,7 @@ export async function sendVerificationEmail(
   lang: Lang,
 ): Promise<void> {
   const link = `${appUrl()}/verify-email?token=${token}`;
-  const subject = lang === "sw" ? "Thibitisha barua pepe yako — AFYA MAZINGIRA" : "Verify your email — AFYA MAZINGIRA";
+  const subject = lang === "sw" ? "Thibitisha barua pepe yako, AFYA MAZINGIRA" : "Verify your email, AFYA MAZINGIRA";
   const html = renderVerificationEmailHtml(name, link, lang);
 
   const res = await fetch("https://api.resend.com/emails", {

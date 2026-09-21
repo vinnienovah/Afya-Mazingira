@@ -17,10 +17,10 @@ interface Props {
   height?: number;
 }
 
-// Custom dot — hidden (no dots on line)
+// Custom dot, hidden (no dots on line)
 function NoDot() { return null; }
 
-// Tooltip content — custom
+// Tooltip content, custom
 function ChartTooltip({
   active, payload, label, t, lang,
 }: {
@@ -125,7 +125,7 @@ export default function ForecastChart({ forecastSeries, measuredSeries = [], sta
   // State history bands
   const stateBands = useMemo(() => stateHistory, [stateHistory]);
 
-  // Legend shows each distinct state once, not once per band segment —
+  // Legend shows each distinct state once, not once per band segment,
   // a 9h window can revisit the same state several times.
   const distinctStates = useMemo(() => {
     const seen = new Set<StateId>();
@@ -311,7 +311,7 @@ export default function ForecastChart({ forecastSeries, measuredSeries = [], sta
         </ComposedChart>
       </ResponsiveContainer>
 
-      {/* State band legend — one entry per distinct state, not per segment */}
+      {/* State band legend, one entry per distinct state, not per segment */}
       {distinctStates.length > 0 && (
         <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2" aria-hidden="true">
           {distinctStates.map((stateId) => {

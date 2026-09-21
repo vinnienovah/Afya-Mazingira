@@ -11,7 +11,7 @@ export default function ServiceWorkerRegister() {
     // Register after load to avoid competing with critical resources
     const register = () => {
       navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {
-        // Registration failure is non-fatal — app remains fully functional
+        // Registration failure is non-fatal, app remains fully functional
       });
     };
     if (document.readyState === "complete") register();

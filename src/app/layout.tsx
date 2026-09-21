@@ -7,7 +7,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: {
     template: "%s | AFYA MAZINGIRA",
-    default: "AFYA MAZINGIRA — Environmental Risk & Early Action Intelligence",
+    default: "AFYA MAZINGIRA, Environmental Risk & Early Action Intelligence",
   },
   description:
     "AFYA MAZINGIRA transforms environmental observations into forecasts, risk assessments, and early-action recommendations for JKUAT/Juja, Kenya.",

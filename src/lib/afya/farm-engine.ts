@@ -1,11 +1,11 @@
-// ─── AFYA MAZINGIRA · Farm Advisory Engine ────────────────────────────────────────
+// AFYA MAZINGIRA · Farm Advisory Engine
 // Deterministic agronomic decision layer built on the validated pipeline.
 //
 // Scientific basis:
-//   · Reference evapotranspiration (ET₀) — Hargreaves–Samani (1985)
-//   · Crop water requirement (ETc) — FAO-56 single crop coefficient (ETc = Kc × ET₀)
-//   · Soil water balance — recent rainfall (CHIRPS) + soil moisture (ERA5-Land) − ETc
-//   · Spray suitability — wind drift + evaporation + wash-off risk windows
+//   · Reference evapotranspiration (ET₀), Hargreaves–Samani (1985)
+//   · Crop water requirement (ETc), FAO-56 single crop coefficient (ETc = Kc × ET₀)
+//   · Soil water balance, recent rainfall (CHIRPS) + soil moisture (ERA5-Land) − ETc
+//   · Spray suitability, wind drift + evaporation + wash-off risk windows
 //
 // This produces AGRONOMIC DECISION SUPPORT ONLY. It does not predict yield,
 // diagnose plant disease, or replace extension-officer judgement.
@@ -22,7 +22,7 @@ export interface CropProfile {
   label_sw: string;
   /** FAO-56 single crop coefficients by stage */
   kc: Record<GrowthStage, number>;
-  /** Root zone depth (m) — drives soil water holding capacity */
+  /** Root zone depth (m), drives soil water holding capacity */
   root_depth_m: number;
   /** Fraction of available water depleted before stress (FAO-56 p-value) */
   depletion_fraction: number;
@@ -73,7 +73,7 @@ export function getCropProfile(key: string): CropProfile {
   return CROP_PROFILES.find((c) => c.key === key) ?? CROP_PROFILES[0];
 }
 
-// ─── Reference evapotranspiration (Hargreaves–Samani) ────────────────────────
+// Reference evapotranspiration (Hargreaves–Samani)
 // ET₀ = 0.0023 × (Tmean + 17.8) × √(Tmax − Tmin) × Ra
 // Ra at the equator ≈ 36.2 MJ/m²/day ≈ 14.8 mm/day water equivalent.
 
@@ -86,7 +86,7 @@ export function computeEt0(tmaxC: number, tminC: number): number {
   return Math.max(0, Math.round(et0 * 100) / 100);
 }
 
-// ─── Soil water balance ───────────────────────────────────────────────────────
+// Soil water balance
 
 export interface WaterBalance {
   et0_mm_day: number;
@@ -128,7 +128,7 @@ export function computeWaterBalance(
   const rain30 = situation.chirps.chirps_30d_mm;
   const demand7 = Math.round(etc * 7 * 10) / 10;
   const balance7 = Math.round((rain7 - demand7) * 10) / 10;
-  // A 7-day rain deficit that looks fine can still mask a longer dry stretch —
+  // A 7-day rain deficit that looks fine can still mask a longer dry stretch,
   // check the 30-day balance too rather than deciding on one short window alone.
   const demand30 = Math.round(etc * 30 * 10) / 10;
   const balance30 = Math.round((rain30 - demand30) * 10) / 10;
@@ -146,7 +146,7 @@ export function computeWaterBalance(
   const deficit30 = Math.max(0, -balance30);
   const depletion30Pct = Math.min(100, Math.round((deficit30 / Math.max(1, raw)) * 1000) / 10);
 
-  // Depletion from the real ERA5 soil moisture reading directly — a much more
+  // Depletion from the real ERA5 soil moisture reading directly, a much more
   // direct signal of actual root-zone water status than rainfall accounting
   // alone, since it also reflects drainage, prior irrigation and evaporation
   // that a simple rain-minus-demand tally can't see.
@@ -156,7 +156,7 @@ export function computeWaterBalance(
   );
   const soilDepletionPct = Math.round((1 - availableFraction) * 1000) / 10;
 
-  // The most severe of the three signals wins — irrigation decisions should
+  // The most severe of the three signals wins, irrigation decisions should
   // never be reassured by a short calm window while soil moisture or the
   // longer trend already shows real stress.
   const depletionPct = Math.max(depletion7Pct, depletion30Pct, soilDepletionPct);
@@ -177,7 +177,7 @@ export function computeWaterBalance(
   };
 }
 
-// ─── Irrigation recommendation ────────────────────────────────────────────────
+// Irrigation recommendation
 
 export interface IrrigationAdvice {
   action: IrrigationAction;
@@ -211,8 +211,8 @@ export function computeIrrigationAdvice(
 
   // Severe depletion → irrigate now.
   // Depth is sized off the depletion fraction itself (not just the 7-day rain
-  // deficit) so it stays sensible even when soil moisture — not the recent
-  // rain balance — is what's driving the decision.
+  // deficit) so it stays sensible even when soil moisture, not the recent
+  // rain balance, is what's driving the decision.
   if (wb.depletion_pct >= 70) {
     const depth = Math.round(wb.readily_available_mm * (wb.depletion_pct / 100) * 10) / 10;
     reasons.push("farm_reason_high_depletion");
@@ -244,7 +244,7 @@ export function computeIrrigationAdvice(
   }
 
   // Adequate water. A negative 7-day balance can still be safe when the root
-  // zone holds enough readily available water to buffer it — say so explicitly
+  // zone holds enough readily available water to buffer it, say so explicitly
   // rather than implying rainfall alone met demand.
   if (wb.balance_7d_mm < 0) {
     reasons.push("farm_reason_buffered_by_rootzone");
@@ -261,7 +261,7 @@ export function computeIrrigationAdvice(
   };
 }
 
-// ─── Spray / field-operation suitability ─────────────────────────────────────
+// Spray / field-operation suitability
 
 export interface FieldWindow {
   operation: "spraying" | "planting" | "harvesting" | "field_work";
@@ -305,7 +305,7 @@ export function evaluateSprayWindow(situation: SituationResult): FieldWindow {
   return { operation: "spraying", quality: score, reason_keys: reasons.slice(0, 4) };
 }
 
-// ─── Planting outlook (rain-fed) ─────────────────────────────────────────────
+// Planting outlook (rain-fed)
 
 export interface PlantingOutlook {
   favourable: boolean;
@@ -345,7 +345,7 @@ export function evaluatePlantingOutlook(
   };
 }
 
-// ─── Crop heat stress (activity-aware, NOT a disease or yield model) ─────────
+// Crop heat stress (activity-aware, NOT a disease or yield model)
 
 export type HeatStress = "NONE" | "MILD" | "MODERATE" | "SEVERE";
 
@@ -393,7 +393,7 @@ export function evaluateCropStress(
   return { level, peak_temp_c: peakTemp, reason_keys: reasons.slice(0, 3) };
 }
 
-// ─── Full farm advisory bundle ───────────────────────────────────────────────
+// Full farm advisory bundle
 
 export interface FarmAdvisory {
   crop: CropProfile;
@@ -403,7 +403,7 @@ export interface FarmAdvisory {
   spray_window: FieldWindow;
   planting: PlantingOutlook;
   stress: CropStressSignal;
-  /** Best time to do physical field work — from the deterministic Best-Time engine */
+  /** Best time to do physical field work, from the deterministic Best-Time engine */
   field_work_window: { start: string; end: string; reasons: string[] } | null;
   generated_at: string;
   data_quality: string;

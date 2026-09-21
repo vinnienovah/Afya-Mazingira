@@ -45,7 +45,7 @@ export default function FloodRiskPage() {
         <p className="text-sm text-afya-muted mt-0.5">{t("flood_subtitle")}</p>
       </div>
 
-      {/* Honesty note — what this is and, importantly, what it is not */}
+      {/* Honesty note, what this is and, importantly, what it is not */}
       <div className="rounded-xl border border-afya-gold/40 bg-afya-gold/8 p-4 flex gap-3" role="note">
         <AlertTriangle className="w-5 h-5 text-afya-gold shrink-0 mt-0.5" strokeWidth={1.8} aria-hidden="true" />
         <p className="text-sm text-afya-charcoal">{t("flood_honesty_note")}</p>

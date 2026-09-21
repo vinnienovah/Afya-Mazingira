@@ -160,10 +160,10 @@ export default function ForecastPage() {
         </Card>
       )}
 
-      {/* Uncertainty by horizon — real data (upper - lower per horizon),
+      {/* Uncertainty by horizon, real data (upper - lower per horizon),
           not fabricated. Replaces a previous "secondary charts" section that
           derived fake temperature/humidity/IR/wind values from the WBGT
-          forecast number via arbitrary formulas — that was never real data,
+          forecast number via arbitrary formulas, that was never real data,
           so it's been removed rather than kept for the sake of having more
           charts on the page. */}
       <Card padding={false}>
@@ -207,7 +207,7 @@ export default function ForecastPage() {
         )}
       </Card>
 
-      {/* Explore further — points to the dedicated Climate History dashboard
+      {/* Explore further, points to the dedicated Climate History dashboard
           rather than duplicating fake variable charts here. */}
       <Link
         href="/climate"
@@ -220,7 +220,7 @@ export default function ForecastPage() {
         <ChevronRight className="w-4 h-4 text-afya-muted group-hover:text-afya-green transition-colors shrink-0" strokeWidth={2} aria-hidden="true" />
       </Link>
 
-      {/* Model contributors — real ranked order from the pipeline, no
+      {/* Model contributors, real ranked order from the pipeline, no
           fabricated percentage-importance numbers (those weren't computed
           from anything; the underlying deterministic model gives an order,
           not a magnitude). */}
@@ -255,7 +255,7 @@ export default function ForecastPage() {
         </Card>
       )}
 
-      {/* Provenance note — reflects the real data source behind this forecast,
+      {/* Provenance note, reflects the real data source behind this forecast,
           not a hardcoded "demo data" claim regardless of what's actually live. */}
       <p className="text-[11px] text-afya-muted/60 text-center">
         {lang === "sw"

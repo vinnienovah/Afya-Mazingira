@@ -4,10 +4,10 @@ import { getSatelliteAcquisitionsLive } from "@/lib/afya/sources-external";
 import { runPipeline } from "@/lib/afya/pipeline";
 
 // Regional outlook + satellite acquisition metadata. Satellite layers must not
-// refresh at 15-minute frequency (spec §51) — a 30-minute cache matches their
+// refresh at 15-minute frequency, a 30-minute cache matches their
 // physical acquisition cadence.
 export const revalidate = 1800;
-// Safety net for the real per-county weather/NDVI fetches — Vercel's default
+// Safety net for the real per-county weather/NDVI fetches, Vercel's default
 // function timeout is short.
 export const maxDuration = 30;
 

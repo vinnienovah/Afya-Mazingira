@@ -1,11 +1,11 @@
-// ─── Conduit CSV archive adapter ──────────────────────────────────────────────
+// Conduit CSV archive adapter
 // Real recorded station data, downloaded by hand from the Conduit dashboard
 // and dropped in data/*.csv, for use while direct API access is blocked
-// (Imunify360 bot-protection on conduit.jhubafrica.com — see project notes).
+// (Imunify360 bot-protection on conduit.jhubafrica.com, see project notes).
 // The CSV's columns are the exact raw Conduit row shape, so it goes through
 // the SAME cleaning/gridding pipeline as the live API (sources.ts).
 //
-// Update the file at any time — it's picked up automatically (checked by
+// Update the file at any time, it's picked up automatically (checked by
 // mtime) without restarting the server.
 
 import fs from "fs";
@@ -18,7 +18,7 @@ const CSV_PATH = process.env.CONDUIT_CSV_PATH
   : path.join(process.cwd(), "data", "conduit_master_2025_2026.csv");
 
 // If the requested anchor falls further before the file's earliest row than
-// this, the archive doesn't meaningfully cover it — let the caller fall
+// this, the archive doesn't meaningfully cover it, let the caller fall
 // through to the synthetic generator instead of serving a misleading window.
 const MAX_LOOKBACK_BEYOND_RANGE_MS = 60 * 86400_000;
 const MIN_ROWS_FOR_WINDOW = 20;
@@ -42,7 +42,7 @@ function loadCsv(): CsvCache | null {
   try {
     stat = fs.statSync(CSV_PATH);
   } catch {
-    return null; // no CSV present — caller falls back further
+    return null; // no CSV present, caller falls back further
   }
   if (cache && cache.mtimeMs === stat.mtimeMs) return cache;
 
@@ -50,7 +50,7 @@ function loadCsv(): CsvCache | null {
   const lines = text.split("\n");
   const header = lines[0]?.split(",").map((h) => h.trim());
   if (!header?.length || header[0] !== "ts") {
-    console.warn(`[afya] Conduit CSV at ${CSV_PATH} has an unexpected header — ignoring`);
+    console.warn(`[afya] Conduit CSV at ${CSV_PATH} has an unexpected header, ignoring`);
     return null;
   }
 
@@ -76,7 +76,7 @@ function loadCsv(): CsvCache | null {
 export interface CsvSeriesResult {
   series: DemoObservation[];
   // true when the requested anchor is beyond the file's latest row, i.e. this
-  // is standing in for "now" rather than serving a genuine historical replay.
+  // is standing in for "now" rather than serving a historical replay.
   realtime: boolean;
 }
 
@@ -92,7 +92,7 @@ export function getCsvSeries(anchorIso: string, lookbackHours: number): CsvSerie
   const effectiveAnchorMs = Math.min(requestedMs, loaded.maxMs);
   const windowStartMs = effectiveAnchorMs - lookbackHours * 3600_000;
 
-  // Rows are sorted ascending — a linear scan is simple and fast enough at
+  // Rows are sorted ascending, a linear scan is simple and fast enough at
   // this size (tens of thousands of rows, filtered down to a ~30h window).
   const windowRows = loaded.rows
     .filter((r) => r.tsMs >= windowStartMs && r.tsMs <= effectiveAnchorMs)
@@ -114,7 +114,7 @@ export function getCsvCoverage(): { minIso: string; maxIso: string } | null {
 
 /**
  * Real recorded observations for an arbitrary [from, to] range (inclusive),
- * for the Climate History dashboard — unlike getCsvSeries, this isn't
+ * for the Climate History dashboard, unlike getCsvSeries, this isn't
  * anchored to "now" or a fixed lookback; the caller picks any window the
  * archive covers, e.g. the last 6 months.
  */
