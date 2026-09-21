@@ -106,6 +106,7 @@ export const MODEL_VERSIONS = {
   "1h": { algorithm: "ExtraTrees", version: "1.0.0", mae: 0.57 },
   "3h": { algorithm: "CatBoost", version: "1.0.0", mae: 0.93 },
   "6h": { algorithm: "ExtraTrees", version: "1.0.0", mae: 1.23 },
+  "9h": { algorithm: "CatBoost", version: "1.0.0", mae: 1.58 },
 };
 
 // ─── Provenance labels ────────────────────────────────────────────────────────

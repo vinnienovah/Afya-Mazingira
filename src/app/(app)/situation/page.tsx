@@ -78,6 +78,7 @@ export default function SituationPage() {
   const f1h = forecast.find((f) => f.horizon === "1h");
   const f3h = forecast.find((f) => f.horizon === "3h");
   const f6h = forecast.find((f) => f.horizon === "6h");
+  const f9h = forecast.find((f) => f.horizon === "9h");
 
   const exposureTrend = f3h && f3h.value > current.wbgt_c + 0.3
     ? "rising"
@@ -302,12 +303,13 @@ export default function SituationPage() {
         />
       </Card>
 
-      {/* ── THREE HORIZON CARD STRIP ────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* ── HORIZON CARD STRIP ───────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { f: f1h, key: "horizon_1h", model: "ExtraTrees" },
           { f: f3h, key: "horizon_3h", model: "CatBoost" },
           { f: f6h, key: "horizon_6h", model: "ExtraTrees" },
+          { f: f9h, key: "horizon_9h", model: "CatBoost" },
         ].map(({ f, key, model }) => f ? (
           <Card key={key}>
             <div className="flex items-start justify-between mb-3">

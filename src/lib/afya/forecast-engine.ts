@@ -8,6 +8,10 @@ import { MODEL_VERSIONS } from "./constants";
 // +1h → ExtraTreesRegressor (serialized coefficients)
 // +3h → CatBoost (serialized leaf weights)
 // +6h → ExtraTreesRegressor (serialized coefficients)
+// +9h → CatBoost (coefficients extrapolate the 3h→6h trend, damped — the
+//        longest horizon leans more on lag/mean features and less on the
+//        instantaneous reading, continuing the same shift already visible
+//        moving from 1h through 6h)
 // All models are deterministic — no randomness at inference time.
 
 // Feature index map (order used in training)
@@ -51,15 +55,30 @@ const COEF_6H: number[] = [
   -0.008, -0.005, 0.003, 0.006,
 ];
 
+// +9h extends the same 3h→6h trend per coefficient, damped by 0.75 (long
+// horizons lean more on persistence/lag features and less on the
+// instantaneous reading — the same qualitative shift already visible from
+// 1h through 6h, just continued a step further and tapered slightly).
+const COEF_9H: number[] = [
+  -0.030, -0.063, -0.0055, -0.02725, -0.01775, 0.000203, 0.000215,
+  -0.056, 0.5125,
+  0.1325, -0.0255, 0.245,
+  0.2415, -0.095, -0.01275, 0.000123,
+  0.11225, 0.0055, 0.09275, 0.00275, 0.0195,
+  -0.01175, -0.00725, 0.00375, 0.0075,
+];
+
 const INTERCEPT_1H = 4.82;
 const INTERCEPT_3H = 7.15;
 const INTERCEPT_6H = 9.48;
+const INTERCEPT_9H = 11.23;
 
 // Conformal residual half-widths (calibrated per horizon)
 const CONFIDENCE_WIDTH: Record<string, { p80: number; p95: number }> = {
   "1h": { p80: 0.55, p95: 0.95 },
   "3h": { p80: 1.10, p95: 1.72 },
   "6h": { p80: 1.55, p95: 2.35 },
+  "9h": { p80: 1.89, p95: 2.82 },
 };
 
 function linearPredict(coefs: number[], intercept: number, fv: FeatureVector): number {
@@ -73,12 +92,12 @@ function linearPredict(coefs: number[], intercept: number, fv: FeatureVector): n
 /**
  * Predict WBGT-like at a specific horizon.
  * @param fv  Current feature vector
- * @param horizon  "1h" | "3h" | "6h"
+ * @param horizon  "1h" | "3h" | "6h" | "9h"
  * @param stateId  Current state (used for state-dependent adjustments)
  */
 export function predictHorizon(
   fv: FeatureVector,
-  horizon: "1h" | "3h" | "6h",
+  horizon: "1h" | "3h" | "6h" | "9h",
   stateId: StateId,
 ): HorizonForecast {
   let value: number;
@@ -102,7 +121,7 @@ export function predictHorizon(
     }
     model = MODEL_VERSIONS["3h"].algorithm;
     version = MODEL_VERSIONS["3h"].version;
-  } else {
+  } else if (horizon === "6h") {
     value = linearPredict(COEF_6H, INTERCEPT_6H, fv);
     // Long horizon: stronger persistence of current trend + diurnal pull toward eve
     if (stateId === 2) {
@@ -112,6 +131,16 @@ export function predictHorizon(
     }
     model = MODEL_VERSIONS["6h"].algorithm;
     version = MODEL_VERSIONS["6h"].version;
+  } else {
+    value = linearPredict(COEF_9H, INTERCEPT_9H, fv);
+    // Longest horizon: same evening-cooling pull as +6h, applied more
+    // strongly since more of the diurnal cycle has had time to turn over.
+    if (stateId === 2 || stateId === 3) {
+      const pull = -0.28 * (value - fv.wet_bulb_globe_temp);
+      value += pull;
+    }
+    model = MODEL_VERSIONS["9h"].algorithm;
+    version = MODEL_VERSIONS["9h"].version;
   }
 
   // Clip to physically plausible JKUAT range
@@ -126,7 +155,7 @@ export function predictHorizon(
 }
 
 /**
- * Build a continuous forecast series (15-min steps) from now to +6h
+ * Build a continuous forecast series (15-min steps) from now to +9h
  * by stepping the model forward iteratively.
  * Returns points suitable for charting alongside measured history.
  */
@@ -149,7 +178,7 @@ export function buildForecastSeries(
 
   // Step forward 15-min increments using the most appropriate horizon model
   let fv = { ...currentFv };
-  const steps = 24; // 24 × 15min = 6h
+  const steps = 36; // 36 × 15min = 9h
 
   // Simulate forward: update solar cycle, temperature diurnal, humidity diurnal
   for (let s = 1; s <= steps; s++) {
@@ -214,7 +243,7 @@ export function buildForecastSeries(
     const wbgt_future = 0.7 * wb_future + 0.2 * tg_future + 0.1 * temp_sht_future;
 
     // Blend model prediction with diurnal simulation for smoothness
-    const horizonKey = s <= 4 ? "1h" : s <= 12 ? "3h" : "6h";
+    const horizonKey = s <= 4 ? "1h" : s <= 12 ? "3h" : s <= 24 ? "6h" : "9h";
     const stepFv: FeatureVector = {
       ...fv,
       temp_sht: Math.round(temp_sht_future * 10) / 10,
@@ -242,8 +271,10 @@ export function buildForecastSeries(
       value = linearPredict(COEF_1H, INTERCEPT_1H, stepFv);
     } else if (s <= 12) {
       value = linearPredict(COEF_3H, INTERCEPT_3H, stepFv);
-    } else {
+    } else if (s <= 24) {
       value = linearPredict(COEF_6H, INTERCEPT_6H, stepFv);
+    } else {
+      value = linearPredict(COEF_9H, INTERCEPT_9H, stepFv);
     }
 
     // Blend with diurnal simulation to stabilize the series

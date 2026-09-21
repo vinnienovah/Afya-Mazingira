@@ -27,7 +27,7 @@ export interface ForecastPoint {
 }
 
 export interface HorizonForecast {
-  horizon: "1h" | "3h" | "6h";
+  horizon: "1h" | "3h" | "6h" | "9h";
   value: number;
   lower: number;
   upper: number;

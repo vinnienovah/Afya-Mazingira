@@ -165,15 +165,16 @@ export default function IntelligencePage() {
                 <th scope="col" className="pb-2 pr-4 font-semibold"></th>
                 <th scope="col" className="pb-2 pr-4 font-semibold">{t("horizon_1h")}</th>
                 <th scope="col" className="pb-2 pr-4 font-semibold">{t("horizon_3h")}</th>
-                <th scope="col" className="pb-2 font-semibold">{t("horizon_6h")}</th>
+                <th scope="col" className="pb-2 pr-4 font-semibold">{t("horizon_6h")}</th>
+                <th scope="col" className="pb-2 font-semibold">{t("horizon_9h")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-afya-border/50">
               {[
-                { label: lang === "sw" ? "Algorithm" : "Algorithm", vals: [MODEL_VERSIONS["1h"].algorithm, MODEL_VERSIONS["3h"].algorithm, MODEL_VERSIONS["6h"].algorithm] },
+                { label: lang === "sw" ? "Algorithm" : "Algorithm", vals: [MODEL_VERSIONS["1h"].algorithm, MODEL_VERSIONS["3h"].algorithm, MODEL_VERSIONS["6h"].algorithm, MODEL_VERSIONS["9h"].algorithm] },
                 { label: lang === "sw" ? "Toleo" : "Version", vals: Object.values(MODEL_VERSIONS).map((m) => m.version) },
                 { label: "MAE", vals: Object.values(MODEL_VERSIONS).map((m) => `${m.mae}°C`) },
-                { label: lang === "sw" ? "Lengo" : "Target", vals: ["wet_bulb_globe_temp", "wet_bulb_globe_temp", "wet_bulb_globe_temp"] },
+                { label: lang === "sw" ? "Lengo" : "Target", vals: ["wet_bulb_globe_temp", "wet_bulb_globe_temp", "wet_bulb_globe_temp", "wet_bulb_globe_temp"] },
               ].map((row, i) => (
                 <tr key={i}>
                   <th scope="row" className="py-2 pr-4 text-xs font-semibold text-afya-muted text-left">{row.label}</th>

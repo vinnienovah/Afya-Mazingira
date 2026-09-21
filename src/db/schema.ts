@@ -147,7 +147,7 @@ export const forecasts = pgTable("forecasts", {
   id: serial("id").primaryKey(),
   issued_at: timestamp("issued_at", { withTimezone: true }).notNull(),
   target_time: timestamp("target_time", { withTimezone: true }).notNull(),
-  horizon: text("horizon").notNull(), // "1h" | "3h" | "6h"
+  horizon: text("horizon").notNull(), // "1h" | "3h" | "6h" | "9h"
   target_name: text("target_name").notNull().default("wet_bulb_globe_temp"),
   prediction: real("prediction").notNull(),
   lower_bound: real("lower_bound").notNull(),
