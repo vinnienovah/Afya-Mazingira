@@ -7,7 +7,7 @@ import { runPipeline } from "@/lib/afya/pipeline";
 import { findBestTime } from "@/lib/afya/best-time-engine";
 
 // Safety net for the (usually much faster) real ERA5/Sentinel fetches in
-// runPipeline — Vercel's default function timeout is short.
+// runPipeline, Vercel's default function timeout is short.
 export const maxDuration = 30;
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

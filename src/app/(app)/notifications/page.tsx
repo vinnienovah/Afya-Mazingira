@@ -105,8 +105,8 @@ export default function NotificationsPage() {
         setTestResult(data.message ?? t("error_generic"));
       } else if (data.test_email_sent) {
         setTestResult(lang === "sw"
-          ? "Hakuna sheria iliyochochewa na hali za sasa — barua pepe ya majaribio imetumwa."
-          : "None of your rules are triggered by current conditions — sent a test email instead.");
+          ? "Hakuna sheria iliyochochewa na hali za sasa, barua pepe ya majaribio imetumwa."
+          : "None of your rules are triggered by current conditions, sent a test email instead.");
       } else {
         setTestResult(lang === "sw"
           ? `Barua pepe imetumwa kwa: ${data.triggered.join(", ")}`
@@ -156,7 +156,7 @@ export default function NotificationsPage() {
             setPushEnabled(false);
           }
         } else {
-          // Demo mode — simulate local push registration
+          // Demo mode, simulate local push registration
           setDemoPush(true);
           setPushEnabled(true);
         }

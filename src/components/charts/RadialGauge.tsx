@@ -11,15 +11,15 @@ interface RadialGaugeProps {
   max: number;
   unit: string;
   color: string;
-  /** Short note under the number — e.g. the real observed range this gauge is scaled to. */
+  /** Short note under the number, e.g. the real observed range this gauge is scaled to. */
   rangeNote: string;
 }
 
 /**
  * A single-value radial gauge. The min/max scale is always passed in from
  * real data (e.g. the same 30h series already fetched for the line charts on
- * this page) — never a fabricated universal "typical" range — so the
- * position on the dial is honestly relative to what this station has
+ * this page), never a fabricated universal "typical" range, so the
+ * position on the dial is relative to what this station has
  * actually recorded recently.
  */
 export default function RadialGauge({ title, sourceLabel, value, min, max, unit, color, rangeNote }: RadialGaugeProps) {

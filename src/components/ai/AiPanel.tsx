@@ -7,7 +7,7 @@ import { Sparkles, Send, Loader2, BookOpen, GraduationCap } from "lucide-react";
 interface AiPanelProps {
   context?: string; // optional context hint (e.g. "situation", "map")
   initialQuestions?: string[];
-  // Extra fields merged into the /api/ai/explain request body — e.g. the
+  // Extra fields merged into the /api/ai/explain request body, e.g. the
   // selected crop/stage on the Farm Advisory page, so the AI can answer
   // farm-specific questions instead of only general situation facts.
   extraParams?: Record<string, string>;
@@ -197,22 +197,22 @@ export default function AiPanel({ context = "situation", initialQuestions, extra
               {msg.role === "assistant" && (
                 <div className="mt-2 pt-2 border-t border-afya-border/60 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[10px] text-afya-muted/70">
                   {msg.source === "llm" && msg.provider === "gemini" && (
-                    <span>✦ Gemini · {t("ai_disclaimer")}</span>
+                    <span>Gemini · {t("ai_disclaimer")}</span>
                   )}
                   {msg.source === "llm" && msg.provider === "groq" && (
-                    <span>✦ Groq · {t("ai_disclaimer")}</span>
+                    <span>Groq · {t("ai_disclaimer")}</span>
                   )}
                   {msg.source === "llm" && msg.provider === "openai" && (
-                    <span>✦ OpenAI · {t("ai_disclaimer")}</span>
+                    <span>OpenAI · {t("ai_disclaimer")}</span>
                   )}
                   {msg.source === "llm" && msg.provider === "anthropic" && (
-                    <span>✦ Anthropic · {t("ai_disclaimer")}</span>
+                    <span>Anthropic · {t("ai_disclaimer")}</span>
                   )}
                   {msg.source === "deterministic" && (
                     <span className="italic">{t("no_ai")}</span>
                   )}
 
-                  {/* Explain simply — only offered on standard answers */}
+                  {/* Explain simply, only offered on standard answers */}
                   {msg.mode !== "plain" && !loading && (
                     <button
                       onClick={() => explainSimply(msg)}

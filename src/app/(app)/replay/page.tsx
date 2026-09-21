@@ -21,7 +21,7 @@ import {
 const DEFAULT_DATE = "2026-09-01";
 
 // Historical Replay now lives as a tab on the consolidated Dashboard
-// (/climate) rather than its own page — this redirects any existing link
+// (/climate) rather than its own page, this redirects any existing link
 // or bookmark straight there instead of leaving a dangling duplicate page.
 export default function ReplayPage() {
   const router = useRouter();
@@ -32,7 +32,7 @@ export default function ReplayPage() {
 }
 
 // Exported as a plain component (not just a page default export) so the
-// Dashboard's "Replay" tab can render it inline — merging Historical Replay
+// Dashboard's "Replay" tab can render it inline, merging Historical Replay
 // into the consolidated Dashboard without duplicating this logic.
 export function ReplayContent() {
   const { t, lang } = useLanguage();
@@ -96,7 +96,7 @@ export function ReplayContent() {
     const simTime = new Date(step.sim_time).getTime();
     const dateStr = step.sim_time.slice(0, 10);
     const tomorrowAnchor = `${dateStr}T${String(21).padStart(2, "0")}:00:00Z`; // 24:00 EAT
-    // Use forecast_series as proxy — the replay engine has already computed the state
+    // Use forecast_series as proxy, the replay engine has already computed the state
     // and forecast up to the simulated time; for "actual" we need what really happened.
     // In a real implementation this would be a separate observation query.
     // For demo purposes we use the series from the NEXT step (i+1 step ahead).
@@ -299,7 +299,7 @@ export function ReplayContent() {
                   <span className="font-bold text-afya-charcoal">
                     {currentStep.situation.expected_peak
                       ? `${fmtTime(currentStep.situation.expected_peak.time)} · ${currentStep.situation.expected_peak.wbgt_c.toFixed(1)}°C`
-                      : "—"}
+                      : "-"}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
@@ -422,8 +422,8 @@ export function ReplayContent() {
                             ? `AFYA MAZINGIRA ilipunguza kupatwa na joto kwa ${improvement.toFixed(1)}°C ikilinganishwa na dirisha la kawaida.`
                             : `AFYA MAZINGIRA reduced peak thermal exposure by ${improvement.toFixed(1)}°C vs the fixed midday window.`
                           : lang === "sw"
-                            ? "Tofauti ndogo — hali ilikuwa imara siku hii."
-                            : "Marginal difference — conditions were relatively stable that day."
+                            ? "Tofauti ndogo, hali ilikuwa imara siku hii."
+                            : "Marginal difference, conditions were relatively stable that day."
                         }
                       </div>
                     </div>

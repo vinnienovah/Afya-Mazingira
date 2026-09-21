@@ -171,7 +171,7 @@ export default function FarmPage() {
         </Card>
       )}
 
-      {/* ── IRRIGATION DECISION (hero) ─────────────────────────────────── */}
+      {/* IRRIGATION DECISION (hero) */}
       {!loading && adv && irr && wb && (
         <>
           <div
@@ -220,7 +220,7 @@ export default function FarmPage() {
             </div>
           </div>
 
-          {/* ── WATER BALANCE ────────────────────────────────────────────── */}
+          {/* WATER BALANCE */}
           <Card>
             <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
               <div>
@@ -278,7 +278,7 @@ export default function FarmPage() {
             </div>
           </Card>
 
-          {/* ── OPERATION WINDOWS ────────────────────────────────────────── */}
+          {/* OPERATION WINDOWS */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Spray window */}
             <Card>
@@ -329,7 +329,7 @@ export default function FarmPage() {
             </Card>
           </div>
 
-          {/* ── CROP STRESS + PLANTING ───────────────────────────────────── */}
+          {/* CROP STRESS + PLANTING */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Heat stress */}
             <Card>
@@ -386,7 +386,7 @@ export default function FarmPage() {
             </Card>
           </div>
 
-          {/* ── AI EXPLANATION ───────────────────────────────────────────── */}
+          {/* AI EXPLANATION */}
           <AiPanel
             context="farm"
             extraParams={{ crop, stage }}
@@ -395,7 +395,7 @@ export default function FarmPage() {
               : ["Should I irrigate today?", "When is the best time to spray?", "How is the rainfall this week?"]}
           />
 
-          {/* ── METHOD + LIMITATIONS ─────────────────────────────────────── */}
+          {/* METHOD + LIMITATIONS */}
           <Card>
             <div className="flex items-start gap-3">
               <Info className="w-4 h-4 text-afya-muted shrink-0 mt-0.5" strokeWidth={1.8} aria-hidden="true" />

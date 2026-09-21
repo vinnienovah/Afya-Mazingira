@@ -84,9 +84,9 @@ function MiniChart({ title, children }: { title: string; children: React.ReactEl
 type DashboardTab = "live" | "history" | "replay";
 
 // Consolidated Dashboard: live climate variables, the date-range Climate
-// History explorer, and Historical Replay — previously three separate
+// History explorer, and Historical Replay, previously three separate
 // destinations (a section on the Intelligence page, this page, and
-// /replay) — now one page with tabs, so there's a single place to look at
+// /replay), now one page with tabs, so there's a single place to look at
 // "everything about the climate data" instead of three.
 export default function DashboardPage() {
   const { t } = useLanguage();

@@ -1,6 +1,6 @@
-// ─── AFYA MAZINGIRA Service Worker ────────────────────────────────────────────────
+// AFYA MAZINGIRA Service Worker
 // Cache-first for static shell assets; network-first for API calls with
-// last-known-good fallback for /api/situation (offline resilience per spec §37.24).
+// last-known-good fallback for /api/situation (offline resilience per).
 
 const SHELL_CACHE = "afya-shell-v1";
 const DATA_CACHE = "afya-data-v1";

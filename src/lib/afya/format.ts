@@ -1,4 +1,4 @@
-// ─── Formatting and unit helpers ─────────────────────────────────────────────
+// Formatting and unit helpers
 
 /** Format an ISO string to "HH:MM" in Africa/Nairobi. */
 export function fmtTime(iso: string): string {

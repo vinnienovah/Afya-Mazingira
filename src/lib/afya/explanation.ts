@@ -3,7 +3,7 @@ import type { SituationResult, RiskAssessment, Lang } from "./types";
 import { STATES, RISK_META } from "./constants";
 import { fmtTime, fmtWindow } from "./format";
 
-// ─── Deterministic Explanation Engine ─────────────────────────────────────────
+// Deterministic Explanation Engine
 // Produces validated explanation facts. The LLM may rewrite for clarity
 // but must NOT change any numbers, times, risk categories, or recommendations.
 
@@ -115,11 +115,11 @@ export function buildExplanationFacts(situation: SituationResult): ExplanationFa
   };
 }
 
-// ─── Farm advisory context facts ──────────────────────────────────────────────
+// Farm advisory context facts
 // The base ExplanationFacts above cover the general Situation/Forecast pages
-// only — they have no notion of a crop, growth stage, irrigation decision or
+// only, they have no notion of a crop, growth stage, irrigation decision or
 // spray window. Without this, a question asked on the Farm Advisory page
-// (e.g. "should I irrigate today?") has genuinely no relevant fact to answer
+// (e.g. "should I irrigate today?") has no relevant fact to answer
 // from, and the AI correctly (if unhelpfully) says so. This gives it the
 // real, already-computed farm advisory facts to draw on instead.
 const FARM_REASON_EN: Record<string, string> = {
@@ -189,7 +189,7 @@ export function buildFarmExplanationFacts(advisory: {
   };
 }
 
-// ─── Deterministic English template ───────────────────────────────────────────
+// Deterministic English template
 
 export function deterministicExplanationEn(facts: ExplanationFacts): string {
   const stateDesc = getStateDescriptionEn(facts.state_id);
@@ -205,7 +205,7 @@ export function deterministicExplanationEn(facts: ExplanationFacts): string {
     : "";
   const qualityPart =
     facts.quality !== "GOOD"
-      ? ` Data quality is ${facts.quality} — recommendations carry higher uncertainty.`
+      ? ` Data quality is ${facts.quality}, recommendations carry higher uncertainty.`
       : "";
 
   return [
@@ -225,7 +225,7 @@ export function deterministicExplanationEn(facts: ExplanationFacts): string {
     .join(" ");
 }
 
-// ─── Deterministic Kiswahili template ─────────────────────────────────────────
+// Deterministic Kiswahili template
 
 export function deterministicExplanationSw(facts: ExplanationFacts): string {
   const stateDesc = getStateDescriptionSw(facts.state_id);
@@ -240,7 +240,7 @@ export function deterministicExplanationSw(facts: ExplanationFacts): string {
     : "";
   const qualityPart =
     facts.quality !== "GOOD"
-      ? ` Ubora wa data ni ${facts.quality} — mapendekezo yana utata mkubwa zaidi.`
+      ? ` Ubora wa data ni ${facts.quality}, mapendekezo yana utata mkubwa zaidi.`
       : "";
 
   return [
@@ -305,20 +305,20 @@ function getRiskDescriptionEn(risk: string): string {
   }
 }
 
-// ─── LLM Communication Layer ─────────────────────────────────────────────────
+// LLM Communication Layer
 
 const LLM_SYSTEM_PROMPT_EN = `You are the AFYA MAZINGIRA communication layer. Your ONLY job is to explain validated environmental intelligence results in plain, natural language. You must NEVER invent sensor values, forecast values, risk levels, thresholds, causes, or medical advice. You may ONLY use the structured facts provided in the JSON input. Preserve every number, time, risk category, and recommendation exactly as given. Do not add weather forecasts of your own. Do not diagnose illness. If the structured facts show data quality is POOR, acknowledge limitations. Write in clear, helpful English suitable for a general audience.`;
 
-// ─── Plain-language prompts ──────────────────────────────────────────────────
-// Same validated facts, same grounding rules — only the reading level changes.
+// Plain-language prompts
+// Same validated facts, same grounding rules, only the reading level changes.
 // Intended for farmers, outdoor workers, vendors, students and the general public.
 
-const PLAIN_SYSTEM_PROMPT_EN = `You are the AFYA MAZINGIRA communication layer, writing for someone with no scientific or technical background — for example a farmer, a construction worker, a market vendor or a student.
+const PLAIN_SYSTEM_PROMPT_EN = `You are the AFYA MAZINGIRA communication layer, writing for someone with no scientific or technical background, for example a farmer, a construction worker, a market vendor or a student.
 
 Rules for how you write:
 - Use short, everyday sentences. Aim for about 60-90 words total.
 - Do NOT use technical words such as WBGT, forecast horizon, uncertainty interval, model contributor, radiation, humidity percentage, or data quality. Say things like "how hot it feels", "we expect", "we are less sure", or "the sensor is working normally" instead.
-- Do not show numbers with units unless they are genuinely helpful. Prefer plain descriptions such as "hotter than now" or "cooler in the evening".
+- Do not show numbers with units unless they are helpful. Prefer plain descriptions such as "hotter than now" or "cooler in the evening".
 - Speak directly to the reader using "you".
 - Lead with what is happening, then what it means for being outside, then the best time to do outdoor work or exercise.
 
@@ -328,7 +328,7 @@ Rules you must never break:
 - Never give medical advice and never diagnose illness.
 - If data quality is not good, say plainly that the information is less reliable right now.`;
 
-const PLAIN_SYSTEM_PROMPT_SW = `Wewe ni safu ya mawasiliano ya AFYA MAZINGIRA, unaandika kwa mtu asiye na elimu ya kisayansi au kiufundi — kwa mfano mkulima, mfanyakazi wa ujenzi, muuzaji sokoni au mwanafunzi.
+const PLAIN_SYSTEM_PROMPT_SW = `Wewe ni safu ya mawasiliano ya AFYA MAZINGIRA, unaandika kwa mtu asiye na elimu ya kisayansi au kiufundi, kwa mfano mkulima, mfanyakazi wa ujenzi, muuzaji sokoni au mwanafunzi.
 
 Kanuni za jinsi ya kuandika:
 - Tumia sentensi fupi za kila siku. Lenga maneno 60-90 kwa jumla.
@@ -346,13 +346,13 @@ Kanuni usizovunja kamwe:
 const LLM_SYSTEM_PROMPT_SW = `Wewe ni safu ya mawasiliano ya AFYA MAZINGIRA. Kazi yako PEKEE ni kueleza matokeo ya ujasusi wa mazingira yaliyothibitishwa kwa lugha rahisi na ya asili. HAUPASWI kamwe kubuni thamani za sensa, thamani za utabiri, viwango vya hatari, viwango vya kiwango, sababu, au ushauri wa matibabu. Unaweza TU kutumia ukweli uliowekwa katika ingizo la JSON. Hifadhi kila namba, wakati, kiwango cha hatari, na mapendekezo kama ilivyopewa. Usiongeze utabiri wa hali ya hewa wako mwenyewe. Usiugue ugonjwa. Ikiwa ukweli uliowekwa unaonyesha ubora wa data ni MBAYA, tambua mapungufu. Andika kwa Kiswahili safi kinachofaa hadhira ya jumla.`;
 
 const PLAIN_PROMPT_TEMPLATE = (factsJson: string, userQuestion: string | null, lang: Lang) =>
-  `Validated AFYA MAZINGIRA facts (for your reference only — do not repeat the field names):\n${factsJson}\n\n` +
+  `Validated AFYA MAZINGIRA facts (for your reference only, do not repeat the field names):\n${factsJson}\n\n` +
   (userQuestion
     ? `The person asked: "${userQuestion}"\n\n` +
-      `Answer THAT specific question first and directly. Pull in only the facts that are actually relevant to it — ` +
+      `Answer THAT specific question first and directly. Pull in only the facts that are actually relevant to it, ` +
       `do not recite every field in the JSON if they weren't asked about it. ` +
       `If the question asks about a change (e.g. "what changed since morning"), compare the relevant before/after facts you were given rather than just restating the current state. ` +
-      `If the facts genuinely don't contain what's needed to answer, say so briefly instead of padding with unrelated facts.\n\n`
+      `If the facts don't contain what's needed to answer, say so briefly instead of padding with unrelated facts.\n\n`
     : `Give a brief overview of the current situation.\n\n`) +
   `Explain this ${lang === "sw" ? "in simple Kiswahili" : "in simple English"} for someone with no technical background. ` +
   `Maximum 90 words. Short everyday sentences. No technical terms and no field names. ` +
@@ -364,7 +364,7 @@ const STRUCTURED_PROMPT_TEMPLATE = (factsJson: string, userQuestion: string | nu
   `Structured AFYA MAZINGIRA validated facts:\n${factsJson}\n\n` +
   (userQuestion
     ? `User question: "${userQuestion}"\n\n` +
-      `Answer THAT specific question first and directly, in your own words. Select only the facts relevant to what was asked — ` +
+      `Answer THAT specific question first and directly, in your own words. Select only the facts relevant to what was asked, ` +
       `do not dump every field in the JSON regardless of relevance; that produces a repetitive, unhelpful answer. ` +
       `If the question is about change over time (e.g. "what changed", "what's different now"), reason about the trend/trajectory facts you were given (current vs. forecast horizons, transition likelihood) rather than just listing the current snapshot again. ` +
       `If the supplied facts don't actually contain an answer to the question, say so briefly rather than substituting an unrelated fact dump.\n\n`
@@ -379,7 +379,7 @@ const STRUCTURED_PROMPT_TEMPLATE = (factsJson: string, userQuestion: string | nu
 export type ExplanationProvider = "gemini" | "groq" | "openai" | "anthropic" | "deterministic";
 export type ExplanationMode = "standard" | "plain";
 
-// ─── Deterministic plain-language templates ──────────────────────────────────
+// Deterministic plain-language templates
 // Served when no provider is available. Same validated facts, simple wording.
 
 function plainStateFeelEn(stateId: number): string {
@@ -538,7 +538,7 @@ export async function generateExplanation(
   };
   const factsJson = JSON.stringify(communicationFacts, null, 2);
   // Extra numeric facts (e.g. a farm advisory's peak crop temperature) are
-  // real, validated values too — the grounding check must accept them, not
+  // real, validated values too, the grounding check must accept them, not
   // just the base situation facts, or the LLM's correct answer gets rejected
   // as an unrecognized number and silently replaced by the generic fallback.
   const extraAllowedNumbers = extraFacts

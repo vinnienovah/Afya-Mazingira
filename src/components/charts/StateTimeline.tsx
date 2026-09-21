@@ -11,7 +11,7 @@ interface Props {
   height?: number;
 }
 
-// Signature State History ribbon — AFYA MAZINGIRA's most recognizable visualization
+// Signature State History ribbon, AFYA MAZINGIRA's most recognizable visualization
 export default function StateTimeline({ segments, height = 44 }: Props) {
   const { t, lang } = useLanguage();
   const [selected, setSelected] = useState<StateSegment | null>(null);

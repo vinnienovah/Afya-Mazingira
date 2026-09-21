@@ -1,11 +1,11 @@
-// ─── External context adapters (ERA5-Land regional + Copernicus Sentinel) ────
-// Live retrieval with caching + graceful fallback (spec §40). All getters are
+// External context adapters (ERA5-Land regional + Copernicus Sentinel)
+// Live retrieval with caching + graceful fallback. All getters are
 // async: they serve the cached live value when it's still fresh, otherwise
 // await a real refresh directly before falling back to the demo fixture only
 // if that refresh fails. (An earlier fire-and-forget-background-refresh
 // version of this file assumed a long-running process; on Vercel a function
 // can be frozen the instant its response is sent, so a background refresh
-// never reliably got to finish — every cold invocation would silently serve
+// never reliably got to finish, every cold invocation would silently serve
 // the synthetic fixture forever, even with real credentials configured.)
 
 import type { Era5Context, SentinelContext, ChirpsContext } from "./types";
@@ -16,7 +16,7 @@ import { hasCopernicusCreds, cdseToken, ndviStatisticsForBbox } from "./copernic
 const JKUAT = { lat: -1.0931, lng: 37.0149 };
 const JKUAT_NDVI_BBOX: [number, number, number, number] = [37.0, -1.11, 37.03, -1.08];
 
-// ═══ ERA5-Land regional context ═════════════════════════════════════════════
+// ERA5-Land regional context
 // Production CDS path (async job → NetCDF, CDS_API_KEY in .env) requires the
 // Python sidecar prescribed by the technical specification. This Node adapter
 // retrieves the same ECMWF ERA5-Land data through the ERA5 archive REST mirror,
@@ -41,14 +41,14 @@ interface Era5Row {
 
 /**
  * `nearNow` gates whether we bother attempting a real fetch at all: for a
- * genuine historical replay anchor, "real recent ERA5" isn't a meaningful
+ * historical replay anchor, "real recent ERA5" isn't a meaningful
  * concept, so we go straight to the synthetic (but anchor-consistent)
  * generator rather than wasting a network round trip.
  *
  * This is `await`ed rather than fire-and-forget-with-instant-fallback: on a
  * serverless platform (Vercel) a function's execution can be frozen the
  * moment its response is sent, so a background refresh kicked off here has
- * no reliable chance to finish and populate the cache for next time — every
+ * no reliable chance to finish and populate the cache for next time, every
  * cold invocation would otherwise silently serve the synthetic fallback
  * forever, even with real credentials configured.
  */
@@ -71,7 +71,7 @@ async function refreshEra5(): Promise<void> {
     return;
   }
   era5Inflight = (async () => {
-    // ERA5 publishes with ~5-day latency — request a guaranteed-available window.
+    // ERA5 publishes with ~5-day latency, request a guaranteed-available window.
     // 30 days wide (not just enough for the diurnal-match) so the same hourly
     // precipitation rows can also back a real 7d/30d rainfall accumulation
     // (see getRainfallContext) instead of a fabricated stand-in for CHIRPS.
@@ -186,12 +186,12 @@ function dewpoint(tC: number, rh: number): number {
   return (b * alpha) / (a - alpha);
 }
 
-// ═══ Rainfall accumulation (real, from the same ERA5 hourly precipitation) ══
-// The technical spec calls for CHIRPS satellite rainfall; a genuine point
-// extraction from CHIRPS's gridded product needs raster tooling this Node
+// Rainfall accumulation, from the same ERA5-Land hourly precipitation
+// CHIRPS would be the better rainfall source, but a point extraction from
+// its gridded product needs raster tooling this Node
 // adapter doesn't have. Real ERA5-Land precipitation serves the same purpose
 // (regional rainfall accumulation) and is already being fetched for the
-// temperature/humidity context above — so this reuses those same hourly
+// temperature/humidity context above, so this reuses those same hourly
 // rows instead of fabricating fixed numbers, which is what happened before.
 
 export async function getRainfallContext(anchorIso: string, nearNow: boolean = true): Promise<ChirpsContext> {
@@ -209,7 +209,7 @@ export interface Era5SeriesPoint {
   precip_mm: number;
 }
 
-/** Raw hourly ERA5 rows for charting — ensures the cache is warm first. */
+/** Raw hourly ERA5 rows for charting, ensures the cache is warm first. */
 export async function getEra5Series(): Promise<Era5SeriesPoint[]> {
   if (!era5Cache || Date.now() - era5Cache.at > ERA5_TTL) await refreshEra5();
   return (era5Cache?.rows ?? []).map((r) => ({
@@ -220,17 +220,17 @@ export async function getEra5Series(): Promise<Era5SeriesPoint[]> {
   }));
 }
 
-// ─── Regional day-ahead outlook (real Open-Meteo forecast, no key needed) ────
+// Regional day-ahead outlook (real Open-Meteo forecast, no key needed)
 // Unlike everything else in this file (which reads the ERA5-Land *archive*,
-// i.e. the recent past), this hits Open-Meteo's actual forecast product —
-// genuine future model output, not a proxy of it. It exists specifically so
+// i.e. the recent past), this hits Open-Meteo's actual forecast product,
+// model output for the future. It exists so
 // planning still works when the Conduit ground station has gone quiet for
-// longer than the +9h forecast horizon: the ML forecast is anchored to the
+// longer than the +9h forecast horizon: the station forecast is anchored to the
 // last real observation and becomes meaningless once "now" has moved past
 // its own horizon, but a regional model forecast doesn't depend on the
-// station at all. Always labeled REGIONAL_MODEL — a real forecast, but a
-// shade-only WBGT approximation for a ~9km grid cell, not the sensor-grade
-// ground truth Conduit provides when it's reporting.
+// station at all. Always labeled REGIONAL_MODEL, a real forecast, but a
+// shade WBGT estimate for a ~9 km grid cell, not the station's own
+// measurements.
 export interface RegionalOutlookPoint {
   time: string;
   wbgt_like: number;
@@ -344,7 +344,7 @@ function rainfallFromRows(rows: Era5Row[], anchorIso: string): ChirpsContext {
   };
 }
 
-// ═══ Copernicus Data Space — Sentinel-2 / Sentinel-3 ════════════════════════
+// Copernicus Data Space, Sentinel-2 / Sentinel-3
 // Real acquisition metadata from the CDSE Catalog + NDVI statistics via the
 // Sentinel Hub Statistical API. LST values require SLSTR thermal statistics
 // and are intentionally left null rather than estimated.
@@ -364,7 +364,7 @@ interface LiveSat {
   s3: { acquired: string } | null;
 }
 
-// Both `await` the refresh rather than firing it in the background — see the
+// Both `await` the refresh rather than firing it in the background, see the
 // comment on getEra5ContextLive for why that pattern doesn't reliably work
 // on a serverless platform, where the function can be frozen right after its
 // response is sent, before a background fetch gets a chance to finish.
@@ -392,7 +392,7 @@ function satContextFrom(d: LiveSat): SentinelContext {
     sentinel2_ndvi_mean: d.s2?.ndvi ?? null,
     sentinel3_available: !!d.s3,
     sentinel3_acquired: d.s3?.acquired ?? null,
-    sentinel3_lst_c: null, // real LST requires SLSTR thermal statistics — never estimated
+    sentinel3_lst_c: null, // real LST requires SLSTR thermal statistics, never estimated
   };
 }
 
@@ -426,7 +426,7 @@ async function refreshSatellite(): Promise<void> {
     ]);
 
     // Prefer clearer scenes; catalog returns newest first. NDVI is only
-    // computed from genuinely clear scenes (< 60% cloud) — cloudy-scene NDVI
+    // computed from clear scenes (< 60% cloud), cloudy-scene NDVI
     // would be dominated by cloud pixels and scientifically misleading.
     const s2 = s2All.filter((f) => (f.properties?.["eo:cloud_cover"] ?? 100) < 80).slice(0, 6);
     const s2Clear = s2All.filter((f) => (f.properties?.["eo:cloud_cover"] ?? 100) < 60);

@@ -27,10 +27,10 @@ export default function AboutPage() {
     },
     {
       icon: <CloudRain className="w-5 h-5 text-afya-rain" />,
-      name: "CHIRPS v3",
-      detail_en: "Rainfall climatology · UCSB Climate Hazards Center",
-      detail_sw: "Uchunguzi wa mvua wa kihistoria · UCSB Climate Hazards Center",
-      type: { en: "HISTORICAL CLIMATE · 0.05° · daily", sw: "HALI YA HEWA YA KIHISTORIA · 0.05° · kila siku" },
+      name: "ERA5-Land rainfall",
+      detail_en: "7-day and 30-day rainfall totals from ERA5-Land, used in place of CHIRPS",
+      detail_sw: "Jumla ya mvua ya siku 7 na 30 kutoka ERA5-Land, badala ya CHIRPS",
+      type: { en: "REGIONAL MODEL · ~9 km · daily", sw: "MFUMO WA KIKANDA · ~9 km · kila siku" },
     },
     {
       icon: <Satellite className="w-5 h-5 text-afya-teal" />,

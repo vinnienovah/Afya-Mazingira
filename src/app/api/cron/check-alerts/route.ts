@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
   let evaluated = 0;
   const errors: string[] = [];
 
-  // ── Rule-based threshold alerts ─────────────────────────────────────────
+  // Rule-based threshold alerts
   const rules = await db.select().from(notificationRules).where(eq(notificationRules.enabled, true));
   for (const rule of rules) {
     evaluated++;
@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
     await db.update(notificationRules).set({ last_triggered_at: new Date() }).where(eq(notificationRules.id, rule.id));
   }
 
-  // ── Saved-plan impact alerts ─────────────────────────────────────────────
+  // Saved-plan impact alerts
   const plans = await db.select().from(activityPlans);
   for (const plan of plans) {
     const content = checkPlanImpact(plan, situation);

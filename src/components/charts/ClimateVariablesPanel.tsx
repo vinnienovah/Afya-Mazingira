@@ -116,7 +116,7 @@ export default function ClimateVariablesPanel() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        {/* Temperature & WBGT — Conduit */}
+        {/* Temperature & WBGT, Conduit */}
         <MiniChart title={lang === "sw" ? "Joto na WBGT (Conduit)" : "Temperature & WBGT (Conduit)"} sourceLabel={conduitLabel}>
           <LineChart data={data.conduit} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" {...GRID_STYLE} vertical={false} />
@@ -128,7 +128,7 @@ export default function ClimateVariablesPanel() {
           </LineChart>
         </MiniChart>
 
-        {/* Humidity — Conduit */}
+        {/* Humidity, Conduit */}
         <MiniChart title={lang === "sw" ? "Unyevu (Conduit)" : "Humidity (Conduit)"} sourceLabel={conduitLabel}>
           <AreaChart data={data.conduit} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
             <defs>
@@ -145,7 +145,7 @@ export default function ClimateVariablesPanel() {
           </AreaChart>
         </MiniChart>
 
-        {/* Wind speed — Conduit */}
+        {/* Wind speed, Conduit */}
         <MiniChart title={lang === "sw" ? "Kasi ya Upepo (Conduit)" : "Wind Speed (Conduit)"} sourceLabel={conduitLabel}>
           <LineChart data={data.conduit} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" {...GRID_STYLE} vertical={false} />
@@ -156,7 +156,7 @@ export default function ClimateVariablesPanel() {
           </LineChart>
         </MiniChart>
 
-        {/* ERA5 regional temperature — 7 days */}
+        {/* ERA5 regional temperature, 7 days */}
         <MiniChart title={lang === "sw" ? "Joto la Kikanda (ERA5, siku 7)" : "Regional Temperature (ERA5, 7d)"} sourceLabel="ERA5-LAND">
           <LineChart data={data.era5} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" {...GRID_STYLE} vertical={false} />
@@ -167,7 +167,7 @@ export default function ClimateVariablesPanel() {
           </LineChart>
         </MiniChart>
 
-        {/* Rainfall — daily, real */}
+        {/* Rainfall, daily, real */}
         <MiniChart title={lang === "sw" ? "Mvua ya Kila Siku" : "Daily Rainfall"} sourceLabel="ERA5-LAND">
           <BarChart data={data.daily_rainfall} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" {...GRID_STYLE} vertical={false} />
@@ -178,7 +178,7 @@ export default function ClimateVariablesPanel() {
           </BarChart>
         </MiniChart>
 
-        {/* Pressure — Conduit */}
+        {/* Pressure, Conduit */}
         <MiniChart title={lang === "sw" ? "Shinikizo la Hewa (Conduit)" : "Pressure (Conduit)"} sourceLabel={conduitLabel}>
           <LineChart data={data.conduit} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" {...GRID_STYLE} vertical={false} />
@@ -190,7 +190,7 @@ export default function ClimateVariablesPanel() {
         </MiniChart>
       </div>
 
-      {/* Gauges — current value positioned within the real observed range of
+      {/* Gauges, current value positioned within the real observed range of
           the same 30h series plotted above, not a fabricated universal scale. */}
       {latest && (
         <div className="grid gap-4 sm:grid-cols-2">
@@ -219,8 +219,8 @@ export default function ClimateVariablesPanel() {
 
       <p className="text-[10px] text-afya-muted/60">
         {lang === "sw"
-          ? "Joto/Unyevu/Upepo/Shinikizo: Conduit (saa 30 zilizopita). Joto la kikanda na mvua: ERA5-Land, mfumo halisi wa hali ya hewa (siyo CHIRPS moja kwa moja — angalia maelezo)."
-          : "Temperature/Humidity/Wind/Pressure: Conduit station (last 30h). Regional temperature and rainfall: ERA5-Land reanalysis — a real precipitation product used in place of a direct CHIRPS point-extraction, which needs raster tooling this deployment doesn't run."}
+          ? "Joto/Unyevu/Upepo/Shinikizo: Conduit (saa 30 zilizopita). Joto la kikanda na mvua: ERA5-Land, mfumo halisi wa hali ya hewa (siyo CHIRPS moja kwa moja, angalia maelezo)."
+          : "Temperature/Humidity/Wind/Pressure: Conduit station (last 30h). Regional temperature and rainfall: ERA5-Land reanalysis, a real precipitation product used in place of a direct CHIRPS point-extraction, which needs raster tooling this deployment doesn't run."}
       </p>
     </div>
   );

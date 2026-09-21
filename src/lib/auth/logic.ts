@@ -4,12 +4,12 @@ import { users, sessions } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
 
-// ─── Session token ─────────────────────────────────────────────────────────────
+// Session token
 export function generateToken(): string {
   return crypto.randomBytes(32).toString("hex");
 }
 
-// ─── Password hashing (scrypt, built-in) ─────────────────────────────────────
+// Password hashing (scrypt, built-in)
 export function hashPassword(password: string): { hash: string; salt: string } {
   const salt = crypto.randomBytes(16).toString("hex");
   const hash = crypto.scryptSync(password, salt, 64).toString("hex");
@@ -28,7 +28,7 @@ export function verifyPassword(password: string, hash: string, salt: string): bo
   }
 }
 
-// ─── Session helpers ──────────────────────────────────────────────────────────
+// Session helpers
 
 export async function createSession(userId: number): Promise<string> {
   const token = generateToken();
@@ -61,7 +61,7 @@ export async function deleteSession(token: string) {
   await db.delete(sessions).where(eq(sessions.token, token));
 }
 
-// ─── Cookie helpers ───────────────────────────────────────────────────────────
+// Cookie helpers
 
 export function sessionCookie(token: string, maxAge = 30 * 24 * 3600) {
   return `afya_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
@@ -71,7 +71,7 @@ export function clearSessionCookie() {
   return `afya_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
 }
 
-// ─── CSRF token ───────────────────────────────────────────────────────────────
+// CSRF token
 export function generateCsrf(): string {
   return crypto.randomBytes(24).toString("hex");
 }

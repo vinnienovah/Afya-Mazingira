@@ -55,7 +55,7 @@ export interface StationOverride {
 
 const OUTLOOK_HOURS = ["09:00", "12:00", "15:00", "18:00"];
 
-// ─── County boundaries (real GeoJSON, loaded once) ──────────────────────────
+// County boundaries (real GeoJSON, loaded once)
 
 interface LoadedCounty {
   name: string;
@@ -117,7 +117,7 @@ function centroidAndBbox(ring: [number, number][]): { centroid: { lat: number; l
   };
 }
 
-// ─── Weather (real, batched Open-Meteo) ─────────────────────────────────────
+// Weather (real, batched Open-Meteo)
 
 interface CountyWeather {
   tempC: number;
@@ -165,7 +165,7 @@ async function fetchRegionalWeather(counties: LoadedCounty[]): Promise<(CountyWe
     }
 
     // Real per-county soil moisture (0-1cm layer, m³/m³) from the same
-    // batched call — falls back to a documented regional default only if
+    // batched call, falls back to a documented regional default only if
     // Open-Meteo omits the field for this location.
     const soilSeries = loc.hourly.soil_moisture_0_to_1cm;
     const soilMoisture = soilSeries?.length
@@ -193,7 +193,7 @@ interface OpenMeteoLocation {
 }
 
 /** Shade-only WBGT approximation (Australian Bureau of Meteorology formula). */
-// ─── NDVI (real, per-county Copernicus Sentinel-2 statistics) ──────────────
+// NDVI (real, per-county Copernicus Sentinel-2 statistics)
 
 const NDVI_TTL_MS = 6 * 3600_000;
 const NDVI_BOX_HALF_DEG = 0.02; // ~2 km half-width sample box around each centroid
@@ -207,7 +207,7 @@ async function getRegionalNdvi(counties: LoadedCounty[]): Promise<Record<string,
   try {
     const token = await cdseToken();
     // Sentinel-2's ~5 day revisit means a single day often misses these small
-    // per-county sample boxes entirely — average over the last 14 days instead.
+    // per-county sample boxes entirely, average over the last 14 days instead.
     const from = new Date(Date.now() - 14 * 86400_000).toISOString().slice(0, 10);
     const to = new Date(Date.now() - 86400_000).toISOString().slice(0, 10);
     const results = await Promise.allSettled(
@@ -233,7 +233,7 @@ async function getRegionalNdvi(counties: LoadedCounty[]): Promise<Record<string,
   }
 }
 
-// ─── Assembly ────────────────────────────────────────────────────────────────
+// Assembly
 
 function round1(n: number): number {
   return Math.round(n * 10) / 10;
@@ -307,7 +307,7 @@ export async function getRegionalOutlook(stationOverride?: StationOverride): Pro
         soil_moisture: soilMoisture,
         flood_risk: computeFloodRisk(rain24h, soilMoisture),
         ndvi_mean: ndvi,
-        lst_c: null, // never estimated — see file header
+        lst_c: null, // never estimated, see file header
         sources,
         trend,
         outlook_hours: outlookHours,
@@ -324,14 +324,14 @@ export async function getRegionalOutlook(stationOverride?: StationOverride): Pro
 
 /**
  * Flood-conducive-conditions indicator: real recent rainfall + real ERA5-Land
- * soil saturation — the same two signals operational flash-flood guidance
+ * soil saturation, the same two signals operational flash-flood guidance
  * systems use before any terrain modelling. This is deliberately NOT a
  * flood-susceptibility map: that would require a DEM, flow-accumulation or
  * proximity-to-drainage data this project doesn't have, and faking a
  * per-location hazard zone from data that can't actually support one would
  * violate the same honesty principle applied everywhere else in the app.
  * Thresholds: soil moisture ≥0.30 m³/m³ is close to field capacity for the
- * loam assumption used elsewhere (farm-engine.ts) — already-saturated ground
+ * loam assumption used elsewhere (farm-engine.ts), already-saturated ground
  * sheds new rain as runoff rather than absorbing it.
  */
 export function computeFloodRisk(rain24hMm: number, soilMoisture: number): "LOW" | "ELEVATED" | "HIGH" {
@@ -346,9 +346,8 @@ function ringToPolygonCoords(geometry: Geometry): [number, number][][] {
   return [[]];
 }
 
-// ─── Satellite acquisitions metadata (demo fallback; live path in
-// sources-external.ts uses real Copernicus catalog search when configured) ──
-
+// Satellite acquisitions metadata (demo fallback; live path in
+// sources-external.ts uses real Copernicus catalog search when configured)
 export interface SatelliteAcquisition {
   id: string;
   sensor: "Sentinel-2" | "Sentinel-3";
