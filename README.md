@@ -185,7 +185,7 @@ Methods: Stull (2011), *J. Appl. Meteor. Climatol.* 50, 2267-2269 (wet bulb); IS
 
 _To be completed by Vincent: which AI tools were used to build the project and for what._ Draft from what the repository shows:
 
-- The commit history records Anthropic's Claude as co-author of commits from 18 to 21 September 2026.
+- Anthropic's Claude was used as a coding assistant from 18 to 21 September 2026.
 - The changes of 21 September (fitted models, WBGT, data handling, tests, this README) were made with AI assistance.
 - Inside the product, language models only reword results the code has already computed, and their replies are checked against those results.
 
