@@ -15,6 +15,8 @@ import { findBestWindowFromNow } from "./best-time-engine";
 import { evaluateQuality } from "./data-quality";
 import { JKUAT_COORDS } from "./constants";
 
+const DAYLIGHT_HOURS = [6, 19] as const;
+
 // AFYA MAZINGIRA Intelligence Pipeline
 // CONDUIT → QC → FEATURES → STATE → FORECAST → RISK → BEST-TIME → EXPLANATION
 // Fully deterministic and source-agnostic: live Conduit observations when
@@ -142,8 +144,14 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
 
   // Step 9: Best-Time (start clamped to the effective now so a stale
   // forecast never recommends an already-elapsed window)
+  // People plan outdoor work and exercise in daylight, so the headline window
+  // comes from the forecast's daylight hours only, 06:00 to 19:00 local.
+  const daylight = forecast_series.filter((p) => {
+    const hour = (new Date(p.time).getUTCHours() + 3) % 24;
+    return hour >= DAYLIGHT_HOURS[0] && hour < DAYLIGHT_HOURS[1];
+  });
   const best_time: BestTimeResult | null = findBestWindowFromNow(
-    forecast_series,
+    daylight,
     activityKey,
     durationMinutes,
     10, // 10-hour look-ahead window
@@ -188,6 +196,7 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
     forecast_series,
     risk,
     best_time,
+    best_time_note: !best_time && quality.status !== "POOR" ? "no_daylight_window" : null,
     expected_peak,
     state_history_24h,
     contributors,

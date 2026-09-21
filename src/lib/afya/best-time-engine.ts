@@ -29,6 +29,8 @@ export function findBestTime(
   forecastSeries: ForecastPoint[],
   quality: DataQuality,
   rainProbFn?: (iso: string) => number,
+  // Forecast points a window needs before it is judged; 1 keeps partial windows.
+  minPoints = 1,
 ): BestTimeResult | null {
   if (quality.status === "POOR") return null; // never recommend when data is poor
 
@@ -54,7 +56,7 @@ export function findBestTime(
       return t >= startMs && t < endMs;
     });
 
-    if (!slice.length) continue;
+    if (slice.length < minPoints) continue;
 
     // Candidate metrics
     const values = slice.map((p) => p.value);
@@ -168,5 +170,8 @@ export function findBestWindowFromNow(
       ? startIso
       : seriesStart;
   const end = new Date(new Date(start).getTime() + availableHours * 3600 * 1000).toISOString();
-  return findBestTime(activityKey, durationMinutes, start, end, forecastSeries, quality);
+  // Only windows the forecast covers in full: one that runs past its end
+  // would otherwise be judged on the part that is left.
+  const fullWindow = Math.round(durationMinutes / STEP_MINUTES);
+  return findBestTime(activityKey, durationMinutes, start, end, forecastSeries, quality, undefined, fullWindow);
 }

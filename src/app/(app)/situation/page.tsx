@@ -202,8 +202,8 @@ export default function SituationPage() {
                     ? `Kwa shughuli za nje, muda bora zaidi ni ${fmtWindow(best_time.recommended.start, best_time.recommended.end)}.`
                     : `For a 60-minute outdoor activity, the best available window is ${fmtWindow(best_time.recommended.start, best_time.recommended.end)}.`
                   : lang === "sw"
-                  ? "Hali ya data ni nzuri kwa shughuli nyingi za nje."
-                  : "Current conditions are favourable for most outdoor activities."}
+                  ? "Hakuna muda wa mchana uliobaki katika utabiri wa saa 9. Angalia tena baadaye usiku kwa asubuhi ya kesho."
+                  : "No daylight window is left in the 9-hour forecast. Check again later tonight for tomorrow morning."}
               </p>
               {best_time && (
                 <div

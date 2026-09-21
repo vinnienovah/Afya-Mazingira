@@ -236,7 +236,13 @@ export default function OperationsPage() {
                 )}
               </div>
             ) : (
-              <p className="text-sm text-afya-muted">{t("quality_suppressed")}</p>
+              <p className="text-sm text-afya-muted">
+                {situation?.best_time_note === "no_daylight_window"
+                  ? lang === "sw"
+                    ? "Hakuna muda wa mchana uliobaki katika utabiri wa saa 9."
+                    : "No daylight window is left in the 9-hour forecast."
+                  : t("quality_suppressed")}
+              </p>
             )}
           </Card>
 
