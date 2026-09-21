@@ -5,6 +5,8 @@ import { useSituation } from "@/lib/contexts/situation";
 import { useLanguage } from "@/lib/contexts/language";
 import { STATES, RISK_META } from "@/lib/afya/constants";
 import { horizonScores, FORECAST_PERIODS } from "@/lib/afya/forecast-engine";
+import evaluation from "@/lib/afya/model/forecast-evaluation.json";
+import type { Lang } from "@/lib/afya/types";
 import { fmtTime, fmtAgo } from "@/lib/afya/format";
 import { Card, CardTitle, CardMeta } from "@/components/ui/Card";
 import { StateChip } from "@/components/ui/StateChip";
@@ -14,9 +16,25 @@ import MeasurementStrip from "@/components/ui/MeasurementStrip";
 import StateTimeline from "@/components/charts/StateTimeline";
 import AiPanel from "@/components/ai/AiPanel";
 import { SkeletonCard } from "@/components/ui/Skeleton";
-import { AlertTriangle, Cpu, Globe, CloudRain, Satellite, Database, TrendingUp, Info, ChevronRight } from "lucide-react";
+import { AlertTriangle, Cpu, Globe, CloudRain, Satellite, Database, TrendingUp, Info, ChevronRight, CalendarRange } from "lucide-react";
 
 const HORIZONS = ["1h", "3h", "6h", "9h"] as const;
+
+const MONTH_NAMES: Record<Lang, string[]> = {
+  en: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+  sw: ["Jan", "Feb", "Mac", "Apr", "Mei", "Jun", "Jul", "Ago", "Sep", "Okt", "Nov", "Des"],
+};
+
+/** "2026-01" as "Jan 2026", or "Jan" without the year. */
+function monthName(month: string, lang: Lang, withYear = true): string {
+  const [year, m] = month.split("-");
+  const name = MONTH_NAMES[lang][Number(m) - 1];
+  return withYear ? `${name} ${year}` : name;
+}
+
+const SEASONS = [evaluation.seasons.hot, evaluation.seasons.other];
+const HOT_MONTHS: string[] = evaluation.seasons.hot.months;
+const TESTED_MONTHS: string[] = evaluation.months;
 
 export default function IntelligencePage() {
   const { situation, isLoading, error } = useSituation();
@@ -209,6 +227,91 @@ export default function IntelligencePage() {
           {lang === "sw"
             ? `Regresheni ya ridge kwa kila hatua ya dakika 15, iliyofunzwa kwa data ya Conduit ${FORECAST_PERIODS.train[0]} hadi ${FORECAST_PERIODS.train[1]}. Bendi imewekwa kutoka ${FORECAST_PERIODS.calibration[0]} hadi ${FORECAST_PERIODS.calibration[1]}, na alama zote zimetoka ${FORECAST_PERIODS.test[0]} hadi ${FORECAST_PERIODS.test[1]}, miezi ambayo modeli haikuiona. Lengo ni WBGT kivulini.`
             : `Ridge regression for each 15-minute step, fitted on Conduit data from ${FORECAST_PERIODS.train[0]} to ${FORECAST_PERIODS.train[1]}. The band is set from ${FORECAST_PERIODS.calibration[0]} to ${FORECAST_PERIODS.calibration[1]}, and every score comes from ${FORECAST_PERIODS.test[0]} to ${FORECAST_PERIODS.test[1]}, months the model never saw. The target is WBGT in shade.`}
+        </p>
+      </Card>
+
+      {/* Month by month, so the hot season is scored on its own */}
+      <Card>
+        <div className="flex items-center gap-2 mb-4">
+          <CalendarRange className="w-5 h-5 text-afya-orange" strokeWidth={1.8} aria-hidden="true" />
+          <CardTitle className="mb-0">{lang === "sw" ? "Imejaribiwa mwezi kwa mwezi" : "Tested month by month"}</CardTitle>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" role="table">
+            <thead>
+              <tr className="text-left text-xs text-afya-muted border-b border-afya-border">
+                <th scope="col" className="pb-2 pr-4 font-semibold"></th>
+                <th scope="col" className="pb-2 pr-4 font-semibold">
+                  {lang === "sw" ? "Msimu wa joto" : "Hot season"}
+                  <span className="block font-normal">
+                    {monthName(HOT_MONTHS[0], lang, false)} {lang === "sw" ? "hadi" : "to"} {monthName(HOT_MONTHS[HOT_MONTHS.length - 1], lang)}
+                  </span>
+                </th>
+                <th scope="col" className="pb-2 font-semibold">
+                  {lang === "sw" ? "Miezi mingine" : "Other months"}
+                  <span className="block font-normal">
+                    {lang === "sw"
+                      ? `miezi ${evaluation.seasons.other.months.length}`
+                      : `${evaluation.seasons.other.months.length} months`}
+                  </span>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-afya-border/50">
+              {[
+                ...(["1h", "3h", "9h"] as const).map((h) => ({
+                  label: `${lang === "sw" ? "Kosa la wastani" : "Mean error"}, ${t(`horizon_${h}`)}`,
+                  vals: SEASONS.map((s) => `${s.horizons[h].mae.toFixed(2)}°C`),
+                })),
+                { label: `${lang === "sw" ? "Bila mabadiliko" : "No-change baseline"}, ${t("horizon_3h")}`, vals: SEASONS.map((s) => `${s.horizons["3h"].persistence_mae.toFixed(2)}°C`) },
+                { label: `${lang === "sw" ? "Kiwango cha hatari sawa" : "Same risk band as observed"}, ${t("horizon_3h")}`, vals: SEASONS.map((s) => `${s.band_same_pct.toFixed(1)}%`) },
+                { label: `${lang === "sw" ? "Kiwango cha chini kuliko halisi" : "Band lower than observed"}, ${t("horizon_3h")}`, vals: SEASONS.map((s) => `${s.band_lower_pct.toFixed(1)}%`) },
+              ].map((row, i) => (
+                <tr key={i}>
+                  <th scope="row" className="py-2 pr-4 text-xs font-semibold text-afya-muted text-left">{row.label}</th>
+                  {row.vals.map((v, j) => (
+                    <td key={j} className="py-2 pr-4 text-afya-charcoal font-medium">{v}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <details className="mt-3">
+          <summary className="text-xs font-semibold text-afya-muted cursor-pointer">
+            {lang === "sw" ? "Kila mwezi (msimu wa joto una kivuli)" : "Each month (hot season shaded)"}
+          </summary>
+          <div className="overflow-x-auto mt-2">
+            <table className="w-full text-xs" role="table">
+              <thead>
+                <tr className="text-left text-afya-muted border-b border-afya-border">
+                  <th scope="col" className="pb-2 pr-4 font-semibold">{lang === "sw" ? "Mwezi" : "Month"}</th>
+                  <th scope="col" className="pb-2 pr-4 font-semibold">{lang === "sw" ? "Kosa" : "Error"}, {t("horizon_3h")}</th>
+                  <th scope="col" className="pb-2 pr-4 font-semibold">{lang === "sw" ? "Kosa" : "Error"}, {t("horizon_9h")}</th>
+                  <th scope="col" className="pb-2 pr-4 font-semibold">{lang === "sw" ? "Bila mabadiliko" : "No change"}, {t("horizon_3h")}</th>
+                  <th scope="col" className="pb-2 pr-4 font-semibold">{lang === "sw" ? "Kiwango sawa" : "Same band"}, {t("horizon_3h")}</th>
+                  <th scope="col" className="pb-2 font-semibold">{lang === "sw" ? "Utabiri" : "Forecasts"}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-afya-border/50">
+                {evaluation.by_month.map((m) => (
+                  <tr key={m.month} className={HOT_MONTHS.includes(m.month) ? "bg-afya-orange/10" : undefined}>
+                    <th scope="row" className="py-1.5 pr-4 font-semibold text-afya-muted text-left whitespace-nowrap">{monthName(m.month, lang)}</th>
+                    <td className="py-1.5 pr-4 text-afya-charcoal">{m.horizons["3h"].mae.toFixed(2)}°C</td>
+                    <td className="py-1.5 pr-4 text-afya-charcoal">{m.horizons["9h"].mae.toFixed(2)}°C</td>
+                    <td className="py-1.5 pr-4 text-afya-charcoal">{m.horizons["3h"].persistence_mae.toFixed(2)}°C</td>
+                    <td className="py-1.5 pr-4 text-afya-charcoal">{m.band_same_pct.toFixed(1)}%</td>
+                    <td className="py-1.5 text-afya-muted">{m.horizons["3h"].n.toLocaleString("en")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+        <p className="mt-3 text-xs text-afya-muted">
+          {lang === "sw"
+            ? `Kila mwezi kuanzia ${monthName(TESTED_MONTHS[0], lang)} hadi ${monthName(TESTED_MONTHS[TESTED_MONTHS.length - 1], lang)} umetabiriwa na modeli zilizofunzwa upya kwa data yote ya kituo iliyorekodiwa kabla ya mwezi huo kuanza, kwa hivyo kila alama inatoka kwa mwezi ambao modeli haikuuona. Jedwali lililo juu linatoka kwa modeli moja iliyofunzwa kwa data hadi ${FORECAST_PERIODS.train[1]}, kwa hivyo takwimu zake zinatofautiana kidogo.`
+            : `Each month from ${monthName(TESTED_MONTHS[0], lang)} to ${monthName(TESTED_MONTHS[TESTED_MONTHS.length - 1], lang)} is forecast by models refitted on everything the station recorded before that month began, so every score comes from a month the fit had not seen. The table above comes from a single fit on data up to ${FORECAST_PERIODS.train[1]}, so its figures differ a little.`}
         </p>
       </Card>
 

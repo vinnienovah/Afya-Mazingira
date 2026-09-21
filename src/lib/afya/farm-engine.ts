@@ -13,7 +13,7 @@
 import type { SituationResult } from "./types";
 
 export type GrowthStage = "establishment" | "vegetative" | "flowering" | "maturity";
-export type IrrigationAction = "IRRIGATE_NOW" | "IRRIGATE_SOON" | "HOLD_RAIN_EXPECTED" | "NO_IRRIGATION";
+export type IrrigationAction = "IRRIGATE_NOW" | "IRRIGATE_SOON" | "HOLD_RAIN_EXPECTED" | "CHECK_SOIL" | "NO_IRRIGATION";
 export type WindowQuality = "GOOD" | "MARGINAL" | "AVOID";
 
 export interface CropProfile {
@@ -30,7 +30,10 @@ export interface CropProfile {
   planting_rain_mm: number;
 }
 
-// Crops common to Kiambu / Juja smallholder and institutional farms
+// Crops common to Kiambu / Juja smallholder and institutional farms.
+// Root depths and p for maize, beans, tomato and potato fall within FAO-56
+// Table 22 (Allen et al. 1998); the kale, coffee and napier values do not
+// come from that table.
 export const CROP_PROFILES: CropProfile[] = [
   {
     key: "maize", label_en: "Maize", label_sw: "Mahindi",
@@ -88,6 +91,11 @@ export function computeEt0(tmaxC: number, tminC: number): number {
 
 // Soil water balance
 
+export interface MmRange {
+  low: number;
+  high: number;
+}
+
 export interface WaterBalance {
   et0_mm_day: number;
   etc_mm_day: number;
@@ -100,18 +108,38 @@ export interface WaterBalance {
   balance_30d_mm: number;
   soil_moisture_pct: number;
   depletion_pct: number;
+  /** Depletion implied by the ERA5-Land soil moisture reading alone */
+  soil_depletion_pct: number;
   readily_available_mm: number;
+  /** Readily available water at the low and high clay available-water bounds */
+  readily_available_range_mm: MmRange;
 }
 
-/**
- * Total available water (mm) in the root zone.
- * Assumes a loam soil typical of the Juja/Kiambu area: ~150 mm/m available water
- * (i.e. field capacity − wilting point ≈ 0.15 m³/m³ volumetric, matching the
- * FIELD_CAPACITY/WILTING_POINT pair below).
- */
-const AVAILABLE_WATER_MM_PER_M = 150;
-const FIELD_CAPACITY_VOL = 0.30;
-const WILTING_POINT_VOL = 0.15;
+// Soil at the JKUAT site is taken as clay: SoilGrids gives about 43 % clay at
+// 0 to 5 cm. Water limits for clay from FAO-56 Table 19 (Allen et al. 1998), m³/m³.
+const CLAY_FIELD_CAPACITY = { low: 0.32, high: 0.40 };
+const CLAY_WILTING_POINT = { low: 0.20, high: 0.24 };
+const CLAY_AVAILABLE_WATER = { low: 0.12, high: 0.20 };
+
+// One depletion figure needs one soil, so it is read against the middle of
+// each range; irrigation depths are then given across the whole
+// available-water range, since the field's own holding capacity is unknown.
+const FIELD_CAPACITY_VOL = (CLAY_FIELD_CAPACITY.low + CLAY_FIELD_CAPACITY.high) / 2;
+const WILTING_POINT_VOL = (CLAY_WILTING_POINT.low + CLAY_WILTING_POINT.high) / 2;
+
+function readilyAvailableMm(availableWaterVol: number, crop: CropProfile): number {
+  return Math.round(availableWaterVol * 1000 * crop.root_depth_m * crop.depletion_fraction * 10) / 10;
+}
+
+/** Share of the root zone's available water already used (0 to 100 %), from a
+ * volumetric soil moisture reading against the clay limits above. */
+export function soilDepletionPct(soilVol: number): number {
+  const availableFraction = Math.max(
+    0,
+    Math.min(1, (soilVol - WILTING_POINT_VOL) / (FIELD_CAPACITY_VOL - WILTING_POINT_VOL)),
+  );
+  return Math.round((1 - availableFraction) * 1000) / 10;
+}
 
 export function computeWaterBalance(
   situation: SituationResult,
@@ -137,8 +165,11 @@ export function computeWaterBalance(
   const soilVol = situation.era5.era5_soil_moisture;
   const soilPct = Math.round(soilVol * 1000) / 10;
 
-  const taw = AVAILABLE_WATER_MM_PER_M * crop.root_depth_m;
-  const raw = Math.round(taw * crop.depletion_fraction * 10) / 10;
+  const raw = readilyAvailableMm(FIELD_CAPACITY_VOL - WILTING_POINT_VOL, crop);
+  const rawRange = {
+    low: readilyAvailableMm(CLAY_AVAILABLE_WATER.low, crop),
+    high: readilyAvailableMm(CLAY_AVAILABLE_WATER.high, crop),
+  };
 
   // Depletion from the rain-vs-demand accounting, for both windows.
   const deficit7 = Math.max(0, -balance7);
@@ -150,16 +181,12 @@ export function computeWaterBalance(
   // direct signal of actual root-zone water status than rainfall accounting
   // alone, since it also reflects drainage, prior irrigation and evaporation
   // that a simple rain-minus-demand tally can't see.
-  const availableFraction = Math.max(
-    0,
-    Math.min(1, (soilVol - WILTING_POINT_VOL) / (FIELD_CAPACITY_VOL - WILTING_POINT_VOL)),
-  );
-  const soilDepletionPct = Math.round((1 - availableFraction) * 1000) / 10;
+  const soilDepletion = soilDepletionPct(soilVol);
 
   // The most severe of the three signals wins, irrigation decisions should
   // never be reassured by a short calm window while soil moisture or the
   // longer trend already shows real stress.
-  const depletionPct = Math.max(depletion7Pct, depletion30Pct, soilDepletionPct);
+  const depletionPct = Math.max(depletion7Pct, depletion30Pct, soilDepletion);
 
   return {
     et0_mm_day: et0,
@@ -173,7 +200,9 @@ export function computeWaterBalance(
     balance_30d_mm: balance30,
     soil_moisture_pct: soilPct,
     depletion_pct: depletionPct,
+    soil_depletion_pct: soilDepletion,
     readily_available_mm: raw,
+    readily_available_range_mm: rawRange,
   };
 }
 
@@ -181,12 +210,32 @@ export function computeWaterBalance(
 
 export interface IrrigationAdvice {
   action: IrrigationAction;
-  /** Suggested application depth in mm (0 when no irrigation is advised) */
+  /** Lower end of depth_range_mm, for clients that read one figure (0 when no irrigation is advised) */
   depth_mm: number;
   /** Litres per m² == mm; provided for smallholder framing */
   litres_per_m2: number;
+  /** Suggested depth across the clay available-water range, to the nearest
+   * 5 mm (null when no irrigation is advised) */
+  depth_range_mm: MmRange | null;
   reason_keys: string[];
   confidence: "LOW" | "MODERATE" | "HIGH";
+}
+
+const HEAVY_DEPLETION_PCT = 70;
+const MODERATE_DEPLETION_PCT = 40;
+
+/** The inputs are a regional layer and a typical soil, so a depth finer than
+ * 5 mm would claim more precision than they carry. */
+export function roundToFiveMm(mm: number): number {
+  return Math.round(mm / 5) * 5;
+}
+
+/** A fraction of the readily available water, at both available-water bounds */
+export function irrigationDepthRange(readilyAvailable: MmRange, fraction: number): MmRange {
+  return {
+    low: roundToFiveMm(readilyAvailable.low * fraction),
+    high: roundToFiveMm(readilyAvailable.high * fraction),
+  };
 }
 
 export function computeIrrigationAdvice(
@@ -204,8 +253,24 @@ export function computeIrrigationAdvice(
       action: "HOLD_RAIN_EXPECTED",
       depth_mm: 0,
       litres_per_m2: 0,
+      depth_range_mm: null,
       reason_keys: reasons,
       confidence: situation.quality.status === "GOOD" ? "MODERATE" : "LOW",
+    };
+  }
+
+  // Rain over the last 7 days covered the crop's demand, yet the soil reading
+  // says the root zone is heavily depleted. That reading is a coarse regional
+  // model layer, not the field, so rather than size a large depth on it, ask
+  // for the soil to be checked.
+  if (wb.rain_7d_mm >= wb.demand_7d_mm && wb.soil_depletion_pct >= HEAVY_DEPLETION_PCT) {
+    return {
+      action: "CHECK_SOIL",
+      depth_mm: 0,
+      litres_per_m2: 0,
+      depth_range_mm: null,
+      reason_keys: ["farm_reason_rain_meets_demand", "farm_reason_low_soil_moisture"],
+      confidence: "LOW",
     };
   }
 
@@ -213,31 +278,33 @@ export function computeIrrigationAdvice(
   // Depth is sized off the depletion fraction itself (not just the 7-day rain
   // deficit) so it stays sensible even when soil moisture, not the recent
   // rain balance, is what's driving the decision.
-  if (wb.depletion_pct >= 70) {
-    const depth = Math.round(wb.readily_available_mm * (wb.depletion_pct / 100) * 10) / 10;
+  if (wb.depletion_pct >= HEAVY_DEPLETION_PCT) {
+    const range = irrigationDepthRange(wb.readily_available_range_mm, wb.depletion_pct / 100);
     reasons.push("farm_reason_high_depletion");
     if (wb.balance_7d_mm < 0) reasons.push("farm_reason_demand_exceeds_rain");
-    if (wb.soil_moisture_pct <= 17) reasons.push("farm_reason_low_soil_moisture");
+    if (wb.soil_depletion_pct >= HEAVY_DEPLETION_PCT) reasons.push("farm_reason_low_soil_moisture");
     if (wb.etc_mm_day > 4.5) reasons.push("farm_reason_high_et");
     return {
       action: "IRRIGATE_NOW",
-      depth_mm: depth,
-      litres_per_m2: depth,
+      depth_mm: range.low,
+      litres_per_m2: range.low,
+      depth_range_mm: range,
       reason_keys: reasons,
       confidence: situation.quality.status === "GOOD" ? "HIGH" : "MODERATE",
     };
   }
 
   // Moderate depletion → irrigate soon
-  if (wb.depletion_pct >= 40) {
-    const depth = Math.round((wb.readily_available_mm * 0.5) * 10) / 10;
+  if (wb.depletion_pct >= MODERATE_DEPLETION_PCT) {
+    const range = irrigationDepthRange(wb.readily_available_range_mm, 0.5);
     reasons.push("farm_reason_moderate_depletion");
     if (wb.rain_7d_mm < 10) reasons.push("farm_reason_low_recent_rain");
-    if (wb.soil_moisture_pct <= 17) reasons.push("farm_reason_low_soil_moisture");
+    if (wb.soil_depletion_pct >= MODERATE_DEPLETION_PCT) reasons.push("farm_reason_low_soil_moisture");
     return {
       action: "IRRIGATE_SOON",
-      depth_mm: depth,
-      litres_per_m2: depth,
+      depth_mm: range.low,
+      litres_per_m2: range.low,
+      depth_range_mm: range,
       reason_keys: reasons,
       confidence: situation.quality.status === "GOOD" ? "MODERATE" : "LOW",
     };
@@ -256,6 +323,7 @@ export function computeIrrigationAdvice(
     action: "NO_IRRIGATION",
     depth_mm: 0,
     litres_per_m2: 0,
+    depth_range_mm: null,
     reason_keys: reasons,
     confidence: situation.quality.status === "GOOD" ? "HIGH" : "MODERATE",
   };
@@ -386,7 +454,8 @@ export function evaluateCropStress(
   else reasons.push("farm_reason_no_heat_stress");
 
   if (sensitive && level !== "NONE") reasons.push("farm_reason_flowering_sensitive");
-  if (situation.era5.era5_soil_moisture < 0.15 && level !== "NONE") {
+  // Below the clay wilting point the crop cannot draw water to cool itself.
+  if (situation.era5.era5_soil_moisture < CLAY_WILTING_POINT.low && level !== "NONE") {
     reasons.push("farm_reason_dry_soil_compounds");
   }
 

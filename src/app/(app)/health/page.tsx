@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Activity, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useLanguage } from "@/lib/contexts/language";
 import { fmtAgo } from "@/lib/afya/format";
+import type { ChordsStation } from "@/lib/afya/sources";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
@@ -21,18 +22,20 @@ interface Audits {
   };
   A05_thermometers: Thermometers[];
 }
+interface Archive {
+  first: string;
+  last: string;
+  slots: number;
+  summary: { days: number; mean_score: number; days_below_80: number; rain_gauge_disagreement_days: number; empty_sensor_days: number };
+  rule_slots: Record<string, number>;
+  gust_direction_copy: { days: number; of: number; share_of_rows_pct: number };
+  audits: Audits;
+  gaps: { over_one_hour: number; longest: { from: string; to: string; hours: number } | null };
+  days: { date: string; score: number; bad: string[]; suspect: string[]; missing_minutes: number }[];
+}
 interface HealthResponse {
-  archive: {
-    first: string;
-    last: string;
-    slots: number;
-    summary: { days: number; mean_score: number; days_below_80: number; rain_gauge_disagreement_days: number; empty_sensor_days: number };
-    rule_slots: Record<string, number>;
-    gust_direction_copy: { days: number; of: number; share_of_rows_pct: number };
-    audits: Audits;
-    gaps: { over_one_hour: number; longest: { from: string; to: string; hours: number } | null };
-    days: { date: string; score: number; bad: string[]; suspect: string[]; missing_minutes: number }[];
-  };
+  // Null for any station but Conduit@Empathy1, the only one with an archive.
+  archive: Archive | null;
   live: {
     source: "live" | "csv" | "demo";
     feed: "jhub" | "chords" | null;
@@ -45,7 +48,21 @@ interface HealthResponse {
   };
 }
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+const fetcher = (url: string) =>
+  fetch(url).then((r) => {
+    if (!r.ok) throw new Error(`station health HTTP ${r.status}`);
+    return r.json();
+  });
+
+// The route's allowlist. sources.ts runs on the server only, so it is
+// repeated here; the type keeps every id and name in step with it.
+const STATIONS: readonly ChordsStation[] = [
+  { id: 61, name: "Conduit@Empathy1" },
+  { id: 10, name: "KALRO Thika" },
+  { id: 39, name: "Machakos Stoni Athi" },
+  { id: 11, name: "Embu" },
+];
+const CONDUIT_ID = STATIONS[0].id;
 
 const GROUP_NAMES: Record<string, [string, string]> = {
   temperature: ["Temperature, 3 sensors", "Joto, vipima 3"],
@@ -90,13 +107,20 @@ const signed = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(2)} °C`;
 export default function StationHealthPage() {
   const { t, lang } = useLanguage();
   const sw = lang === "sw";
-  const { data, isLoading } = useSWR<HealthResponse>("/api/station-health", fetcher, { refreshInterval: 5 * 60_000 });
+  const [instrument, setInstrument] = useState<number>(CONDUIT_ID);
+  const conduit = instrument === CONDUIT_ID;
+  const { data, error } = useSWR<HealthResponse>(
+    conduit ? "/api/station-health" : `/api/station-health?instrument=${instrument}`,
+    fetcher,
+    { refreshInterval: 5 * 60_000 },
+  );
 
   useEffect(() => {
     document.title = `${t("nav_health")} | AFYA MAZINGIRA`;
   }, [t]);
 
-  if (isLoading || !data) {
+  // Only the first load blanks the page; a station change reloads the live card alone.
+  if (conduit && !data) {
     return (
       <div className="max-w-5xl mx-auto space-y-4">
         {[0, 1, 2].map((i) => <Skeleton key={i} className="h-40 w-full rounded-xl" />)}
@@ -104,13 +128,154 @@ export default function StationHealthPage() {
     );
   }
 
-  const { archive, live } = data;
+  const live = data?.live;
+  const liveLabel = !live
+    ? ""
+    : live.source === "live"
+      ? `${live.feed === "chords" ? "CHORDS" : "Conduit API"} · ${live.age_minutes === null ? "-" : fmtAgo(live.age_minutes, lang)}`
+      : live.source === "csv" ? (sw ? "Kumbukumbu ya kituo" : "Station archive") : "DEMO";
+  // For another station the route leaves out groups it has no sensor for.
+  const unlisted = live && !conduit
+    ? Object.keys(GROUP_NAMES).filter((g) => !live.groups.some((x) => x.group === g))
+    : [];
+  const rainFlagged = !!live?.groups.some((g) => g.group === "rain" && g.status !== "good");
+
+  return (
+    <div className="max-w-5xl mx-auto space-y-5">
+      <div>
+        <h1 className="text-2xl font-bold text-afya-charcoal">{t("nav_health")}</h1>
+        <p className="text-sm text-afya-muted mt-0.5">
+          {sw
+            ? "Kila usomaji wa kituo cha Conduit hukaguliwa kabla ya kutumika. Ukurasa huu unaonyesha ukaguzi unapata nini, sasa na katika kumbukumbu yote."
+            : "Every Conduit reading is checked before the app uses it. This page shows what the checks find, now and across the whole record."}
+        </p>
+      </div>
+
+      <Card>
+        <CardTitle>{sw ? "Ukaguzi unabadilisha nini" : "What the checks change"}</CardTitle>
+        <ul className="mt-2 space-y-2 text-sm text-afya-charcoal list-disc pl-5">
+          <li>
+            {sw
+              ? "WBGT ya programu dhibiti inashindwa ukaguzi A03, kwa hiyo programu hukokotoa WBGT kutoka balbu nyevu na joto la hewa badala yake."
+              : "The firmware WBGT fails audit A03, so the app computes WBGT from the wet bulb and air temperature instead."}
+          </li>
+          <li>
+            {sw
+              ? "Usomaji uliojazwa kwenye mapengo huwekwa alama. Ubora wa data hushuka vipimo muhimu vinapokosekana, na ushauri husimama baada ya saa 3 bila data."
+              : "Readings filled in across gaps are marked. Data quality drops when a critical sensor is missing, and advice stops after three hours without data."}
+          </li>
+          <li>
+            {sw
+              ? "Kwa kuwa kipima mvua 2 hakiaminiki, mvua ikipimwa na kipima chochote huhesabiwa, na jumla za mvua hutoka ERA5-Land."
+              : "Because rain gauge 2 cannot be trusted, rain from either gauge counts as rain, and rainfall totals come from ERA5-Land."}
+          </li>
+        </ul>
+      </Card>
+
+      <div>
+        <label htmlFor="health-station" className="text-xs font-semibold text-afya-charcoal block mb-1.5">
+          {sw ? "Kituo" : "Station"}
+        </label>
+        <select
+          id="health-station"
+          value={instrument}
+          onChange={(e) => setInstrument(Number(e.target.value))}
+          className="w-full sm:w-72 rounded-xl border border-afya-border bg-white px-3 py-2.5 text-sm text-afya-charcoal focus:outline-none focus:ring-2 focus:ring-afya-green"
+        >
+          {STATIONS.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
+        <p className="mt-1.5 text-xs text-afya-muted">
+          {sw
+            ? "Ukaguzi uleule huendeshwa bila mabadiliko kwenye kituo chochote cha 3D-PAWS kilicho kwenye tovuti ya CHORDS."
+            : "The same checks run unchanged on any 3D-PAWS station on the CHORDS portal."}
+        </p>
+      </div>
+
+      {live ? (
+        <Card>
+          <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+            <CardTitle className="mb-0">{sw ? "Saa 24 zilizopita" : "The last 24 hours"}</CardTitle>
+            <span className="text-xs text-afya-muted">{liveLabel}</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {live.groups.map((g) => (
+              <div key={g.group} className="rounded-xl border border-afya-border px-4 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-afya-charcoal">{GROUP_NAMES[g.group]?.[sw ? 1 : 0] ?? g.group}</span>
+                  <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-bold", STATUS_STYLE[g.status])}>
+                    {STATUS_NAME[g.status][sw ? 1 : 0]}
+                  </span>
+                </div>
+                <div className="text-xs text-afya-muted mt-1">
+                  {sw ? "Imepimwa" : "Measured"}: {Math.round(g.measured_share * 100)} %
+                  {g.rules.length ? ` · ${g.rules.join(", ")}` : ""}
+                </div>
+              </div>
+            ))}
+          </div>
+          {conduit && live.feed === "chords" && (
+            <p className="mt-3 text-xs text-afya-muted">
+              {sw
+                ? "Mtiririko wa moja kwa moja wa CHORDS haubebi vipimo vya mvua, kwa hiyo vipima mvua vinaonekana kimya hapa. Kumbukumbu hapa chini inaonyesha jinsi vinavyofanya kazi."
+                : "The CHORDS live feed carries no rain readings, so the rain gauges look silent here. The record below shows how they actually behave."}
+            </p>
+          )}
+          {!conduit && rainFlagged && (
+            <p className="mt-3 text-xs text-afya-muted">
+              {sw
+                ? "Mtiririko wa moja kwa moja wa CHORDS hubeba usomaji mchache wa mvua, hivyo vipima mvua vinaweza kuonekana kimya hapa."
+                : "The CHORDS live feed carries few rain readings, so the rain gauges can look silent here."}
+            </p>
+          )}
+          {unlisted.length > 0 && (
+            <p className="mt-3 text-xs text-afya-muted">
+              {sw
+                ? `Tovuti haionyeshi kipima cha aina hiyo kwa kituo hiki, hivyo hakikaguliwi: ${unlisted.map((g) => GROUP_NAMES[g][1]).join(", ")}.`
+                : `The portal lists no such sensor for this station, so it is not checked: ${unlisted.map((g) => GROUP_NAMES[g][0]).join(", ")}.`}
+            </p>
+          )}
+          {live.firmware_below_wet_bulb_now && (
+            <p className="mt-3 text-xs text-afya-muted flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5 text-afya-gold" strokeWidth={2} aria-hidden="true" />
+              {sw
+                ? "Hivi sasa WBGT ya programu dhibiti iko chini ya balbu nyevu."
+                : "Right now the firmware WBGT is below the wet bulb."}
+            </p>
+          )}
+        </Card>
+      ) : error ? (
+        <Card>
+          <p className="text-sm text-afya-muted">
+            {sw
+              ? "Tovuti ya CHORDS haikurudisha data ya kituo hiki sasa hivi. Jaribu tena baadaye."
+              : "The CHORDS portal did not return this station's data just now. Try again later."}
+          </p>
+        </Card>
+      ) : (
+        <Skeleton className="h-40 w-full rounded-xl" />
+      )}
+
+      {conduit ? (
+        data?.archive && <ArchiveRecord archive={data.archive} sw={sw} />
+      ) : (
+        <Card>
+          <p className="text-sm text-afya-muted">
+            {sw
+              ? "Alama za kila siku tangu Juni 2025, ukaguzi, matokeo na kanuni zinatoka kwenye kumbukumbu ya Conduit@Empathy1, hivyo zinaonyeshwa kwa kituo hicho tu."
+              : "The daily scores since June 2025, the audits, the findings and the rules come from the Conduit@Empathy1 archive, so they show for that station only."}
+          </p>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
   const a03 = archive.audits.A03_firmware_wbgt_vs_wet_bulb;
   const a01 = archive.audits.A01_wet_bulb_vs_stull;
   const shtBmx = archive.audits.A05_thermometers.find((p) => p.pair === "temp_sht - temp_bmx");
-  const liveLabel = live.source === "live"
-    ? `${live.feed === "chords" ? "CHORDS" : "Conduit API"} · ${live.age_minutes === null ? "-" : fmtAgo(live.age_minutes, lang)}`
-    : live.source === "csv" ? (sw ? "Kumbukumbu ya kituo" : "Station archive") : "DEMO";
 
   const dayUnit = sw ? "siku" : "days";
   const ruleCount = (id: string) => {
@@ -146,75 +311,7 @@ export default function StationHealthPage() {
   ];
 
   return (
-    <div className="max-w-5xl mx-auto space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold text-afya-charcoal">{t("nav_health")}</h1>
-        <p className="text-sm text-afya-muted mt-0.5">
-          {sw
-            ? "Kila usomaji wa kituo cha Conduit hukaguliwa kabla ya kutumika. Ukurasa huu unaonyesha ukaguzi unapata nini, sasa na katika kumbukumbu yote."
-            : "Every Conduit reading is checked before the app uses it. This page shows what the checks find, now and across the whole record."}
-        </p>
-      </div>
-
-      <Card>
-        <CardTitle>{sw ? "Ukaguzi unabadilisha nini" : "What the checks change"}</CardTitle>
-        <ul className="mt-2 space-y-2 text-sm text-afya-charcoal list-disc pl-5">
-          <li>
-            {sw
-              ? "WBGT ya programu dhibiti inashindwa ukaguzi A03, kwa hiyo programu hukokotoa WBGT kutoka balbu nyevu na joto la hewa badala yake."
-              : "The firmware WBGT fails audit A03, so the app computes WBGT from the wet bulb and air temperature instead."}
-          </li>
-          <li>
-            {sw
-              ? "Usomaji uliojazwa kwenye mapengo huwekwa alama. Ubora wa data hushuka vipimo muhimu vinapokosekana, na ushauri husimama baada ya saa 3 bila data."
-              : "Readings filled in across gaps are marked. Data quality drops when a critical sensor is missing, and advice stops after three hours without data."}
-          </li>
-          <li>
-            {sw
-              ? "Kwa kuwa kipima mvua 2 hakiaminiki, mvua ikipimwa na kipima chochote huhesabiwa, na jumla za mvua hutoka ERA5-Land."
-              : "Because rain gauge 2 cannot be trusted, rain from either gauge counts as rain, and rainfall totals come from ERA5-Land."}
-          </li>
-        </ul>
-      </Card>
-
-      <Card>
-        <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
-          <CardTitle className="mb-0">{sw ? "Saa 24 zilizopita" : "The last 24 hours"}</CardTitle>
-          <span className="text-xs text-afya-muted">{liveLabel}</span>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {live.groups.map((g) => (
-            <div key={g.group} className="rounded-xl border border-afya-border px-4 py-3">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-semibold text-afya-charcoal">{GROUP_NAMES[g.group]?.[sw ? 1 : 0] ?? g.group}</span>
-                <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-bold", STATUS_STYLE[g.status])}>
-                  {STATUS_NAME[g.status][sw ? 1 : 0]}
-                </span>
-              </div>
-              <div className="text-xs text-afya-muted mt-1">
-                {sw ? "Imepimwa" : "Measured"}: {Math.round(g.measured_share * 100)} %
-                {g.rules.length ? ` · ${g.rules.join(", ")}` : ""}
-              </div>
-            </div>
-          ))}
-        </div>
-        {live.feed === "chords" && (
-          <p className="mt-3 text-xs text-afya-muted">
-            {sw
-              ? "Mtiririko wa moja kwa moja wa CHORDS haubebi vipimo vya mvua, kwa hiyo vipima mvua vinaonekana kimya hapa. Kumbukumbu hapa chini inaonyesha jinsi vinavyofanya kazi."
-              : "The CHORDS live feed carries no rain readings, so the rain gauges look silent here. The record below shows how they actually behave."}
-          </p>
-        )}
-        {live.firmware_below_wet_bulb_now && (
-          <p className="mt-3 text-xs text-afya-muted flex items-center gap-1.5">
-            <AlertTriangle className="w-3.5 h-3.5 text-afya-gold" strokeWidth={2} aria-hidden="true" />
-            {sw
-              ? "Hivi sasa WBGT ya programu dhibiti iko chini ya balbu nyevu."
-              : "Right now the firmware WBGT is below the wet bulb."}
-          </p>
-        )}
-      </Card>
-
+    <>
       <Card>
         <CardTitle>{sw ? "Kila siku tangu Juni 2025" : "Every day since June 2025"}</CardTitle>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-2 mb-4">
@@ -317,7 +414,7 @@ export default function StationHealthPage() {
             : "Last column: 15-minute slots each rule touched across the record, or days for R11 to R13."}
         </p>
       </Card>
-    </div>
+    </>
   );
 }
 

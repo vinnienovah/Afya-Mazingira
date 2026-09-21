@@ -4,6 +4,8 @@ Heat and weather decisions for the JKUAT campus in Juja, Kenya, built on the Con
 
 Live at **[afya-mazingira.vercel.app](https://afya-mazingira.vercel.app)**. Built for Hack The Weather 2026 (JHUB Africa).
 
+**In one example.** A site supervisor in Juja is planning tomorrow's concrete pour. The station's own record shows how much the season matters: from January to March 2026 about half of all working hours were in the HIGH heat band for outdoor work, against about 3 % in July and August 2025. Afya Mazingira reads the station every 15 minutes, forecasts WBGT for the next nine hours, and tells the supervisor which daylight hours carry the least heat risk for construction, in English or Kiswahili.
+
 ---
 
 ## 1. Project name
@@ -56,7 +58,7 @@ The station (Conduit@Empathy1, JKUAT, lat -1.0997, lon 37.0145, 1,523 m) is the 
 - the gust-direction column is a copy of the gust speed on every day;
 - the firmware wet bulb agrees with Stull (2011) to 0.032 °C, so the app uses it.
 
-These go on the page as findings to report to JHUB.
+These go on the page as findings to report to JHUB. The same checks also run live, unchanged, on other 3D-PAWS stations on the CHORDS portal: the page's station selector adds KALRO Thika, Machakos Stoni Athi and Embu, the nearby stations that were reporting on 21 September 2026.
 
 **WBGT from the station's own sensors.** The station's firmware WBGT column reads **below the wet bulb in 63.6 % of the archive**, which a real WBGT cannot do. We do not use it. WBGT here is the ISO 7243 form without solar load, 0.7 x wet bulb + 0.3 x air temperature, from the station's wet bulb (which agrees with Stull (2011) to 0.03 °C) and its air temperature. When the firmware value falls below the wet bulb, the Why? page says so.
 
@@ -76,11 +78,20 @@ The "next state" shown on the page is the one that most often followed in the ar
 | Lead time | Mean error | Assuming no change | 80 % band | Inside the band | Same risk band | Band too low |
 |---|---|---|---|---|---|---|
 | +1 h | 0.45 °C | 0.64 °C | ±0.74 °C | 81 % | 91.8 % | 4.3 % |
-| +3 h | 0.79 °C | 1.64 °C | ±1.21 °C | 79 % | 86.2 % | 5.7 % |
+| +3 h | 0.79 °C | 1.64 °C | ±1.20 °C | 79 % | 86.2 % | 5.7 % |
 | +6 h | 0.90 °C | 2.85 °C | ±1.31 °C | 76 % | 84.9 % | 7.5 % |
-| +9 h | 0.98 °C | 3.56 °C | ±1.54 °C | 79 % | 85.2 % | 8.3 % |
+| +9 h | 0.98 °C | 3.56 °C | ±1.55 °C | 79 % | 85.2 % | 8.3 % |
 
 The last two columns score what people act on: how often the forecast puts the hour in the same risk band as the station then measured, and how often in a lower one, the error that could leave someone unprepared.
+
+**Tested month by month.** Those scores come from one cool season, so `npm run evaluate` also refits the forecast on everything before each month from October 2025 to September 2026 and scores that month alone:
+
+| Season | +1 h | +3 h | +9 h | Assuming no change, +3 h | Same risk band, +3 h | Band too low, +3 h |
+|---|---|---|---|---|---|---|
+| Hot, January to March 2026 | 0.58 °C | 1.01 °C | 1.12 °C | 1.91 °C | 76.9 % | 17.1 % |
+| All other months | 0.49 °C | 0.84 °C | 1.05 °C | 1.61 °C | 81.3 % | 7.8 % |
+
+The forecast beats "no change" in every month at every horizon. In the hot season it is less accurate, and it puts the hour in too low a band about twice as often, running about 0.3 °C low in February and March. That is where the next round of work goes (see Known limitations).
 
 `npm run fit` refits both models from the archive through the same cleaning and feature code the app runs.
 
@@ -164,7 +175,7 @@ Open the app and start at **Situation**. Choose an activity to see its risk and 
 | Command | What it does |
 |---|---|
 | `npm run dev` | Development server on http://localhost:3000 |
-| `npm test` | 32 tests, no network |
+| `npm test` | 48 tests, no network |
 | `npm run typecheck` / `npm run lint` | Type check and lint |
 | `npm run fit` | Refit the forecast and states from the archive |
 | `npm run station-report` | Rerun the station health checks over the archive |
@@ -180,7 +191,7 @@ Main API routes (JSON):
 | `POST /api/farm` | Advisory for `{crop, stage}` |
 | `POST /api/replay` | Hour-by-hour replay of a past day `{date}` |
 | `GET /api/map` | County indicators and satellite acquisitions |
-| `GET /api/station-health` | The archive health report and the same checks on the last 24 hours |
+| `GET /api/station-health` | The archive health report and the same checks on the last 24 hours; `?instrument=10` runs them on another CHORDS station |
 | `GET /api/climate-history` | Any date range, daily or hourly, station or ERA5-Land |
 
 ## 10. Data sources
@@ -229,8 +240,9 @@ Between them the team covers the environmental science behind the heat and farm 
 ## 14. Future development
 
 - **Add the sun to WBGT.** Calibrate the station's light sensor to irradiance so direct-sun WBGT can be computed, not only shade WBGT.
-- **More stations.** The CHORDS portal lists 75 3D-PAWS instruments in Kenya. The live feed address is a setting, and `npm run fit` refits from any station's archive in the same format.
+- **More stations.** The station health checks already run on any 3D-PAWS station on the CHORDS portal (75 instruments in Kenya); the forecast needs each station's archive to refit with `npm run fit`.
 - **Refit monthly** as the archive grows, and publish the scores each time.
+- **Reach people without a smartphone.** Send the daily best window and heat alerts by SMS and WhatsApp. The first partner to approach is the Kiambu county agricultural extension service, which already advises farmers around Juja.
 - **CHIRPS rainfall** by point extraction from its gridded files, in place of ERA5-Land.
 - **Partners:** JHUB Africa for station access, Kiambu county agriculture officers for the farm advisory, and the JKUAT sports and estates departments as first users.
 
@@ -244,7 +256,7 @@ MIT. See [LICENSE](LICENSE). Station and reanalysis data remain under their prov
 
 - **WBGT is shade WBGT.** It leaves out direct sun because the station's light sensor is not calibrated to irradiance. In full midday sun WBGT is several degrees higher, so the bands understate risk for work in the open.
 - **The risk bands are our own.** 18, 21 and 24 °C WBGT and the activity adjustments are screening bands chosen by the project, not a published occupational or medical limit.
-- **The forecast is tested on the cool season.** The test months are June to September 2026. The fit includes the January to March hot season, but hot-season skill is not scored separately.
+- **The forecast under-warns more in the hot season.** Tested month by month, it put the hour in too low a risk band 17.1 % of the time from January to March 2026, against 7.8 % in other months. Treat hot-season forecasts near a band boundary as the higher band.
 - **Rain probability is a rule of thumb** (falling pressure and high humidity raise it), not fitted: the station's rain gauges are too sparse to fit it on.
 - **Rainfall context is ERA5-Land,** not CHIRPS.
 - **When ERA5-Land or the satellite catalogue cannot be reached** (and in historical replay, which does not fetch past context), their panels show "-" instead of numbers and data quality carries a `regional_context_unavailable` flag. No stand-in values are shown as data.
