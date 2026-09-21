@@ -649,7 +649,7 @@ export default function Landing() {
                 {lang === "sw" ? "Kuhusu" : "About"}
               </Link>
               <Link href="/intelligence" className="text-white/50 transition-colors hover:text-white">
-                {lang === "sw" ? "Ujasusi" : "Intelligence"}
+                {lang === "sw" ? "Kwa Nini?" : "Why?"}
               </Link>
               <Link href="/sign-in" className="text-white/50 transition-colors hover:text-white">
                 {lang === "sw" ? "Ingia" : "Sign in"}

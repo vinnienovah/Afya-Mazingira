@@ -101,6 +101,14 @@ export default function SituationPage() {
         aria-label={t("current_state")}
       >
         <div className="p-6 sm:p-8 text-white">
+          {/* Ground + Regional Intelligence tier — JKUAT/Juja is the flagship
+              ground-intelligence site (real Conduit station), distinct from
+              the regional-only intelligence available elsewhere (see /map). */}
+          <div className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-afya-gold/40 bg-afya-gold/10 px-2.5 py-1 text-[10px] font-bold tracking-wide text-afya-gold">
+            <span className="w-1.5 h-1.5 rounded-full bg-afya-gold" aria-hidden="true" />
+            {t("ground_regional_intelligence")}
+          </div>
+
           {/* State chip + quality */}
           <div className="flex flex-wrap items-center gap-3 mb-5">
             <StateChip stateId={state.state_id} size="md" />
