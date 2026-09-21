@@ -13,18 +13,16 @@ import path from "path";
 import { getCsvCoverage, getCsvRange } from "../src/lib/afya/csv-source";
 import {
   buildFeatureSeries,
-  FEATURE_SOURCE_FIELDS,
   FORECAST_FEATURES,
   STATE_FEATURES,
   type FeatureVector,
 } from "../src/lib/afya/feature-engine";
-import type { DemoObservation } from "../src/lib/afya/demo-observations";
 import { riskRank, wbgtToRisk } from "../src/lib/afya/constants";
+import { featureScale, fitRidge, forecastOrigins, mean, round, usableOrigins } from "./ridge";
 
 const CALIBRATION_FROM = "2026-04-01T00:00:00Z";
 const TEST_FROM = "2026-06-01T00:00:00Z";
 const STEPS = 36; // 15-minute steps out to nine hours
-const RIDGE_LAMBDA = 1.0;
 const STATE_COUNT = 4;
 const OUT_DIR = path.join(process.cwd(), "src", "lib", "afya", "model");
 
@@ -36,47 +34,12 @@ function periodOf(ts: string): Period {
   return "test";
 }
 
-function measured(o: DemoObservation, fields: readonly string[]): boolean {
-  return !fields.some((f) => o.imputed?.includes(f));
-}
-
-function round(v: number, digits = 4): number {
-  const f = 10 ** digits;
-  return Math.round(v * f) / f;
-}
-
 function quantile(values: number[], q: number): number {
   const sorted = [...values].sort((a, b) => a - b);
   const pos = (sorted.length - 1) * q;
   const lo = Math.floor(pos);
   const hi = Math.ceil(pos);
   return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
-}
-
-function mean(values: number[]): number {
-  return values.reduce((a, b) => a + b, 0) / values.length;
-}
-
-/** Solve A x = b by Gaussian elimination with partial pivoting. */
-function solve(a: number[][], b: number[]): number[] {
-  const n = b.length;
-  const m = a.map((row, i) => [...row, b[i]]);
-  for (let col = 0; col < n; col++) {
-    let pivot = col;
-    for (let r = col + 1; r < n; r++) if (Math.abs(m[r][col]) > Math.abs(m[pivot][col])) pivot = r;
-    [m[col], m[pivot]] = [m[pivot], m[col]];
-    for (let r = col + 1; r < n; r++) {
-      const f = m[r][col] / m[col][col];
-      for (let c = col; c <= n; c++) m[r][c] -= f * m[col][c];
-    }
-  }
-  const x = new Array(n).fill(0);
-  for (let r = n - 1; r >= 0; r--) {
-    let sum = m[r][n];
-    for (let c = r + 1; c < n; c++) sum -= m[r][c] * x[c];
-    x[r] = sum / m[r][r];
-  }
-  return x;
 }
 
 /** Deterministic pseudo-random numbers, so a refit gives the same clusters. */
@@ -129,20 +92,12 @@ function main() {
   const features = buildFeatureSeries(series);
   console.log(`archive ${coverage.minIso} to ${coverage.maxIso}, ${series.length} slots`);
 
-  // An origin is usable when its features come from an hour of measured data.
-  const usable = series.map((_, i) =>
-    !!features[i] && i >= 4 && series.slice(i - 4, i + 1).every((o) => measured(o, FEATURE_SOURCE_FIELDS)),
-  );
+  const usable = usableOrigins(series, features);
   const row = (fv: FeatureVector, names: (keyof FeatureVector)[]) => names.map((n) => fv[n]);
 
   // Feature scaling from the training months only.
   const trainIdx = series.map((o, i) => i).filter((i) => usable[i] && periodOf(series[i].ts) === "train");
-  const scale = (names: (keyof FeatureVector)[]) => {
-    const cols = names.map((n) => trainIdx.map((i) => features[i]![n]));
-    const mu = cols.map(mean);
-    const sd = cols.map((c, j) => Math.sqrt(mean(c.map((v) => (v - mu[j]) ** 2))) || 1);
-    return { mu, sd };
-  };
+  const scale = (names: (keyof FeatureVector)[]) => featureScale(features, trainIdx, names);
   const fScale = scale(FORECAST_FEATURES);
   const z = (fv: FeatureVector) =>
     row(fv, FORECAST_FEATURES).map((v, j) => (v - fScale.mu[j]) / fScale.sd[j]);
@@ -152,34 +107,15 @@ function main() {
     const samples: Record<Period, { x: number[]; y: number; now: number }[]> = {
       train: [], calibration: [], test: [],
     };
-    for (let i = 0; i + step < series.length; i++) {
-      if (!usable[i]) continue;
-      const target = series[i + step];
-      if (!measured(target, ["temp_sht", "wet_bulb_temp"])) continue;
+    for (const i of forecastOrigins(series, usable, step)) {
       samples[periodOf(series[i].ts)].push({
         x: z(features[i]!),
-        y: target.wet_bulb_globe_temp,
+        y: series[i + step].wet_bulb_globe_temp,
         now: series[i].wet_bulb_globe_temp,
       });
     }
 
-    const p = FORECAST_FEATURES.length;
-    const yMean = mean(samples.train.map((s) => s.y));
-    const xtx = Array.from({ length: p }, () => new Array(p).fill(0));
-    const xty = new Array(p).fill(0);
-    for (const s of samples.train) {
-      const r = s.y - yMean;
-      for (let a = 0; a < p; a++) {
-        xty[a] += s.x[a] * r;
-        for (let b = a; b < p; b++) xtx[a][b] += s.x[a] * s.x[b];
-      }
-    }
-    for (let a = 0; a < p; a++) {
-      for (let b = 0; b < a; b++) xtx[a][b] = xtx[b][a];
-      xtx[a][a] += RIDGE_LAMBDA;
-    }
-    const coef = solve(xtx, xty);
-    const predict = (x: number[]) => yMean + x.reduce((sum, v, j) => sum + v * coef[j], 0);
+    const { intercept: yMean, coef, predict } = fitRidge(samples.train);
 
     const calErrors = samples.calibration.map((s) => Math.abs(s.y - predict(s.x)));
     const band80 = quantile(calErrors, 0.8);
