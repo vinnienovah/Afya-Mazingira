@@ -114,7 +114,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
 
     // Forecast page
     forecast_title: "Environmental Forecast",
-    forecast_subtitle: "WBGT-like exposure · +1h / +3h / +6h horizons",
+    forecast_subtitle: "WBGT-like exposure · +1h / +3h / +6h / +9h horizons",
     measured: "Measured",
     predicted: "Predicted",
     uncertainty: "Uncertainty",
@@ -131,6 +131,10 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     technical_measurements: "Technical Measurements",
     contributor_title: "Top Model Contributors",
     contributor_note: "These are model contributors and environmental signals — not causes.",
+    uncertainty_by_horizon: "Uncertainty by Horizon",
+    uncertainty_by_horizon_note: "How the forecast's confidence band widens the further ahead it looks — a shorter bar means a tighter, more confident range.",
+    explore_climate_history: "Explore Climate History",
+    explore_climate_history_note: "Pick any date range up to a year back, daily or hourly, and compare against ERA5-Land for any location.",
 
     // Intelligence / Why page
     intelligence_title: "Why?",
@@ -616,7 +620,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     reason_early_morning: "Hali za asubuhi ni nzuri",
 
     forecast_title: "Utabiri wa Mazingira",
-    forecast_subtitle: "Utabiri wa WBGT · +1h / +3h / +6h",
+    forecast_subtitle: "Utabiri wa WBGT · +1h / +3h / +6h / +9h",
     measured: "Ilipimwa",
     predicted: "Ilitabiriwa",
     uncertainty: "Utata",
@@ -633,6 +637,10 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     technical_measurements: "Vipimo vya Kiufundi",
     contributor_title: "Vichangiaji Vikuu vya Mfumo",
     contributor_note: "Hivi ni vichangiaji vya mfumo na ishara za mazingira — si sababu.",
+    uncertainty_by_horizon: "Utata kwa Kipindi",
+    uncertainty_by_horizon_note: "Jinsi kipimo cha uhakika wa utabiri kinavyopanuka kadri kinavyoangalia mbali zaidi — mstari mfupi unamaanisha uhakika zaidi.",
+    explore_climate_history: "Chunguza Historia ya Hali ya Hewa",
+    explore_climate_history_note: "Chagua kipindi chochote hadi mwaka mmoja uliopita, kila siku au kila saa, na linganisha na ERA5-Land kwa eneo lolote.",
 
     intelligence_title: "Kwa Nini?",
     intelligence_subtitle: "Maelezo ya uwazi na ya kisayansi ya mapendekezo ya AFYA MAZINGIRA",

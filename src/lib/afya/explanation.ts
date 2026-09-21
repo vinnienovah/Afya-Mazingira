@@ -278,7 +278,13 @@ const LLM_SYSTEM_PROMPT_SW = `Wewe ni safu ya mawasiliano ya AFYA MAZINGIRA. Kaz
 
 const PLAIN_PROMPT_TEMPLATE = (factsJson: string, userQuestion: string | null, lang: Lang) =>
   `Validated AFYA MAZINGIRA facts (for your reference only — do not repeat the field names):\n${factsJson}\n\n` +
-  (userQuestion ? `The person asked: ${userQuestion}\n\n` : "") +
+  (userQuestion
+    ? `The person asked: "${userQuestion}"\n\n` +
+      `Answer THAT specific question first and directly. Pull in only the facts that are actually relevant to it — ` +
+      `do not recite every field in the JSON if they weren't asked about it. ` +
+      `If the question asks about a change (e.g. "what changed since morning"), compare the relevant before/after facts you were given rather than just restating the current state. ` +
+      `If the facts genuinely don't contain what's needed to answer, say so briefly instead of padding with unrelated facts.\n\n`
+    : `Give a brief overview of the current situation.\n\n`) +
   `Explain this ${lang === "sw" ? "in simple Kiswahili" : "in simple English"} for someone with no technical background. ` +
   `Maximum 90 words. Short everyday sentences. No technical terms and no field names. ` +
   `If you mention a clock time, copy it exactly as supplied. ` +
@@ -287,12 +293,18 @@ const PLAIN_PROMPT_TEMPLATE = (factsJson: string, userQuestion: string | null, l
 
 const STRUCTURED_PROMPT_TEMPLATE = (factsJson: string, userQuestion: string | null, lang: Lang) =>
   `Structured AFYA MAZINGIRA validated facts:\n${factsJson}\n\n` +
-  (userQuestion ? `User question: ${userQuestion}\n\n` : "") +
+  (userQuestion
+    ? `User question: "${userQuestion}"\n\n` +
+      `Answer THAT specific question first and directly, in your own words. Select only the facts relevant to what was asked — ` +
+      `do not dump every field in the JSON regardless of relevance; that produces a repetitive, unhelpful answer. ` +
+      `If the question is about change over time (e.g. "what changed", "what's different now"), reason about the trend/trajectory facts you were given (current vs. forecast horizons, transition likelihood) rather than just listing the current snapshot again. ` +
+      `If the supplied facts don't actually contain an answer to the question, say so briefly rather than substituting an unrelated fact dump.\n\n`
+    : `Give a concise overview of the current situation.\n\n`) +
   `Respond ${lang === "sw" ? "in Kiswahili" : "in English"}. Be concise (max 150 words). ` +
   `Reference only the supplied facts. Do not invent numbers. ` +
   `When using a numeric fact, copy it exactly with the supplied decimal precision; never round, derive, or convert it. ` +
   `If you cannot copy a number exactly, omit that number and explain the qualitative signal instead. ` +
-  `Use plain language. If a best window exists, mention best_window_time_range exactly. ` +
+  `Use plain language. Only mention best_window_time_range if the question is about timing/best-time or no question was asked. ` +
   `Do not add disclaimers about being an AI.`;
 
 export type ExplanationProvider = "gemini" | "groq" | "openai" | "anthropic" | "deterministic";

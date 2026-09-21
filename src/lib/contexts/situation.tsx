@@ -19,6 +19,8 @@ export function useSituation() {
 export function useForecast() {
   const { data, error, isLoading } = useSWR<{
     generated_at: string;
+    data_source: string;
+    demo_mode: boolean;
     forecast: import("@/lib/afya/types").HorizonForecast[];
     forecast_series: import("@/lib/afya/types").ForecastPoint[];
     expected_peak: { time: string; wbgt_c: number } | null;
