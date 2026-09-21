@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useLanguage } from "@/lib/contexts/language";
 import { STATES } from "@/lib/afya/constants";
 import { fmtTime, fmtWindow } from "@/lib/afya/format";
@@ -19,7 +20,21 @@ import {
 
 const DEFAULT_DATE = "2026-09-01";
 
+// Historical Replay now lives as a tab on the consolidated Dashboard
+// (/climate) rather than its own page — this redirects any existing link
+// or bookmark straight there instead of leaving a dangling duplicate page.
 export default function ReplayPage() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace("/climate?tab=replay");
+  }, [router]);
+  return null;
+}
+
+// Exported as a plain component (not just a page default export) so the
+// Dashboard's "Replay" tab can render it inline — merging Historical Replay
+// into the consolidated Dashboard without duplicating this logic.
+export function ReplayContent() {
   const { t, lang } = useLanguage();
   const [date, setDate] = useState(DEFAULT_DATE);
   const [steps, setSteps] = useState<ReplayStep[]>([]);

@@ -24,6 +24,7 @@ export async function GET() {
       temp_c: Math.round(o.temp_sht * 10) / 10,
       humidity_pct: Math.round(o.humidity_sht * 10) / 10,
       wind_ms: Math.round(o.wind_spd * 10) / 10,
+      wind_gust_ms: Math.round(o.wind_gust * 10) / 10,
       pressure_hpa: Math.round(o.press_bmx * 10) / 10,
       wbgt_c: Math.round(o.wet_bulb_globe_temp * 10) / 10,
       rain_mm: Math.round((o.rg1 + o.rg2) * 10) / 10,

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import {
   ResponsiveContainer, LineChart, Line, AreaChart, Area, BarChart, Bar,
@@ -12,6 +13,9 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { CLIMATE_LOCATIONS } from "@/lib/afya/constants";
 import { fmtDate, fmtTimeShort } from "@/lib/afya/format";
 import { cn } from "@/lib/utils";
+import ClimateVariablesPanel from "@/components/charts/ClimateVariablesPanel";
+import { ReplayContent } from "@/app/(app)/replay/page";
+import { Radio, LineChart as LineChartIcon, History as HistoryIcon } from "lucide-react";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -77,7 +81,72 @@ function MiniChart({ title, children }: { title: string; children: React.ReactEl
   );
 }
 
-export default function ClimateHistoryPage() {
+type DashboardTab = "live" | "history" | "replay";
+
+// Consolidated Dashboard: live climate variables, the date-range Climate
+// History explorer, and Historical Replay — previously three separate
+// destinations (a section on the Intelligence page, this page, and
+// /replay) — now one page with tabs, so there's a single place to look at
+// "everything about the climate data" instead of three.
+export default function DashboardPage() {
+  const { t } = useLanguage();
+  const router = useRouter();
+  const [tab, setTab] = useState<DashboardTab>("live");
+
+  useEffect(() => {
+    document.title = `${t("nav_climate")} | AFYA MAZINGIRA`;
+    const requested = new URLSearchParams(window.location.search).get("tab");
+    if (requested === "history" || requested === "replay" || requested === "live") {
+      setTab(requested);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function selectTab(next: DashboardTab) {
+    setTab(next);
+    router.replace(next === "live" ? "/climate" : `/climate?tab=${next}`, { scroll: false });
+  }
+
+  const TABS: { key: DashboardTab; label: string; icon: typeof Radio }[] = [
+    { key: "live", label: t("dashboard_tab_live"), icon: Radio },
+    { key: "history", label: t("dashboard_tab_history"), icon: LineChartIcon },
+    { key: "replay", label: t("dashboard_tab_replay"), icon: HistoryIcon },
+  ];
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-afya-charcoal">{t("nav_climate")}</h1>
+        <p className="text-sm text-afya-muted mt-0.5">{t("dashboard_sub")}</p>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex rounded-xl border border-afya-border overflow-hidden w-fit">
+        {TABS.map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            onClick={() => selectTab(key)}
+            aria-pressed={tab === key}
+            className={cn(
+              "flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold transition-colors",
+              tab === key ? "bg-afya-green text-white" : "bg-white text-afya-muted hover:bg-afya-canvas",
+            )}
+          >
+            <Icon className="w-4 h-4" strokeWidth={1.8} aria-hidden="true" />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "live" && <ClimateVariablesPanel />}
+      {tab === "history" && <ClimateHistoryTab />}
+      {tab === "replay" && <ReplayContent />}
+    </div>
+  );
+}
+
+function ClimateHistoryTab() {
   const { t, lang } = useLanguage();
   const today = useMemo(() => new Date(), []);
 
@@ -103,14 +172,6 @@ export default function ClimateHistoryPage() {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-afya-charcoal">{t("climate_history_title")}</h1>
-          <p className="text-sm text-afya-muted mt-0.5">{t("climate_history_sub")}</p>
-        </div>
-      </div>
-
       {/* Controls */}
       <Card>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">

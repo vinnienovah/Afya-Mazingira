@@ -9,6 +9,7 @@ import { useLanguage } from "@/lib/contexts/language";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { fmtTimeShort, fmtDate } from "@/lib/afya/format";
+import RadialGauge from "./RadialGauge";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -17,6 +18,7 @@ interface ConduitPoint {
   temp_c: number;
   humidity_pct: number;
   wind_ms: number;
+  wind_gust_ms: number;
   pressure_hpa: number;
   wbgt_c: number;
   rain_mm: number;
@@ -97,6 +99,14 @@ export default function ClimateVariablesPanel() {
     data.conduit_source === "live" ? "LIVE · CONDUIT"
       : data.conduit_source === "csv" ? "CONDUIT ARCHIVE"
         : "DEMO";
+
+  const latest = data.conduit[data.conduit.length - 1];
+  const gustValues = data.conduit.map((p) => p.wind_gust_ms);
+  const pressureValues = data.conduit.map((p) => p.pressure_hpa);
+  const gustMin = Math.min(...gustValues, 0);
+  const gustMax = Math.max(...gustValues, 1);
+  const pressureMin = Math.min(...pressureValues) - 1;
+  const pressureMax = Math.max(...pressureValues) + 1;
 
   return (
     <div className="space-y-4">
@@ -179,6 +189,33 @@ export default function ClimateVariablesPanel() {
           </LineChart>
         </MiniChart>
       </div>
+
+      {/* Gauges — current value positioned within the real observed range of
+          the same 30h series plotted above, not a fabricated universal scale. */}
+      {latest && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <RadialGauge
+            title={lang === "sw" ? "Mkurupuko wa Upepo (Conduit)" : "Wind Gust (Conduit)"}
+            sourceLabel={conduitLabel}
+            value={latest.wind_gust_ms}
+            min={gustMin}
+            max={gustMax}
+            unit=" m/s"
+            color="#6B8F71"
+            rangeNote={lang === "sw" ? `Kiwango cha saa 30: ${gustMin.toFixed(1)}–${gustMax.toFixed(1)} m/s` : `Last 30h range: ${gustMin.toFixed(1)}–${gustMax.toFixed(1)} m/s`}
+          />
+          <RadialGauge
+            title={lang === "sw" ? "Shinikizo la Hewa (Conduit)" : "Pressure (Conduit)"}
+            sourceLabel={conduitLabel}
+            value={latest.pressure_hpa}
+            min={pressureMin}
+            max={pressureMax}
+            unit=" hPa"
+            color="#7C6BAE"
+            rangeNote={lang === "sw" ? `Kiwango cha saa 30: ${pressureMin.toFixed(0)}–${pressureMax.toFixed(0)} hPa` : `Last 30h range: ${pressureMin.toFixed(0)}–${pressureMax.toFixed(0)} hPa`}
+          />
+        </div>
+      )}
 
       <p className="text-[10px] text-afya-muted/60">
         {lang === "sw"

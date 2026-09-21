@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useSituation } from "@/lib/contexts/situation";
 import { useLanguage } from "@/lib/contexts/language";
 import { STATES, RISK_META, MODEL_VERSIONS } from "@/lib/afya/constants";
@@ -10,10 +11,9 @@ import { RiskChip } from "@/components/ui/RiskChip";
 import { QualityDot } from "@/components/ui/QualityDot";
 import MeasurementStrip from "@/components/ui/MeasurementStrip";
 import StateTimeline from "@/components/charts/StateTimeline";
-import ClimateVariablesPanel from "@/components/charts/ClimateVariablesPanel";
 import AiPanel from "@/components/ai/AiPanel";
 import { SkeletonCard } from "@/components/ui/Skeleton";
-import { AlertTriangle, Cpu, Globe, CloudRain, Satellite, Database, TrendingUp, Info } from "lucide-react";
+import { AlertTriangle, Cpu, Globe, CloudRain, Satellite, Database, TrendingUp, Info, ChevronRight } from "lucide-react";
 
 export default function IntelligencePage() {
   const { situation, isLoading, error } = useSituation();
@@ -143,8 +143,20 @@ export default function IntelligencePage() {
         <MeasurementStrip obs={current} freshnessMinutes={quality.freshness_minutes} />
       </Card>
 
-      {/* Climate variables dashboard — real Conduit + ERA5 time series */}
-      <ClimateVariablesPanel />
+      {/* Live climate variables now live on the consolidated Dashboard
+          (/climate) alongside Climate History and Historical Replay,
+          rather than duplicated here — this page stays focused on
+          why/explanation. */}
+      <Link
+        href="/climate"
+        className="flex items-center justify-between rounded-2xl border border-afya-border bg-white px-5 py-4 hover:border-afya-green/50 transition-colors group"
+      >
+        <div>
+          <p className="text-sm font-semibold text-afya-charcoal">{t("explore_dashboard")}</p>
+          <p className="text-xs text-afya-muted mt-0.5">{t("explore_dashboard_note")}</p>
+        </div>
+        <ChevronRight className="w-4 h-4 text-afya-muted group-hover:text-afya-green transition-colors shrink-0" strokeWidth={2} aria-hidden="true" />
+      </Link>
 
       {/* State history */}
       <Card>
