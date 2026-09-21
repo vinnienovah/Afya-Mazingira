@@ -75,38 +75,63 @@ export async function getObservationSeries(anchorIso: string, lookbackHours = 30
 
 // ─── Live Conduit ingestion ──────────────────────────────────────────────────
 
+/** Raw POST to the Conduit API for an arbitrary date range — shared by the
+ * "current" live refresh below and the Climate History dashboard's ability
+ * to fill the gap between the CSV archive's last row and today. */
+async function fetchConduitRaw(from: Date, to: Date): Promise<Record<string, unknown>[]> {
+  const url = process.env.CONDUIT_URL ?? "https://conduit.jhubafrica.com/data.php";
+  const body = new URLSearchParams({
+    apikey: process.env.CONDUIT_API_KEY!,
+    email: process.env.CONDUIT_EMAIL!,
+    fromdate: from.toISOString().slice(0, 10),
+    todate: to.toISOString().slice(0, 10),
+  }).toString();
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+    signal: AbortSignal.timeout(8_000),
+  });
+  if (!res.ok) throw new Error(`Conduit HTTP ${res.status}`);
+
+  const json = (await res.json()) as { status?: string; data?: Record<string, unknown>[] };
+  if (json.status !== "success" || !Array.isArray(json.data)) {
+    throw new Error("Conduit response not successful");
+  }
+  return json.data;
+}
+
+/**
+ * Real Conduit observations for an arbitrary [from, to] range, for the
+ * Climate History dashboard — a one-off fetch, not the cached "live now"
+ * bundle. Returns [] on any failure (no synthetic fallback here; the caller
+ * already has the CSV archive to fall back on for the same range).
+ */
+export async function getConduitRange(fromIso: string, toIso: string): Promise<DemoObservation[]> {
+  if (!hasConduitCreds()) return [];
+  try {
+    const raw = await fetchConduitRaw(new Date(fromIso), new Date(toIso));
+    return cleanAndGrid(raw);
+  } catch (err) {
+    console.warn("[afya] Conduit range fetch failed:", (err as Error).message);
+    return [];
+  }
+}
+
 async function refreshLive(): Promise<void> {
   if (inflight) {
     await inflight.catch(() => {});
     return;
   }
   inflight = (async () => {
-    const url = process.env.CONDUIT_URL ?? "https://conduit.jhubafrica.com/data.php";
     // todate is effectively exclusive of the current day — request tomorrow
     // so today's observations are included whenever the station uploads them.
     const to = new Date(Date.now() + 86400_000);
     const from = new Date(Date.now() - 3 * 86400_000);
-    const body = new URLSearchParams({
-      apikey: process.env.CONDUIT_API_KEY!,
-      email: process.env.CONDUIT_EMAIL!,
-      fromdate: from.toISOString().slice(0, 10),
-      todate: to.toISOString().slice(0, 10),
-    }).toString();
+    const data = await fetchConduitRaw(from, to);
 
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body,
-      signal: AbortSignal.timeout(8_000),
-    });
-    if (!res.ok) throw new Error(`Conduit HTTP ${res.status}`);
-
-    const json = (await res.json()) as { status?: string; data?: Record<string, unknown>[] };
-    if (json.status !== "success" || !Array.isArray(json.data)) {
-      throw new Error("Conduit response not successful");
-    }
-
-    const grid = cleanAndGrid(json.data);
+    const grid = cleanAndGrid(data);
     if (grid.length < 20) throw new Error("Insufficient valid Conduit observations");
 
     liveBundle = {
