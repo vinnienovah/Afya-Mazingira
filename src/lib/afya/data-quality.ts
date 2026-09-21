@@ -1,33 +1,31 @@
 import type { DataQuality, QualityStatus } from "./types";
 import type { DemoObservation } from "./demo-observations";
 
-// ─── Data Quality Engine ──────────────────────────────────────────────────────
-// Evaluates observation freshness, sensor agreement, and known field issues.
-// Spec §18 defines the GOOD / DEGRADED / POOR behaviour. Audited against 465
-// days of the real dataset, the station records roughly every
-// EXPECTED_INTERVAL_MINUTES (mean 96.9/day, median 95/day) — but that's the
-// recording interval, not a guarantee about how promptly the public API
-// reflects a new reading, and it has gone quiet for hours at a time in
-// practice. The thresholds below are deliberately several multiples of the
-// expected interval rather than assuming a strict continuous 15-min stream;
-// the age itself (from the observation's own timestamp, not from when we
-// last polled) is always displayed regardless of which band it falls in.
+// GOOD, DEGRADED or POOR for the latest observations. POOR suppresses strong
+// recommendations. The station records about every 15 minutes, so an hour
+// without a new observation is already worth saying, and advice stops after
+// three hours: the forecast is only as good as the reading it starts from.
 
-const EXPECTED_INTERVAL_MINUTES = 15;
-const GOOD_MAX_AGE_MINUTES = 90;            // ~6x the expected interval
-const DEGRADED_MAX_AGE_MINUTES = 18 * 60;   // overnight/multi-hour gap tolerated
-const POOR_MAX_AGE_MINUTES = 30 * 60;       // station genuinely unavailable
+export const QUALITY_LIMITS = {
+  good_max_age_minutes: 60,
+  degraded_max_age_minutes: 3 * 60,
+  // Share of the last six hours carried forward rather than measured before
+  // the gaps are worth a warning.
+  max_filled_share: 0.25,
+  // Spread between the station's three thermometers.
+  degraded_temp_spread_c: 2.0,
+  poor_temp_spread_c: 3.0,
+};
 
-const CRITICAL_FIELDS: (keyof DemoObservation)[] = [
-  "temp_sht", "humidity_sht", "wet_bulb_globe_temp", "si1145_ir", "wind_spd",
-];
+const RECENT_SLOTS = 24; // six hours of 15-minute slots
+
+const CRITICAL_FIELDS = ["temp_sht", "humidity_sht", "wet_bulb_temp", "si1145_ir", "wind_spd"];
 
 /**
  * Evaluate data quality from a series of observations.
  * @param series  Full observation series (most recent last)
- * @param referenceNow  The clock to measure freshness against — the real clock
- *                      for live data (honest age), the simulated anchor for
- *                      demo/replay mode.
+ * @param referenceNow  The clock to measure freshness against: the real clock
+ *                      for live data, the anchor for a replay or the synthetic series.
  */
 export function evaluateQuality(series: DemoObservation[], referenceNow?: string): DataQuality {
   const flags: string[] = [];
@@ -43,51 +41,50 @@ export function evaluateQuality(series: DemoObservation[], referenceNow?: string
   }
 
   const latest = series[series.length - 1];
-  const latestMs = new Date(latest.ts).getTime();
-  const freshnessMinutes = Math.round((now - latestMs) / 60000);
+  const freshnessMinutes = Math.round((now - new Date(latest.ts).getTime()) / 60000);
 
-  // ── Freshness check ─────────────────────────────────────────────────────
-  if (freshnessMinutes > DEGRADED_MAX_AGE_MINUTES) {
+  if (freshnessMinutes > QUALITY_LIMITS.degraded_max_age_minutes) {
     flags.push("stale_data");
-  } else if (freshnessMinutes > GOOD_MAX_AGE_MINUTES) {
+  } else if (freshnessMinutes > QUALITY_LIMITS.good_max_age_minutes) {
     flags.push("observation_age_elevated");
   }
 
-  // ── Missing critical fields in latest ────────────────────────────────────
-  const missing: string[] = [];
-  for (const f of CRITICAL_FIELDS) {
-    const v = latest[f];
-    if (v === null || v === undefined || isNaN(v as number)) missing.push(f);
-  }
+  // Critical fields in the latest slot that were not actually measured.
+  const missing = CRITICAL_FIELDS.filter((f) => latest.imputed?.includes(f));
   if (missing.length > 0) flags.push(`missing_fields:${missing.join(",")}`);
 
-  // ── Temperature sensor spread (cross-sensor consistency) ─────────────────
+  // How much of the last six hours was filled in rather than measured.
+  const recent = series.slice(-RECENT_SLOTS);
+  const filled = recent.filter((o) => CRITICAL_FIELDS.some((f) => o.imputed?.includes(f))).length;
+  const filledShare = filled / recent.length;
+  if (filledShare > QUALITY_LIMITS.max_filled_share) flags.push(`gaps_filled_recently:${filled}`);
+
   const tempSpread =
     Math.max(latest.temp_sht, latest.temp_bmx, latest.temp_mcp) -
     Math.min(latest.temp_sht, latest.temp_bmx, latest.temp_mcp);
-  if (tempSpread > 2.0) flags.push("temp_sensor_disagreement");
+  if (tempSpread > QUALITY_LIMITS.degraded_temp_spread_c) flags.push("temp_sensor_disagreement");
 
-  // ── Impossible ranges (scientific sanity, spec §55) ──────────────────────
   if (latest.humidity_sht < 0 || latest.humidity_sht > 100) flags.push("humidity_out_of_range");
   if (latest.temp_sht < -10 || latest.temp_sht > 50) flags.push("temp_out_of_range");
-  if (latest.wet_bulb_globe_temp < 5 || latest.wet_bulb_globe_temp > 45) flags.push("wbgt_out_of_range");
 
-  // ── UV channel (low trust per spec §15.3) ─────────────────────────────────
-  if (latest.si1145_uv > 0) flags.push("uv_signal_unusual");
+  // The firmware's own WBGT is not used, but when it reads below the wet bulb
+  // (physically impossible) the page says so.
+  if (typeof latest.firmware_wbgt === "number" && latest.firmware_wbgt < latest.wet_bulb_temp) {
+    flags.push("firmware_wbgt_below_wet_bulb");
+  }
 
-  // ── Determine status ─────────────────────────────────────────────────────
   let status: QualityStatus;
   if (
-    freshnessMinutes > POOR_MAX_AGE_MINUTES ||
-    tempSpread > 3.0 ||
-    missing.length >= 3 ||
-    flags.some((f) => f === "no_observations")
+    freshnessMinutes > QUALITY_LIMITS.degraded_max_age_minutes ||
+    tempSpread > QUALITY_LIMITS.poor_temp_spread_c ||
+    missing.length >= 3
   ) {
     status = "POOR";
   } else if (
-    freshnessMinutes > GOOD_MAX_AGE_MINUTES ||
-    tempSpread > 2.0 ||
-    missing.length >= 1
+    freshnessMinutes > QUALITY_LIMITS.good_max_age_minutes ||
+    tempSpread > QUALITY_LIMITS.degraded_temp_spread_c ||
+    missing.length >= 1 ||
+    filledShare > QUALITY_LIMITS.max_filled_share
   ) {
     status = "DEGRADED";
   } else {

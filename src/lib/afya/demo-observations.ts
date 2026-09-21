@@ -23,6 +23,12 @@ export interface DemoObservation {
   heat_idx: number;
   wet_bulb_temp: number;
   wet_bulb_globe_temp: number;
+  // The station firmware's own WBGT column, kept for reference only. It reads
+  // below the wet bulb most of the time, which a real WBGT cannot do.
+  firmware_wbgt?: number | null;
+  // Fields in this slot that were carried forward or defaulted rather than
+  // measured. Absent or empty when every value was observed.
+  imputed?: string[];
 }
 
 // ─── Seeded pseudo-random for reproducibility ─────────────────────────────────

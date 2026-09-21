@@ -139,6 +139,8 @@ export interface SituationResult {
   location: string;
   demo_mode: boolean;
   data_source: "CONDUIT_LIVE" | "CONDUIT_ARCHIVE" | "DEMO";
+  // Which live feed served the station data: JHUB's Conduit API or the CHORDS portal.
+  data_feed?: "jhub" | "chords" | null;
   quality: DataQuality;
   current: CurrentObservation;
   state: EnvironmentalState;

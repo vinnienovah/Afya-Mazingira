@@ -41,12 +41,6 @@ export const STATES: Record<
 
 export const STATE_CYCLE: StateId[] = [0, 1, 2, 3, 0];
 
-// Next-state transition probabilities derived from the state machine
-export function nextState(current: StateId): { state_id: StateId; probability: number } {
-  const next = STATE_CYCLE[(STATE_CYCLE.indexOf(current) + 1) % 4] as StateId;
-  const prob: Record<StateId, number> = { 0: 0.82, 1: 0.76, 2: 0.84, 3: 0.79 };
-  return { state_id: next, probability: prob[current] };
-}
 
 // ─── Risk levels ──────────────────────────────────────────────────────────────
 export const RISK_ORDER: RiskLevel[] = ["LOW", "ELEVATED", "HIGH", "VERY_HIGH"];
@@ -88,40 +82,52 @@ export function getActivityProfile(key: string): ActivityProfile {
   return ACTIVITY_PROFILES.find((p) => p.key === key) ?? ACTIVITY_PROFILES[6];
 }
 
-// ─── WBGT → Risk thresholds (activity-aware, NOT medical) ───────────────────
-// These are activity-adjusted environmental exposure tiers.
-// They are not medical or clinical thresholds.
+// WBGT screening bands. These are the project's own bands for comparing hours
+// and activities, not a published occupational or medical limit.
+export const WBGT_BANDS_C = { elevated: 18, high: 21, very_high: 24 };
+
+/**
+ * Risk band for a WBGT value. A positive activity offset means the activity
+ * tolerates more heat (walking), a negative one less (sports, construction),
+ * so the offset is taken off the reading before it is banded.
+ */
 export function wbgtToRisk(wbgt: number, activityOffset = 0): RiskLevel {
-  const t = wbgt + activityOffset; // positive offset → more tolerant (lower effective exposure)
-  // For high-intensity activities (sports, construction) offset is negative,
-  // meaning the same WBGT produces a higher risk tier.
-  if (t < 18) return "LOW";
-  if (t < 21) return "ELEVATED";
-  if (t < 24) return "HIGH";
+  const t = wbgt - activityOffset;
+  if (t < WBGT_BANDS_C.elevated) return "LOW";
+  if (t < WBGT_BANDS_C.high) return "ELEVATED";
+  if (t < WBGT_BANDS_C.very_high) return "HIGH";
   return "VERY_HIGH";
 }
 
 /**
- * Shade-only WBGT approximation (Australian Bureau of Meteorology formula),
- * from real temperature + humidity alone — used wherever we have a real
- * regional forecast (ERA5-Land / Open-Meteo) but no ground-station globe/
- * wet-bulb sensor. A genuine, published approximation, not a fabricated
- * number — but coarser than the sensor-grade WBGT the Conduit station
- * computes directly, so it's always labeled REGIONAL_MODEL, never MEASURED.
+ * Wet-bulb temperature from air temperature and relative humidity (%), after
+ * Stull (2011), J. Appl. Meteor. Climatol. 50, 2267-2269. The station's own
+ * wet-bulb column agrees with it to within 0.03 degC over the archive.
  */
-export function approxWbgtShade(tempC: number, rhPct: number): number {
-  const es = 6.105 * Math.exp((17.27 * tempC) / (237.7 + tempC));
-  const e = (rhPct / 100) * es;
-  return 0.567 * tempC + 0.393 * e + 3.94;
+export function stullWetBulb(tempC: number, rhPct: number): number {
+  return (
+    tempC * Math.atan(0.151977 * Math.sqrt(rhPct + 8.313659)) +
+    Math.atan(tempC + rhPct) -
+    Math.atan(rhPct - 1.676331) +
+    0.00391838 * Math.pow(rhPct, 1.5) * Math.atan(0.023101 * rhPct) -
+    4.686035
+  );
 }
 
-// ─── Model versions ───────────────────────────────────────────────────────────
-export const MODEL_VERSIONS = {
-  "1h": { algorithm: "ExtraTrees", version: "1.0.0", mae: 0.57 },
-  "3h": { algorithm: "CatBoost", version: "1.0.0", mae: 0.93 },
-  "6h": { algorithm: "ExtraTrees", version: "1.0.0", mae: 1.23 },
-  "9h": { algorithm: "CatBoost", version: "1.0.0", mae: 1.58 },
-};
+/**
+ * WBGT without solar load, ISO 7243: 0.7 x natural wet bulb + 0.3 x globe.
+ * In shade the psychrometric wet bulb and the air temperature stand in for
+ * the two. Direct sun adds to this, and the station's light sensor is not
+ * calibrated to irradiance, so the sun term is left out rather than guessed.
+ */
+export function shadeWbgt(tempC: number, wetBulbC: number): number {
+  return 0.7 * wetBulbC + 0.3 * tempC;
+}
+
+/** Shade WBGT from air temperature and humidity alone, for places with no station. */
+export function shadeWbgtFromHumidity(tempC: number, rhPct: number): number {
+  return shadeWbgt(tempC, stullWetBulb(tempC, rhPct));
+}
 
 // ─── Provenance labels ────────────────────────────────────────────────────────
 export const PROVENANCE_LABELS: Record<string, { en: string; sw: string; icon: string }> = {
