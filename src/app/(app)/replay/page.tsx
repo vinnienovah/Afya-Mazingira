@@ -18,6 +18,9 @@ import {
   Eye, EyeOff, AlertTriangle, Info,
 } from "lucide-react";
 
+// Replay runs on the recorded station archive, so only its days are offered.
+const ARCHIVE_FIRST_DAY = "2025-06-01";
+const ARCHIVE_LAST_DAY = "2026-09-08";
 const DEFAULT_DATE = "2026-09-01";
 
 // Historical Replay now lives as a tab on the consolidated Dashboard
@@ -37,17 +40,55 @@ export default function ReplayPage() {
 export function ReplayContent() {
   const { t, lang } = useLanguage();
   const [date, setDate] = useState(DEFAULT_DATE);
-  const [steps, setSteps] = useState<ReplayStep[]>([]);
+  const [result, setResult] = useState<{ date: string; steps: ReplayStep[]; message: string | null } | null>(null);
   const [stepIdx, setStepIdx] = useState(2); // start at 08:00 EAT
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [revealed, setRevealed] = useState(false);
 
   useEffect(() => {
-    loadReplay(date);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    let active = true;
+    fetch("/api/replay", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date }),
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!active) return;
+        if (!res.ok) {
+          setResult({ date, steps: [], message: data.message ?? "" });
+          return;
+        }
+        // What happened afterwards is the station's own reading at each later
+        // step of the same day, so the reveal compares the forecast with data.
+        const all: ReplayStep[] = data.steps;
+        const steps = all.map((step, i) => ({
+          ...step,
+          actual_after: all.slice(i + 1).map((later) => ({
+            time: later.situation.current.time,
+            wbgt: later.situation.current.wbgt_c,
+          })),
+        }));
+        setResult({ date, steps, message: null });
+      })
+      .catch(() => {
+        if (active) setResult({ date, steps: [], message: "" });
+      });
+    return () => {
+      active = false;
+    };
   }, [date]);
+
+  const loading = result?.date !== date;
+  const steps = loading ? [] : result.steps;
+  const error = loading || result.message === null ? null : result.message || t("error_generic");
+
+  function chooseDate(next: string) {
+    setDate(next);
+    setStepIdx(2);
+    setRevealed(false);
+    setPlaying(false);
+  }
 
   // Auto-advance when playing
   useEffect(() => {
@@ -61,50 +102,6 @@ export function ReplayContent() {
     return () => clearInterval(id);
   }, [playing, steps.length]);
 
-  async function loadReplay(d: string) {
-    setLoading(true);
-    setError(null);
-    setRevealed(false);
-    setPlaying(false);
-    try {
-      const res = await fetch("/api/replay", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: d }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.message ?? t("error_generic")); return; }
-
-      // Enrich steps: add actual observations after sim time for "reveal" comparison
-      const enriched = data.steps.map((step: ReplayStep) => ({
-        ...step,
-        actual_after: buildActualAfter(step),
-      }));
-      setSteps(enriched);
-      setStepIdx(2); // start at 08:00
-    } catch {
-      setError(t("error_generic"));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // Build "actual conditions" after simulated time (full-day data generated separately)
-  function buildActualAfter(step: ReplayStep): { time: string; wbgt: number }[] {
-    // The full day's series is regenerated with the same seed for consistency.
-    // We approximate actual conditions by using the demo generator directly.
-    const simTime = new Date(step.sim_time).getTime();
-    const dateStr = step.sim_time.slice(0, 10);
-    const tomorrowAnchor = `${dateStr}T${String(21).padStart(2, "0")}:00:00Z`; // 24:00 EAT
-    // Use forecast_series as proxy, the replay engine has already computed the state
-    // and forecast up to the simulated time; for "actual" we need what really happened.
-    // In a real implementation this would be a separate observation query.
-    // For demo purposes we use the series from the NEXT step (i+1 step ahead).
-    return step.situation.forecast_series.slice(4).map((p) => ({
-      time: p.time,
-      wbgt: p.value + (Math.random() - 0.5) * 0.8, // small noise to show actual ≠ forecast
-    }));
-  }
 
   const currentStep = steps[stepIdx] ?? null;
   const simTimeEAT = currentStep
@@ -162,9 +159,9 @@ export function ReplayContent() {
             <input
               type="date"
               value={date}
-              onChange={(e) => setDate(e.target.value)}
-              min="2025-01-01"
-              max={new Date().toISOString().slice(0, 10)}
+              onChange={(e) => chooseDate(e.target.value)}
+              min={ARCHIVE_FIRST_DAY}
+              max={ARCHIVE_LAST_DAY}
               className="rounded-lg bg-white/15 border border-white/20 text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-afya-gold"
               aria-label="Replay date"
             />

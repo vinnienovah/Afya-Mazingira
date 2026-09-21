@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryParam } from "@/lib/use-query-param";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -36,14 +37,13 @@ export function AuthCard({ initialMode }: { initialMode: Mode }) {
   const [resendLoading, setResendLoading] = useState(false);
   const [resendSent, setResendSent] = useState(false);
 
-  // Surface the Google OAuth redirect's ?error= without useSearchParams
-  // (avoids a Suspense boundary requirement on this static auth page).
-  useEffect(() => {
-    const oauthError = new URLSearchParams(window.location.search).get("error");
-    if (oauthError === "google_auth_failed") setError(t("error_google_auth"));
-    else if (oauthError === "google_not_configured") setError(t("error_google_not_configured"));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // The Google sign-in redirect reports failures as ?error=.
+  const oauthError = useQueryParam("error");
+  const oauthMessage =
+    oauthError === "google_auth_failed" ? t("error_google_auth")
+      : oauthError === "google_not_configured" ? t("error_google_not_configured")
+        : null;
+  const shownError = error ?? oauthMessage;
 
   function switchMode(next: Mode) {
     if (next === mode) return;
@@ -332,9 +332,9 @@ export function AuthCard({ initialMode }: { initialMode: Mode }) {
                       </div>
                     )}
 
-                    {error && (
+                    {shownError && (
                       <div className="rounded-xl border border-afya-red/30 bg-afya-red/8 px-4 py-3 text-sm text-afya-charcoal" role="alert">
-                        <p>{error}</p>
+                        <p>{shownError}</p>
                         {unverifiedEmail && (
                           <button
                             type="button"

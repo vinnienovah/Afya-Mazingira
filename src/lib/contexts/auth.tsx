@@ -45,7 +45,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    let active = true;
+    fetch("/api/auth/me", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .catch(() => null)
+      .then((me: AuthUser | null) => {
+        if (!active) return;
+        setUser(me);
+        setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const signOut = async () => {
     await fetch("/api/auth/sign-out", { method: "POST", credentials: "include" });
