@@ -366,7 +366,7 @@ export default function SituationPage() {
                 temp_rising: "Temperature rising",
                 temp_falling: "Temperature falling",
                 high_radiation: "High solar radiation",
-                low_ventilation: "Low ventilation",
+                low_ventilation: "Weak ventilation (low wind speed)",
                 humidity_falling: "Humidity falling",
                 peak_radiation: "Peak radiation period",
               };
@@ -374,7 +374,7 @@ export default function SituationPage() {
                 temp_rising: "Joto linaongezeka",
                 temp_falling: "Joto linapungua",
                 high_radiation: "Mionzi mikali ya jua",
-                low_ventilation: "Uingizaji hewa mdogo",
+                low_ventilation: "Uingizaji hewa mdogo (upepo mdogo)",
                 humidity_falling: "Unyevu unapungua",
                 peak_radiation: "Kipindi cha mionzi ya juu",
               };

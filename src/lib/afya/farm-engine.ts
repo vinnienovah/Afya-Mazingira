@@ -96,6 +96,8 @@ export interface WaterBalance {
   rain_30d_mm: number;
   demand_7d_mm: number;
   balance_7d_mm: number;
+  demand_30d_mm: number;
+  balance_30d_mm: number;
   soil_moisture_pct: number;
   depletion_pct: number;
   readily_available_mm: number;
@@ -103,9 +105,13 @@ export interface WaterBalance {
 
 /**
  * Total available water (mm) in the root zone.
- * Assumes a loam soil typical of the Juja/Kiambu area: ~150 mm/m available water.
+ * Assumes a loam soil typical of the Juja/Kiambu area: ~150 mm/m available water
+ * (i.e. field capacity − wilting point ≈ 0.15 m³/m³ volumetric, matching the
+ * FIELD_CAPACITY/WILTING_POINT pair below).
  */
 const AVAILABLE_WATER_MM_PER_M = 150;
+const FIELD_CAPACITY_VOL = 0.30;
+const WILTING_POINT_VOL = 0.15;
 
 export function computeWaterBalance(
   situation: SituationResult,
@@ -122,16 +128,38 @@ export function computeWaterBalance(
   const rain30 = situation.chirps.chirps_30d_mm;
   const demand7 = Math.round(etc * 7 * 10) / 10;
   const balance7 = Math.round((rain7 - demand7) * 10) / 10;
+  // A 7-day rain deficit that looks fine can still mask a longer dry stretch —
+  // check the 30-day balance too rather than deciding on one short window alone.
+  const demand30 = Math.round(etc * 30 * 10) / 10;
+  const balance30 = Math.round((rain30 - demand30) * 10) / 10;
 
   // ERA5-Land volumetric soil water (m³/m³) → percentage
-  const soilPct = Math.round(situation.era5.era5_soil_moisture * 1000) / 10;
+  const soilVol = situation.era5.era5_soil_moisture;
+  const soilPct = Math.round(soilVol * 1000) / 10;
 
   const taw = AVAILABLE_WATER_MM_PER_M * crop.root_depth_m;
   const raw = Math.round(taw * crop.depletion_fraction * 10) / 10;
 
-  // Depletion proxy: how much of readily available water the 7-day deficit consumed
-  const deficit = Math.max(0, -balance7);
-  const depletionPct = Math.min(100, Math.round((deficit / Math.max(1, raw)) * 1000) / 10);
+  // Depletion from the rain-vs-demand accounting, for both windows.
+  const deficit7 = Math.max(0, -balance7);
+  const depletion7Pct = Math.min(100, Math.round((deficit7 / Math.max(1, raw)) * 1000) / 10);
+  const deficit30 = Math.max(0, -balance30);
+  const depletion30Pct = Math.min(100, Math.round((deficit30 / Math.max(1, raw)) * 1000) / 10);
+
+  // Depletion from the real ERA5 soil moisture reading directly — a much more
+  // direct signal of actual root-zone water status than rainfall accounting
+  // alone, since it also reflects drainage, prior irrigation and evaporation
+  // that a simple rain-minus-demand tally can't see.
+  const availableFraction = Math.max(
+    0,
+    Math.min(1, (soilVol - WILTING_POINT_VOL) / (FIELD_CAPACITY_VOL - WILTING_POINT_VOL)),
+  );
+  const soilDepletionPct = Math.round((1 - availableFraction) * 1000) / 10;
+
+  // The most severe of the three signals wins — irrigation decisions should
+  // never be reassured by a short calm window while soil moisture or the
+  // longer trend already shows real stress.
+  const depletionPct = Math.max(depletion7Pct, depletion30Pct, soilDepletionPct);
 
   return {
     et0_mm_day: et0,
@@ -141,6 +169,8 @@ export function computeWaterBalance(
     rain_30d_mm: rain30,
     demand_7d_mm: demand7,
     balance_7d_mm: balance7,
+    demand_30d_mm: demand30,
+    balance_30d_mm: balance30,
     soil_moisture_pct: soilPct,
     depletion_pct: depletionPct,
     readily_available_mm: raw,
@@ -179,10 +209,15 @@ export function computeIrrigationAdvice(
     };
   }
 
-  // Severe depletion → irrigate now
+  // Severe depletion → irrigate now.
+  // Depth is sized off the depletion fraction itself (not just the 7-day rain
+  // deficit) so it stays sensible even when soil moisture — not the recent
+  // rain balance — is what's driving the decision.
   if (wb.depletion_pct >= 70) {
-    const depth = Math.round(Math.min(wb.readily_available_mm, Math.abs(wb.balance_7d_mm)) * 10) / 10;
-    reasons.push("farm_reason_high_depletion", "farm_reason_demand_exceeds_rain");
+    const depth = Math.round(wb.readily_available_mm * (wb.depletion_pct / 100) * 10) / 10;
+    reasons.push("farm_reason_high_depletion");
+    if (wb.balance_7d_mm < 0) reasons.push("farm_reason_demand_exceeds_rain");
+    if (wb.soil_moisture_pct <= 17) reasons.push("farm_reason_low_soil_moisture");
     if (wb.etc_mm_day > 4.5) reasons.push("farm_reason_high_et");
     return {
       action: "IRRIGATE_NOW",
@@ -198,6 +233,7 @@ export function computeIrrigationAdvice(
     const depth = Math.round((wb.readily_available_mm * 0.5) * 10) / 10;
     reasons.push("farm_reason_moderate_depletion");
     if (wb.rain_7d_mm < 10) reasons.push("farm_reason_low_recent_rain");
+    if (wb.soil_moisture_pct <= 17) reasons.push("farm_reason_low_soil_moisture");
     return {
       action: "IRRIGATE_SOON",
       depth_mm: depth,

@@ -389,6 +389,7 @@ export default function FarmPage() {
           {/* ── AI EXPLANATION ───────────────────────────────────────────── */}
           <AiPanel
             context="farm"
+            extraParams={{ crop, stage }}
             initialQuestions={lang === "sw"
               ? ["Je, nimwagilie leo?", "Ni wakati gani mzuri wa kunyunyizia dawa?", "Hali ya mvua ikoje wiki hii?"]
               : ["Should I irrigate today?", "When is the best time to spray?", "How is the rainfall this week?"]}

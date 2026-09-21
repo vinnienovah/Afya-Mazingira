@@ -232,12 +232,12 @@ export default function ForecastPage() {
             {forecast.contributors.slice(0, 4).map((c, i) => {
               const labels_en: Record<string, string> = {
                 temp_rising: "Temperature rising", temp_falling: "Temperature falling",
-                high_radiation: "High solar radiation", low_ventilation: "Weak ventilation",
+                high_radiation: "High solar radiation", low_ventilation: "Weak ventilation (low wind speed)",
                 humidity_falling: "Humidity falling", peak_radiation: "Peak radiation period",
               };
               const labels_sw: Record<string, string> = {
                 temp_rising: "Joto linaongezeka", temp_falling: "Joto linapungua",
-                high_radiation: "Mionzi mikali ya jua", low_ventilation: "Uingizaji hewa mdogo",
+                high_radiation: "Mionzi mikali ya jua", low_ventilation: "Uingizaji hewa mdogo (upepo mdogo)",
                 humidity_falling: "Unyevu unapungua", peak_radiation: "Kipindi cha mionzi ya juu",
               };
               return (
