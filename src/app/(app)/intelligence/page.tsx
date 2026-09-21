@@ -55,7 +55,7 @@ export default function IntelligencePage() {
     {
       icon: <Info className="w-5 h-5 text-afya-teal" />,
       title_en: "WHAT?", title_sw: "NINI?",
-      body_en: `The JKUAT environment is in a ${STATES[state.state_id].name} state. WBGT-like exposure is ${current.wbgt_c.toFixed(1)}°C with ${risk.thermal.toLowerCase()} thermal exposure risk.`,
+      body_en: `The JKUAT environment is in a ${STATES[state.state_id].name} state. WBGT in shade is ${current.wbgt_c.toFixed(1)}°C with ${risk.thermal.toLowerCase()} thermal exposure risk.`,
       body_sw: `Mazingira ya JKUAT iko katika hali ya ${STATES[state.state_id].name_sw}. Kupatwa na WBGT ni ${current.wbgt_c.toFixed(1)}°C yenye hatari ${risk.thermal.toLowerCase()}.`,
     },
     {

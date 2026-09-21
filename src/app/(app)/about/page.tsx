@@ -42,9 +42,9 @@ export default function AboutPage() {
     {
       icon: <Satellite className="w-5 h-5 text-afya-teal" />,
       name: "Sentinel-3 SLSTR",
-      detail_en: "Regional land surface temperature · ESA Copernicus",
-      detail_sw: "Joto la uso wa ardhi wa kikanda · ESA Copernicus",
-      type: { en: "SATELLITE-DERIVED · ~1 km native", sw: "KUTOKA SAYETI · ~1 km asilia" },
+      detail_en: "Acquisition dates only; land surface temperature is not computed · ESA Copernicus",
+      detail_sw: "Tarehe za uchukuzi pekee; joto la uso wa ardhi halikokotolewi · ESA Copernicus",
+      type: { en: "SATELLITE-DERIVED · dates", sw: "KUTOKA SAYETI · tarehe" },
     },
   ];
 
@@ -83,7 +83,7 @@ export default function AboutPage() {
         <div className="space-y-2">
           {[
             { step: "1", en: "Conduit local measurements", sw: "Vipimo vya kimaeneo vya Conduit" },
-            { step: "2", en: "Quality control and validation", sw: "Udhibiti wa ubora na uthibitisho" },
+            { step: "2", en: "Quality control (station health rules)", sw: "Udhibiti wa ubora (kanuni za afya ya kituo)" },
             { step: "3", en: "Feature engineering", sw: "Uhandisi wa vipengele" },
             { step: "4", en: "Climate Reflex state classification", sw: "Uainishaji wa hali ya Climate Reflex" },
             { step: "5", en: "+1/+3/+6/+9h WBGT forecasting", sw: "Utabiri wa WBGT wa +1/+3/+6/+9saa" },

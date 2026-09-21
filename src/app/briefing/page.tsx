@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Environmental Briefing | AFYA MAZINGIRA",
+  title: "Environmental Briefing",
   description:
     "One-page printable operational summary of the current JKUAT/Juja environmental situation, forecast, Best-Time window and data provenance.",
 };

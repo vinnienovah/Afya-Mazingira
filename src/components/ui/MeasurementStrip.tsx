@@ -61,7 +61,7 @@ export default function MeasurementStrip({
     },
     {
       icon: <Eye className="w-4 h-4" />,
-      label_en: "WBGT-like", label_sw: "WBGT",
+      label_en: "WBGT (shade)", label_sw: "WBGT (kivuli)",
       value: `${obs.wbgt_c.toFixed(1)}°C`,
       accent: "#103D2C",
     },

@@ -7,7 +7,7 @@ import { wbgtToRisk, riskRank } from "./constants";
 
 /**
  * Compute thermal exposure risk for a given WBGT value and activity profile.
- * @param wbgt  Wet bulb globe temperature (WBGT-like) °C
+ * @param wbgt  Wet bulb globe temperature in shade, °C
  * @param activityOffset  From ACTIVITY_PROFILES (positive = more tolerant)
  */
 export function computeThermalRisk(wbgt: number, activityOffset = 0): RiskLevel {

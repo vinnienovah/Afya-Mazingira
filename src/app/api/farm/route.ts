@@ -44,6 +44,7 @@ export async function POST(req: NextRequest) {
         era5: situation.era5,
         chirps: situation.chirps,
         demo_mode: situation.demo_mode,
+        best_time_note: situation.best_time_note ?? null,
         data_source: situation.data_source,
       },
     });

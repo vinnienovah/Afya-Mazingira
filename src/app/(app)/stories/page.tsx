@@ -57,7 +57,7 @@ const STORIES: Story[] = [
     role_en: "Sports coach · JKUAT", role_sw: "Kocha wa michezo · JKUAT",
     problem_en: "Training is scheduled at 14:00 because that is when the pitch is free, often the hottest, highest-radiation part of the day.",
     problem_sw: "Mazoezi yamepangwa saa 14:00 kwa sababu ndipo uwanja upo wazi, mara nyingi wakati wa joto na mionzi mikali zaidi.",
-    data_en: "Conduit temperature, humidity, wind and a WBGT-like thermal exposure signal, updated every 15 minutes.",
+    data_en: "Conduit temperature, humidity, wind, and WBGT computed from its wet bulb and air temperature, updated every 15 minutes.",
     data_sw: "Joto, unyevu, upepo na ishara ya WBGT ya Conduit, inayosasishwa kila dakika 15.",
     insight_en: "Horizon-specialised models forecast exposure at +1h, +3h, +6h and +9h with calibrated uncertainty, and the Climate Reflex engine identifies the coming state transition.",
     insight_sw: "Mifumo maalum hutabiri kupatwa kwa +saa 1, +3, +6 na +9 pamoja na utata uliorekebishwa, na Climate Reflex hutambua mabadiliko ya hali yanayokuja.",

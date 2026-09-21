@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useForecast } from "@/lib/contexts/situation";
 import { useLanguage } from "@/lib/contexts/language";
+import { horizonScores } from "@/lib/afya/forecast-engine";
 import { STATES } from "@/lib/afya/constants";
 import { fmtTime } from "@/lib/afya/format";
 import ForecastChart from "@/components/charts/ForecastChart";
@@ -77,7 +78,7 @@ export default function ForecastPage() {
         <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
           <div>
             <CardTitle className="mb-0">
-              {lang === "sw" ? "Chati ya Utabiri" : "WBGT-like Exposure Forecast"}
+              {lang === "sw" ? "Chati ya Utabiri" : "WBGT Forecast (shade)"}
             </CardTitle>
             <CardMeta>
               {expected_peak
@@ -103,18 +104,20 @@ export default function ForecastPage() {
 
       {/* Horizon cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { h: f1h, key: "horizon_1h", mae: "0.57" },
-          { h: f3h, key: "horizon_3h", mae: "0.93" },
-          { h: f6h, key: "horizon_6h", mae: "1.23" },
-          { h: f9h, key: "horizon_9h", mae: "1.58" },
-        ].map(({ h, key, mae }) => h ? (
+        {([
+          { h: f1h, key: "horizon_1h", horizon: "1h" },
+          { h: f3h, key: "horizon_3h", horizon: "3h" },
+          { h: f6h, key: "horizon_6h", horizon: "6h" },
+          { h: f9h, key: "horizon_9h", horizon: "9h" },
+        ] as const).map(({ h, key, horizon }) => h ? (
           <Card key={key}>
             <div className="flex items-start justify-between mb-2">
               <span className="font-semibold text-afya-charcoal text-sm">{t(key)}</span>
               <div className="text-right">
                 <span className="text-[10px] text-afya-muted border border-afya-border rounded px-1.5 py-0.5">{h.model}</span>
-                <div className="text-[9px] text-afya-muted/60 mt-0.5">MAE {mae}°C</div>
+                <div className="text-[9px] text-afya-muted/60 mt-0.5" title={lang === "sw" ? "Kwenye miezi ya majaribio" : "On the test months"}>
+                  MAE {horizonScores(horizon).mae.toFixed(2)}°C
+                </div>
               </div>
             </div>
             <div className="text-3xl font-bold text-afya-charcoal">{h.value.toFixed(1)}°C</div>

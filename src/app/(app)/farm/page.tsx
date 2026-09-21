@@ -46,6 +46,7 @@ interface FarmResponse {
     chirps: { chirps_7d_mm: number; chirps_30d_mm: number; chirps_percentile: number; chirps_dry_spell_days: number };
     era5: { era5_soil_moisture: number };
     demo_mode: boolean;
+    best_time_note?: "no_daylight_window" | null;
   };
 }
 
@@ -336,7 +337,13 @@ export default function FarmPage() {
                   </ul>
                 </>
               ) : (
-                <p className="text-sm text-afya-muted">{t("quality_suppressed")}</p>
+                <p className="text-sm text-afya-muted">
+                  {data?.situation.best_time_note === "no_daylight_window"
+                    ? lang === "sw"
+                      ? "Hakuna muda wa mchana uliobaki katika utabiri wa saa 9."
+                      : "No daylight window is left in the 9-hour forecast."
+                    : t("quality_suppressed")}
+                </p>
               )}
             </Card>
           </div>

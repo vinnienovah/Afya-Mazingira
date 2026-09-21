@@ -20,7 +20,7 @@ export interface IsoTime {
 
 export interface ForecastPoint {
   time: string; // ISO
-  value: number; // WBGT-like °C
+  value: number; // WBGT in shade, °C
   lower: number;
   upper: number;
   horizon_minutes: number; // 0 for now point
