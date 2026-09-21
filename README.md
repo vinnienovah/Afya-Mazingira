@@ -4,7 +4,13 @@ Heat and weather decisions for the JKUAT campus in Juja, Kenya, built on the Con
 
 Live at **[afya-mazingira.vercel.app](https://afya-mazingira.vercel.app)**. Built for Hack The Weather 2026 (JHUB Africa).
 
-`Next.js 16` · `React 19` · `TypeScript` · `Tailwind CSS 4` · `PostgreSQL / Drizzle` · `Recharts` · `Leaflet`
+[![Next.js](https://img.shields.io/badge/Next.js_16-black?logo=next.js)](https://nextjs.org)
+[![React](https://img.shields.io/badge/React_19-149ECA?logo=react)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Tailwind](https://img.shields.io/badge/Tailwind_4-38BDF8?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Drizzle-336791?logo=postgresql&logoColor=white)](https://orm.drizzle.team)
+[![Vercel](https://img.shields.io/badge/Vercel-black?logo=vercel&logoColor=white)](https://vercel.com)
+[![Leaflet](https://img.shields.io/badge/Leaflet-199900?logo=leaflet&logoColor=white)](https://leafletjs.com)
 
 ---
 
@@ -188,20 +194,40 @@ Also: sign-in with email and password or Google, email verification, saved plans
 Three real, redundant station feeds and Sentinel's quality checks feed one deterministic pipeline. A language model only rewords what the pipeline has already computed — it never produces a number, a time or a risk band itself.
 
 ```
-Conduit API --+
-CHORDS live --+--> 15-minute grid --> Sentinel checks --> features --+--> state (k-means)
-Archive CSV --+    duplicates counted   and data quality             |
-                   gaps marked                                       +--> forecast (ridge, per step)
-                   shade WBGT                                                  |
-                                                                               v
-                                  risk band per activity, best daylight window,
-                                  farm advisory, alerts
-                                               |
-ERA5-Land, Open-Meteo, Sentinel-2 --> regional context and county map
-                                               |
-                                               v
-                                  pages, briefing, email, push; language model
-                                  rewording, checked against the computed facts
+┌───────────────────────────────────────────────────────────────────────┐
+│ INGESTION   Conduit API · CHORDS live · Archive CSV                   │
+│             (3 fallbacks in order; the freshest live feed wins)       │
+└───────────────────────────────────┬───────────────────────────────────┘
+                                    ▼
+┌───────────────────────────────────────────────────────────────────────┐
+│ CLEAN + CHECK   15-minute grid · duplicates counted · gaps marked     │
+│                 Sentinel QC (rules + audits) · shade WBGT             │
+└───────────────────────────────────┬───────────────────────────────────┘
+                                    ▼
+┌───────────────────────────────────────────────────────────────────────┐
+│ FEATURES   25 signals — level, 1h change, 1h mean/std, hour-of-day    │
+│            and day-of-year (cyclic)                                   │
+└───────────────────────────────────┬───────────────────────────────────┘
+                                    ▼
+┌────────────────────────────┐        ┌───────────────────────────────┐
+│ STATE   k-means, 4 clusters │        │ FORECAST   ridge regression,  │
+│ (cool/warming/hot/cooling)  │        │ one model per 15-min step     │
+└──────────────┬──────────────┘        └───────────────┬───────────────┘
+               └──────────────────┬───────────────────┘
+                                   ▼
+┌───────────────────────────────────────────────────────────────────────┐
+│ DECISION   risk band per activity · best daylight window ·            │
+│            farm advisory · alert rules                                │
+│            (also fed by ERA5-Land / Open-Meteo / Sentinel-2 for       │
+│             the regional map and the 10 non-station counties)         │
+└───────────────────────────────────┬───────────────────────────────────┘
+                                    ▼
+┌───────────────────────────────────────────────────────────────────────┐
+│ DELIVERY   pages · printed briefing · email + push alerts             │
+│            language model rewords the result above — never computes  │
+│            one — and a checker rejects anything it states that the   │
+│            pipeline didn't                                            │
+└───────────────────────────────────────────────────────────────────────┘
 ```
 
 Code: `src/lib/afya/` holds the engines (`sources`, `sentinel`, `data-quality`, `feature-engine`, `state-engine`, `forecast-engine`, `risk-engine`, `best-time-engine`, `farm-engine`, `explanation`), `src/lib/afya/model/` the fitted models, `src/app/` the pages and API routes, `scripts/` the model fit, the station report and the database seed, `tests/` the tests.
