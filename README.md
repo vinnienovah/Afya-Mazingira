@@ -4,6 +4,8 @@ Heat and weather decisions for the JKUAT campus in Juja, Kenya, built on the Con
 
 Live at **[afya-mazingira.vercel.app](https://afya-mazingira.vercel.app)**. Built for Hack The Weather 2026 (JHUB Africa).
 
+**In one example.** A site supervisor in Juja is planning tomorrow's concrete pour. The station's own record shows how much the season matters: from January to March 2026 about half of all working hours were in the HIGH heat band for outdoor work, against about 3 % in July and August 2025. Afya Mazingira reads the station every 15 minutes, forecasts WBGT for the next nine hours, and tells the supervisor which daylight hours carry the least heat risk for construction, in English or Kiswahili.
+
 ---
 
 ## 1. Project name
@@ -231,6 +233,7 @@ Between them the team covers the environmental science behind the heat and farm 
 - **Add the sun to WBGT.** Calibrate the station's light sensor to irradiance so direct-sun WBGT can be computed, not only shade WBGT.
 - **More stations.** The CHORDS portal lists 75 3D-PAWS instruments in Kenya. The live feed address is a setting, and `npm run fit` refits from any station's archive in the same format.
 - **Refit monthly** as the archive grows, and publish the scores each time.
+- **Reach people without a smartphone.** Send the daily best window and heat alerts by SMS and WhatsApp. The first partner to approach is the Kiambu county agricultural extension service, which already advises farmers around Juja.
 - **CHIRPS rainfall** by point extraction from its gridded files, in place of ERA5-Land.
 - **Partners:** JHUB Africa for station access, Kiambu county agriculture officers for the farm advisory, and the JKUAT sports and estates departments as first users.
 
