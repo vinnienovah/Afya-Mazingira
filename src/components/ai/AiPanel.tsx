@@ -13,14 +13,14 @@ const SUGGESTED_EN = [
   "Why is exposure rising?",
   "What does this mean for outdoor work?",
   "Why is this the recommended time?",
-  "What changed since morning?",
+  "How reliable is this data right now?",
 ];
 
 const SUGGESTED_SW = [
   "Kwa nini kupatwa kunazidi?",
   "Hii ina maana gani kwa kazi za nje?",
   "Kwa nini huu ndio wakati unaopendekezwa?",
-  "Kilichobadilika tangu asubuhi ni nini?",
+  "Data hii ina uhakika kiasi gani sasa hivi?",
 ];
 
 type Mode = "standard" | "plain";
