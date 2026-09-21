@@ -162,7 +162,7 @@ export default function ForecastPage() {
 
       {/* Uncertainty by horizon, real data (upper - lower per horizon),
           not fabricated. Replaces a previous "secondary charts" section that
-          derived fake temperature/humidity/IR/wind values from the WBGT
+          derived temperature, humidity, IR and wind values from the WBGT
           forecast number via arbitrary formulas, that was never real data,
           so it's been removed rather than kept for the sake of having more
           charts on the page. */}
@@ -208,7 +208,7 @@ export default function ForecastPage() {
       </Card>
 
       {/* Explore further, points to the dedicated Climate History dashboard
-          rather than duplicating fake variable charts here. */}
+          rather than duplicating variable charts here. */}
       <Link
         href="/climate"
         className="flex items-center justify-between rounded-2xl border border-afya-border bg-white px-5 py-4 hover:border-afya-green/50 transition-colors group"
@@ -256,7 +256,7 @@ export default function ForecastPage() {
       )}
 
       {/* Provenance note, reflects the real data source behind this forecast,
-          not a hardcoded "demo data" claim regardless of what's actually live. */}
+          not a fixed claim regardless of what is actually live. */}
       <p className="text-[11px] text-afya-muted/60 text-center">
         {lang === "sw"
           ? `Utabiri unatolewa kutoka mfumo wa kisayansi wa AFYA MAZINGIRA. ${

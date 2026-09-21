@@ -139,8 +139,8 @@ export const PROVENANCE_LABELS: Record<string, { en: string; sw: string; icon: s
   DERIVED: { en: "AFYA MAZINGIRA DERIVED", sw: "IMECHAKATWA NA AFYA MAZINGIRA", icon: "◇" },
 };
 
-// Demo Conduit coordinates
-export const JKUAT_COORDS = { lat: -1.0931, lng: 37.0149 };
+// The Conduit@Empathy1 station, as its CHORDS exports give it (1,523 m).
+export const JKUAT_COORDS = { lat: -1.099736, lng: 37.014528 };
 export const JKUAT_NAME = "JKUAT / Juja Conduit Station";
 
 // Climate History dashboard locations

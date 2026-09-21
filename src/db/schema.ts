@@ -202,7 +202,7 @@ export const modelMetadata = pgTable("model_metadata", {
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ERA5 context (demo-seeded)
+// ERA5 context (not used by the app yet; context is fetched live)
 export const era5Context = pgTable("era5_context", {
   id: serial("id").primaryKey(),
   valid_time: timestamp("valid_time", { withTimezone: true }).notNull(),
@@ -218,7 +218,7 @@ export const era5Context = pgTable("era5_context", {
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// CHIRPS context (demo-seeded)
+// Rainfall context (not used by the app yet; context is fetched live)
 export const chirpsContext = pgTable("chirps_context", {
   id: serial("id").primaryKey(),
   valid_date: date("valid_date").notNull(),

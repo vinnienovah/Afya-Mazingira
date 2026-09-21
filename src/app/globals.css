@@ -153,6 +153,10 @@ body {
 }
 
 /* Leaflet integration (Regional Environmental Outlook) */
+.afya-basemap {
+  filter: grayscale(0.9) brightness(1.06) contrast(0.92);
+}
+
 .leaflet-container {
   font-family: var(--font-family-sans);
   background: #e8f0ea;
