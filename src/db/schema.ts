@@ -87,6 +87,9 @@ export const notificationRules = pgTable("notification_rules", {
   rule_type: text("rule_type").notNull(),
   activity_type: text("activity_type"),
   enabled: boolean("enabled").notNull().default(true),
+  // Bookkeeping for the cron-driven alert check (/api/cron/check-alerts) —
+  // prevents re-emailing the same still-true condition on every run.
+  last_triggered_at: timestamp("last_triggered_at", { withTimezone: true }),
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

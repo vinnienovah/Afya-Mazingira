@@ -44,6 +44,8 @@ export default function NotificationsPage() {
   const [ruleType, setRuleType] = useState("state_transition");
   const [ruleActivity, setRuleActivity] = useState("general");
   const [saving, setSaving] = useState(false);
+  const [testSending, setTestSending] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) loadRules();
@@ -91,6 +93,30 @@ export default function NotificationsPage() {
   async function deleteRule(id: number) {
     await fetch(`/api/notifications/${id}`, { method: "DELETE", credentials: "include" });
     loadRules();
+  }
+
+  async function sendTestAlert() {
+    setTestSending(true);
+    setTestResult(null);
+    try {
+      const res = await fetch("/api/notifications/test", { method: "POST", credentials: "include" });
+      const data = await res.json();
+      if (!res.ok) {
+        setTestResult(data.message ?? t("error_generic"));
+      } else if (data.test_email_sent) {
+        setTestResult(lang === "sw"
+          ? "Hakuna sheria iliyochochewa na hali za sasa — barua pepe ya majaribio imetumwa."
+          : "None of your rules are triggered by current conditions — sent a test email instead.");
+      } else {
+        setTestResult(lang === "sw"
+          ? `Barua pepe imetumwa kwa: ${data.triggered.join(", ")}`
+          : `Email sent for: ${data.triggered.join(", ")}`);
+      }
+    } catch {
+      setTestResult(t("error_generic"));
+    } finally {
+      setTestSending(false);
+    }
   }
 
   async function enablePush() {
@@ -200,17 +226,36 @@ export default function NotificationsPage() {
       </Card>
 
       {/* Rules */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-base font-semibold text-afya-charcoal">{t("notification_rules")}</h2>
-        <button
-          onClick={() => setShowForm((v) => !v)}
-          className="inline-flex items-center gap-1.5 rounded-xl bg-afya-green px-3 py-2 text-sm font-semibold text-white hover:bg-afya-green/90 transition-colors"
-          aria-expanded={showForm}
-        >
-          <Plus className="w-4 h-4" strokeWidth={2.5} aria-hidden="true" />
-          {t("new_rule")}
-        </button>
+        <div className="flex items-center gap-2">
+          {rules.length > 0 && (
+            <button
+              onClick={sendTestAlert}
+              disabled={testSending}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-afya-border px-3 py-2 text-sm font-semibold text-afya-charcoal hover:bg-afya-canvas disabled:opacity-50 transition-colors"
+            >
+              {testSending && <RefreshCw className="w-4 h-4 animate-spin" strokeWidth={2} aria-hidden="true" />}
+              {t("send_test_alert")}
+            </button>
+          )}
+          <button
+            onClick={() => setShowForm((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-afya-green px-3 py-2 text-sm font-semibold text-white hover:bg-afya-green/90 transition-colors"
+            aria-expanded={showForm}
+          >
+            <Plus className="w-4 h-4" strokeWidth={2.5} aria-hidden="true" />
+            {t("new_rule")}
+          </button>
+        </div>
       </div>
+
+      {testResult && (
+        <div className="rounded-xl border border-afya-green/30 bg-afya-green/8 px-4 py-3 flex gap-2" role="status">
+          <CheckCircle2 className="w-4 h-4 text-afya-green shrink-0 mt-0.5" strokeWidth={1.8} aria-hidden="true" />
+          <p className="text-sm text-afya-charcoal">{testResult}</p>
+        </div>
+      )}
 
       {/* New rule form */}
       {showForm && (
@@ -350,11 +395,16 @@ export default function NotificationsPage() {
         </div>
       )}
 
-      {/* Demo example notice */}
-      <div className="rounded-xl border border-afya-gold/30 bg-afya-gold/8 px-4 py-3">
+      {/* How delivery actually works — set expectations honestly */}
+      <div className="rounded-xl border border-afya-border bg-afya-canvas/60 px-4 py-3 space-y-1.5">
         <p className="text-xs text-afya-muted">
           {lang === "sw"
-            ? "Onyo: Katika hali ya uzalishaji, arifa zinatumwa kwa kutumia VAPID keys. Badilisha mipangilio yako kwa matumizi halisi."
+            ? "Sheria zako zinaangaliwa mara moja kwa siku (karibu 08:00 EAT) dhidi ya hali halisi, na barua pepe hutumwa kwa anwani ya akaunti yako ikiwa sheria itachochewa. Hii si arifa za wakati halisi — mpango wa bure wa Vercel unaruhusu kazi ya kupanga mara moja kwa siku tu."
+            : "Your rules are checked once daily (~08:00 EAT) against real conditions, and an email is sent to your account address if a rule is triggered. This is a daily check, not real-time — Vercel's free (Hobby) plan only allows a scheduled job to run once per day."}
+        </p>
+        <p className="text-xs text-afya-muted">
+          {lang === "sw"
+            ? "Onyo: Kwa utumaji wa push wa uzalishaji, weka mazingira ya VAPID_PUBLIC_KEY na VAPID_PRIVATE_KEY."
             : "Note: For production push delivery, configure VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY environment variables."}
         </p>
       </div>
