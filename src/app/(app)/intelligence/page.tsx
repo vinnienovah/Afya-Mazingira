@@ -46,6 +46,8 @@ export default function IntelligencePage() {
   }
 
   const { current, state, forecast, quality, risk, era5, chirps, sentinel, contributors, state_history_24h } = situation;
+  const era5Ok = era5.available !== false;
+  const rainOk = chirps.available !== false;
   const f3h = forecast.find((f) => f.horizon === "3h");
   const transition = state.transition_likelihood;
 
@@ -216,10 +218,10 @@ export default function IntelligencePage() {
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
           {[
-            { l_en: "ERA5 Temp", l_sw: "Joto la ERA5", v: `${era5.era5_temp_c.toFixed(1)}°C` },
-            { l_en: "ERA5 RH", l_sw: "Unyevu wa ERA5", v: `${era5.era5_relative_humidity.toFixed(0)}%` },
-            { l_en: "ERA5 Wind", l_sw: "Upepo wa ERA5", v: `${era5.era5_wind_speed_ms.toFixed(1)} m/s` },
-            { l_en: "ERA5 Solar", l_sw: "Mionzi ya ERA5", v: `${era5.era5_solar_wm2.toFixed(0)} W/m²` },
+            { l_en: "ERA5 Temp", l_sw: "Joto la ERA5", v: era5Ok ? `${era5.era5_temp_c.toFixed(1)}°C` : "-" },
+            { l_en: "ERA5 RH", l_sw: "Unyevu wa ERA5", v: era5Ok ? `${era5.era5_relative_humidity.toFixed(0)}%` : "-" },
+            { l_en: "ERA5 Wind", l_sw: "Upepo wa ERA5", v: era5Ok ? `${era5.era5_wind_speed_ms.toFixed(1)} m/s` : "-" },
+            { l_en: "ERA5 Solar", l_sw: "Mionzi ya ERA5", v: era5Ok ? `${era5.era5_solar_wm2.toFixed(0)} W/m²` : "-" },
           ].map((item, i) => (
             <div key={i} className="rounded-lg border border-afya-border bg-afya-canvas/50 px-3 py-2">
               <div className="text-[10px] text-afya-muted">{lang === "sw" ? item.l_sw : item.l_en}</div>
@@ -234,13 +236,13 @@ export default function IntelligencePage() {
           <div className="flex gap-6">
             <div>
               <div className="text-lg font-bold" style={{ color: era5.local_temp_anomaly_c >= 0 ? "#E27832" : "#247B78" }}>
-                {era5.local_temp_anomaly_c >= 0 ? "+" : ""}{era5.local_temp_anomaly_c.toFixed(1)}°C
+                {era5Ok ? `${era5.local_temp_anomaly_c >= 0 ? "+" : ""}${era5.local_temp_anomaly_c.toFixed(1)}°C` : "-"}
               </div>
               <div className="text-[10px] text-afya-muted">{lang === "sw" ? "Tofauti ya Joto" : "Temp anomaly"}</div>
             </div>
             <div>
               <div className="text-lg font-bold" style={{ color: era5.local_humidity_anomaly >= 0 ? "#247B78" : "#E27832" }}>
-                {era5.local_humidity_anomaly >= 0 ? "+" : ""}{era5.local_humidity_anomaly.toFixed(1)}%
+                {era5Ok ? `${era5.local_humidity_anomaly >= 0 ? "+" : ""}${era5.local_humidity_anomaly.toFixed(1)}%` : "-"}
               </div>
               <div className="text-[10px] text-afya-muted">{lang === "sw" ? "Tofauti ya Unyevu" : "RH anomaly"}</div>
             </div>
@@ -263,12 +265,12 @@ export default function IntelligencePage() {
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {[
-            { l_en: "Today's rainfall", l_sw: "Mvua ya leo", v: `${chirps.chirps_mm.toFixed(1)} mm` },
-            { l_en: "7-day total", l_sw: "Jumla ya siku 7", v: `${chirps.chirps_7d_mm.toFixed(1)} mm` },
-            { l_en: "30-day total", l_sw: "Jumla ya siku 30", v: `${chirps.chirps_30d_mm.toFixed(1)} mm` },
-            { l_en: "Rainfall percentile", l_sw: "Asilimia ya mvua", v: `${chirps.chirps_percentile.toFixed(0)}th` },
-            { l_en: "Dry spell", l_sw: "Kipindi kavu", v: `${chirps.chirps_dry_spell_days} ${lang === "sw" ? "siku" : "days"}` },
-            { l_en: "Wet spell", l_sw: "Kipindi cha mvua", v: `${chirps.chirps_wet_spell_days} ${lang === "sw" ? "siku" : "days"}` },
+            { l_en: "Today's rainfall", l_sw: "Mvua ya leo", v: rainOk ? `${chirps.chirps_mm.toFixed(1)} mm` : "-" },
+            { l_en: "7-day total", l_sw: "Jumla ya siku 7", v: rainOk ? `${chirps.chirps_7d_mm.toFixed(1)} mm` : "-" },
+            { l_en: "30-day total", l_sw: "Jumla ya siku 30", v: rainOk ? `${chirps.chirps_30d_mm.toFixed(1)} mm` : "-" },
+            { l_en: "Rainfall percentile", l_sw: "Asilimia ya mvua", v: rainOk ? `${chirps.chirps_percentile.toFixed(0)}th` : "-" },
+            { l_en: "Dry spell", l_sw: "Kipindi kavu", v: rainOk ? `${chirps.chirps_dry_spell_days} ${lang === "sw" ? "siku" : "days"}` : "-" },
+            { l_en: "Wet spell", l_sw: "Kipindi cha mvua", v: rainOk ? `${chirps.chirps_wet_spell_days} ${lang === "sw" ? "siku" : "days"}` : "-" },
           ].map((item, i) => (
             <div key={i} className="rounded-lg border border-afya-border bg-afya-canvas/50 px-3 py-2">
               <div className="text-[10px] text-afya-muted">{lang === "sw" ? item.l_sw : item.l_en}</div>
