@@ -19,6 +19,7 @@ import {
   type FeatureVector,
 } from "../src/lib/afya/feature-engine";
 import type { DemoObservation } from "../src/lib/afya/demo-observations";
+import { riskRank, wbgtToRisk } from "../src/lib/afya/constants";
 
 const CALIBRATION_FROM = "2026-04-01T00:00:00Z";
 const TEST_FROM = "2026-06-01T00:00:00Z";
@@ -184,6 +185,11 @@ function main() {
     const band80 = quantile(calErrors, 0.8);
     const band95 = quantile(calErrors, 0.95);
     const testErrors = samples.test.map((s) => Math.abs(s.y - predict(s.x)));
+    // The risk band is what people act on, so it is scored too: how often the
+    // forecast band matches the one observed, and how often it is lower.
+    const bandGap = samples.test.map((s) => riskRank(wbgtToRisk(predict(s.x))) - riskRank(wbgtToRisk(s.y)));
+    const bandShare = (keep: (d: number) => boolean) =>
+      round((bandGap.filter(keep).length / bandGap.length) * 100, 1);
     const persistenceErrors = samples.test.map((s) => Math.abs(s.y - s.now));
 
     steps.push({
@@ -195,6 +201,9 @@ function main() {
       test_mae: round(mean(testErrors), 3),
       persistence_mae: round(mean(persistenceErrors), 3),
       coverage80: round(testErrors.filter((e) => e <= band80).length / testErrors.length, 3),
+      band_same_pct: bandShare((d) => d === 0),
+      band_lower_pct: bandShare((d) => d < 0),
+      band_higher_pct: bandShare((d) => d > 0),
       n_train: samples.train.length,
       n_calibration: samples.calibration.length,
       n_test: samples.test.length,
@@ -309,7 +318,8 @@ function main() {
   for (const s of steps.filter((s) => [4, 12, 24, 36].includes(s.step))) {
     console.log(
       `+${s.step * 15} min  MAE ${s.test_mae} degC (no-change ${s.persistence_mae})  ` +
-        `band80 ±${s.band80}  covered ${Math.round(s.coverage80 * 100)}%  test n=${s.n_test}`,
+        `band80 ±${s.band80}  covered ${Math.round(s.coverage80 * 100)}%  same band ${s.band_same_pct}%  ` +
+        `lower ${s.band_lower_pct}%  test n=${s.n_test}`,
     );
   }
   console.log("states", JSON.stringify(summary));

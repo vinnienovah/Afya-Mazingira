@@ -39,6 +39,8 @@ export function horizonScores(horizon: Horizon) {
     persistence_mae: m.persistence_mae,
     band80: m.band80,
     coverage80: m.coverage80,
+    band_same_pct: m.band_same_pct,
+    band_lower_pct: m.band_lower_pct,
     n_test: m.n_test,
   };
 }

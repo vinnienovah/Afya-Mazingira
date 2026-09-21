@@ -7,7 +7,7 @@ const at = (minutes: number) => new Date(Date.UTC(2026, 8, 1, 6, 0) + minutes * 
 function row(minutes: number, extra: Record<string, unknown> = {}) {
   return {
     ts: at(minutes),
-    temp_sht: 20, humidity_sht: 60, press_bmx: 851, wind_spd: 1, wind_dir: 90, wind_gust: 2,
+    temp_sht: 20, temp_bmx: 20, temp_mcp: 20, heat_idx: 20, humidity_sht: 60, press_bmx: 851, wind_spd: 1, wind_dir: 90, wind_gust: 2,
     si1145_vis: 300, si1145_ir: 800, wet_bulb_temp: 15, wet_bulb_globe_temp: 12, rg1: 0, rg2: 0,
     ...extra,
   };

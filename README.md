@@ -46,6 +46,16 @@ The station (Conduit@Empathy1, JKUAT, lat -1.0997, lon 37.0145, 1,523 m) is the 
 
 **Cleaning.** Every source goes onto one 15-minute grid. Repeated timestamps are removed and counted. The station's missing-value code (-999.9) is treated as missing. Gaps up to 30 minutes are interpolated; longer ones are carried forward so the engines keep running, and every such value is marked as filled in. Data quality is GOOD, DEGRADED (over an hour old, or a critical reading filled in) or POOR (over three hours old), and POOR suppresses recommendations.
 
+**Station health first.** Before any reading is used it passes the quality rules of the Conduit Sentinel specification, scaled to 15-minute data: plausible ranges, sudden jumps, readings stuck for hours, the three thermometers disagreeing, a sensor silent all day, the two rain gauges disagreeing, and the firmware's derived values. `npm run station-report` runs them over the whole archive; the **Station Health** page shows that report and the same checks on the last 24 hours. Over the 465 days on record:
+
+- the station is healthy most of the time: a mean daily score of 98.8 out of 100, no day below 80, and only two gaps longer than an hour;
+- the firmware WBGT is more than 1.5 °C below the wet bulb in 42.9 % of readings (62 % at night), so the app does not use it;
+- rain gauge 2 recorded nothing on 53 days when gauge 1 measured rain, so rainfall totals come from ERA5-Land;
+- the gust-direction column is a copy of the gust speed on every day;
+- the firmware wet bulb agrees with Stull (2011) to 0.032 °C, so the app uses it.
+
+These go on the page as findings to report to JHUB.
+
 **WBGT from the station's own sensors.** The station's firmware WBGT column reads **below the wet bulb in 63.6 % of the archive**, which a real WBGT cannot do. We do not use it. WBGT here is the ISO 7243 form without solar load, 0.7 x wet bulb + 0.3 x air temperature, from the station's wet bulb (which agrees with Stull (2011) to 0.03 °C) and its air temperature. When the firmware value falls below the wet bulb, the Why? page says so.
 
 **Environmental states.** k-means with four clusters on the archive's training months (June 2025 to March 2026), named by their centres:
@@ -61,12 +71,14 @@ The "next state" shown on the page is the one that most often followed in the ar
 
 **Forecast.** One ridge regression for each 15-minute step ahead, from 25 features of the last hour of station data (temperature, humidity, pressure, wind, light, wet bulb, WBGT, their one-hour changes and means, and time of day and year). Fitted on June 2025 to March 2026, the 80 % band set from April and May 2026, and scored on June to September 2026, which the fit never saw:
 
-| Lead time | Mean error | Assuming no change | 80 % band | Inside the band |
-|---|---|---|---|---|
-| +1 h | 0.45 °C | 0.64 °C | ±0.74 °C | 81 % |
-| +3 h | 0.79 °C | 1.64 °C | ±1.21 °C | 79 % |
-| +6 h | 0.90 °C | 2.85 °C | ±1.31 °C | 76 % |
-| +9 h | 0.98 °C | 3.56 °C | ±1.54 °C | 79 % |
+| Lead time | Mean error | Assuming no change | 80 % band | Inside the band | Same risk band | Band too low |
+|---|---|---|---|---|---|---|
+| +1 h | 0.45 °C | 0.64 °C | ±0.74 °C | 81 % | 91.8 % | 4.3 % |
+| +3 h | 0.79 °C | 1.64 °C | ±1.21 °C | 79 % | 86.2 % | 5.7 % |
+| +6 h | 0.90 °C | 2.85 °C | ±1.31 °C | 76 % | 84.9 % | 7.5 % |
+| +9 h | 0.98 °C | 3.56 °C | ±1.54 °C | 79 % | 85.2 % | 8.3 % |
+
+The last two columns score what people act on: how often the forecast puts the hour in the same risk band as the station then measured, and how often in a lower one, the error that could leave someone unprepared.
 
 `npm run fit` refits both models from the archive through the same cleaning and feature code the app runs.
 
@@ -84,6 +96,7 @@ The "next state" shown on the page is the one that most often followed in the ar
 | **Farm Advisory** | Irrigation depth in mm and litres per m², spray and field-work windows, crop heat stress and planting outlook for 7 crops and 4 growth stages |
 | **Risk Map** | 11 county boundaries with outlook, heat, rain, vegetation layers and a time slider; station-backed versus regional marked on each |
 | **Dashboard** | Live climate variables, a climate history explorer over any date range, and historical replay: step through a past day with the future hidden, then reveal what the station recorded |
+| **Station Health** | Sensor-group status for the last 24 hours, the daily health score since June 2025, firmware and thermometer audits, the rules, and findings to report to JHUB |
 | **Why?** | Data quality flags, the state timeline, the fitted model table with test-month scores, and the regional context |
 | **Operations** | A day's planned activities, each judged against the forecast with a cooler window suggested when there is one |
 | **Flood Risk** | Current rainfall and soil saturation by county. Conditions only; not a flood forecast |
@@ -122,7 +135,7 @@ ERA5-Land, Open-Meteo, Sentinel-2 ---> regional context and county map
                                      language model rewording, checked against the computed facts
 ```
 
-Code: `src/lib/afya/` holds the engines (`sources`, `data-quality`, `feature-engine`, `state-engine`, `forecast-engine`, `risk-engine`, `best-time-engine`, `farm-engine`, `explanation`), `src/lib/afya/model/` the fitted models, `src/app/` the pages and API routes, `scripts/` the model fit and database seed, `tests/` the tests.
+Code: `src/lib/afya/` holds the engines (`sources`, `sentinel`, `data-quality`, `feature-engine`, `state-engine`, `forecast-engine`, `risk-engine`, `best-time-engine`, `farm-engine`, `explanation`), `src/lib/afya/model/` the fitted models, `src/app/` the pages and API routes, `scripts/` the model fit, the station report and the database seed, `tests/` the tests.
 
 ## 8. Installation and setup
 
@@ -149,9 +162,10 @@ Open the app and start at **Situation**. Choose an activity to see its risk and 
 | Command | What it does |
 |---|---|
 | `npm run dev` | Development server on http://localhost:3000 |
-| `npm test` | 23 tests, no network |
+| `npm test` | 30 tests, no network |
 | `npm run typecheck` / `npm run lint` | Type check and lint |
 | `npm run fit` | Refit the forecast and states from the archive |
+| `npm run station-report` | Rerun the station health checks over the archive |
 | `npm run build` | Production build |
 
 Main API routes (JSON):
@@ -164,6 +178,7 @@ Main API routes (JSON):
 | `POST /api/farm` | Advisory for `{crop, stage}` |
 | `POST /api/replay` | Hour-by-hour replay of a past day `{date}` |
 | `GET /api/map` | County indicators and satellite acquisitions |
+| `GET /api/station-health` | The archive health report and the same checks on the last 24 hours |
 | `GET /api/climate-history` | Any date range, daily or hourly, station or ERA5-Land |
 
 ## 10. Data sources
@@ -199,6 +214,8 @@ Demo video: _link to be added_
 
 ![Why? page with the fitted model table](docs/screenshots/why.png)
 
+![Station Health](docs/screenshots/station-health.png)
+
 ![Operations](docs/screenshots/operations.png)
 
 ## 13. Team members
@@ -229,14 +246,14 @@ MIT. See [LICENSE](LICENSE). Station and reanalysis data remain under their prov
 - **Rainfall context is ERA5-Land,** not CHIRPS.
 - **When ERA5-Land or the satellite catalogue cannot be reached** (and in historical replay, which does not fetch past context), their panels show "-" instead of numbers and data quality carries a `regional_context_unavailable` flag. No stand-in values are shown as data.
 - **The flood page shows conditions,** rainfall and soil saturation, not a flood forecast.
-- **The Conduit API can lag by most of a day;** the CHORDS feed covers for it.
+- **The Conduit API can lag by most of a day;** the CHORDS feed covers for it, but carries no rain readings, so live rain is only seen when the Conduit API is current. Rainfall totals always come from ERA5-Land.
 - **Rate limits are per server instance,** so they are weak on a serverless host.
 - **The Kiswahili text** should be checked by a fluent speaker before wider use.
 
 ## Reproducibility
 
 - `npm test` runs every test without network access.
-- `npm run fit` rebuilds `src/lib/afya/model/wbgt-forecast.json` and `states.json` from the archive. The split is fixed by date and the clustering is seeded, so a refit on the same archive gives the same models.
+- `npm run fit` rebuilds `src/lib/afya/model/wbgt-forecast.json` and `states.json` from the archive, and `npm run station-report` rebuilds `station-health.json`. The split is fixed by date and the clustering is seeded, so a refit on the same archive gives the same models.
 
 ## Build timeline
 

@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "fit": "tsx scripts/fit-models.ts",
+    "station-report": "tsx scripts/station-report.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
   },

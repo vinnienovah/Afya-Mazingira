@@ -6,6 +6,7 @@ import {
   Search, LayoutDashboard, TrendingUp, CalendarCheck, Map as MapIcon,
   BrainCircuit, Building2, History, Bell, User, Info, Printer,
   Languages, Sparkles, X, CornerDownLeft, Sprout, BookOpen,
+ Activity,
 } from "lucide-react";
 import { useLanguage } from "@/lib/contexts/language";
 
@@ -36,6 +37,7 @@ export default function CommandPalette() {
       { id: "p-stories", group: "pages", labelKey: "nav_stories", icon: BookOpen, keywords: "stories case studies impact hadithi matumizi", run: go("/stories") },
       { id: "p-map", group: "pages", labelKey: "nav_map", icon: MapIcon, keywords: "map counties regional ramani hatari", run: go("/map") },
       { id: "p-intelligence", group: "pages", labelKey: "nav_intelligence", icon: BrainCircuit, keywords: "why intelligence model contributors ujasusi", run: go("/intelligence") },
+      { id: "p-health", group: "pages", labelKey: "nav_health", icon: Activity, keywords: "station health quality sensors sentinel afya kituo", run: go("/health") },
       { id: "p-operations", group: "pages", labelKey: "nav_operations", icon: Building2, keywords: "operations institutional command uendeshaji", run: go("/operations") },
       { id: "p-replay", group: "pages", labelKey: "nav_replay", icon: History, keywords: "replay historical simulation marudio", run: go("/replay") },
       { id: "p-notifications", group: "pages", labelKey: "nav_notifications", icon: Bell, keywords: "notifications alerts push arifa", run: go("/notifications") },
