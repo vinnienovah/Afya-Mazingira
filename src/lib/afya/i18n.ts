@@ -436,6 +436,14 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     // Navigation additions
     nav_farm: "Farm Advisory",
     nav_stories: "Case Studies",
+    nav_flood: "Flood Risk",
+    flood_subtitle: "Real rainfall + soil saturation across the 11 monitored counties — conditions that make flash flooding more likely.",
+    flood_honesty_note: "This shows current rainfall and soil-saturation conditions, computed from real ERA5-Land data — it is not a flood-susceptibility map. A true susceptibility map needs terrain/drainage data (elevation, flow accumulation, river proximity) that this deployment doesn't have, so it isn't shown here rather than approximated.",
+    flood_high_count: "HIGH risk counties",
+    flood_elevated_count: "ELEVATED risk counties",
+    flood_counties_monitored: "Counties monitored",
+    flood_soil_moisture: "Soil moisture",
+    flood_data_note: "Rainfall and soil moisture: real ERA5-Land data, refreshed every 5 minutes. Risk level: rain (last 24h) and soil saturation compared against thresholds documented in the codebase — a coarse, real-data indicator, not a hazard model.",
 
     // Map
     map_boundaries_note: "County boundaries: official Kenya administrative dataset",
@@ -941,6 +949,14 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     // Navigation additions
     nav_farm: "Ushauri wa Shamba",
     nav_stories: "Hadithi za Matumizi",
+    nav_flood: "Hatari ya Mafuriko",
+    flood_subtitle: "Mvua halisi + unyevu wa udongo katika kaunti 11 zinazofuatiliwa — hali zinazoongeza uwezekano wa mafuriko ya ghafla.",
+    flood_honesty_note: "Hii inaonyesha hali za sasa za mvua na unyevu wa udongo, zilizohesabiwa kutoka data halisi ya ERA5-Land — si ramani ya uwezekano wa mafuriko. Ramani halisi ya uwezekano inahitaji data ya ardhi/mifereji (mwinuko, mtiririko, ukaribu wa mto) ambayo mradi huu hauna, hivyo haionyeshwi hapa badala ya kukisiwa.",
+    flood_high_count: "Kaunti za hatari JUU",
+    flood_elevated_count: "Kaunti za hatari ILIYOINUKA",
+    flood_counties_monitored: "Kaunti zinazofuatiliwa",
+    flood_soil_moisture: "Unyevu wa udongo",
+    flood_data_note: "Mvua na unyevu wa udongo: data halisi ya ERA5-Land, inasasishwa kila dakika 5. Kiwango cha hatari: mvua (saa 24 zilizopita) na unyevu wa udongo vinalinganishwa na vipimo vilivyowekwa kwenye msimbo — kiashiria halisi lakini chepesi, si mfumo wa hatari.",
 
     // Map
     map_boundaries_note: "Mipaka ya kaunti: data rasmi ya utawala ya Kenya",
