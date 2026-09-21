@@ -56,7 +56,7 @@ export default function MapPage() {
   const [satIdx, setSatIdx] = useState(0);
   const [showSatTimeline, setShowSatTimeline] = useState(false);
 
-  const counties: CountyFeature[] = data?.counties?.features ?? [];
+  const counties: CountyFeature[] = useMemo(() => data?.counties?.features ?? [], [data]);
   const satellites: SatelliteAcquisition[] = data?.satellites ?? [];
 
   // Indicator lookup keyed by county name (boundaries are authoritative geometry)

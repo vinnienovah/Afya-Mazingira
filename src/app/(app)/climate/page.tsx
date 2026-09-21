@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryParam } from "@/lib/use-query-param";
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -91,19 +92,17 @@ type DashboardTab = "live" | "history" | "replay";
 export default function DashboardPage() {
   const { t } = useLanguage();
   const router = useRouter();
-  const [tab, setTab] = useState<DashboardTab>("live");
+  const requested = useQueryParam("tab");
+  const [chosen, setChosen] = useState<DashboardTab | null>(null);
+  const tab: DashboardTab =
+    chosen ?? (requested === "history" || requested === "replay" ? requested : "live");
 
   useEffect(() => {
     document.title = `${t("nav_climate")} | AFYA MAZINGIRA`;
-    const requested = new URLSearchParams(window.location.search).get("tab");
-    if (requested === "history" || requested === "replay" || requested === "live") {
-      setTab(requested);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [t]);
 
   function selectTab(next: DashboardTab) {
-    setTab(next);
+    setChosen(next);
     router.replace(next === "live" ? "/climate" : `/climate?tab=${next}`, { scroll: false });
   }
 

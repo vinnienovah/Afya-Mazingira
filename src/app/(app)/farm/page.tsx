@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useLanguage } from "@/lib/contexts/language";
 import { CROP_PROFILES, type GrowthStage, type FarmAdvisory } from "@/lib/afya/farm-engine";
 import { fmtWindow, fmtTime } from "@/lib/afya/format";
@@ -53,33 +53,36 @@ export default function FarmPage() {
   const { t, lang } = useLanguage();
   const [crop, setCrop] = useState("maize");
   const [stage, setStage] = useState<GrowthStage>("vegetative");
-  const [data, setData] = useState<FarmResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // One result, tagged with the crop and stage it answers, so a slow reply
+  // for an earlier choice never shows under a later one.
+  const [result, setResult] = useState<{ key: string; data: FarmResponse | null } | null>(null);
+  const key = `${crop}|${stage}`;
 
-  const load = useCallback(async (c: string, s: GrowthStage) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/farm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ crop: c, stage: s }),
+  useEffect(() => {
+    let active = true;
+    const answering = `${crop}|${stage}`;
+    fetch("/api/farm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ crop, stage }),
+    })
+      .then((res) => (res.ok ? (res.json() as Promise<FarmResponse>) : null))
+      .catch(() => null)
+      .then((data) => {
+        if (active) setResult({ key: answering, data });
       });
-      if (!res.ok) throw new Error("failed");
-      setData(await res.json());
-    } catch {
-      setError(t("error_generic"));
-    } finally {
-      setLoading(false);
-    }
-  }, [t]);
+    return () => {
+      active = false;
+    };
+  }, [crop, stage]);
+
+  const loading = result?.key !== key;
+  const data = loading ? null : result.data;
+  const error = !loading && !data ? t("error_generic") : null;
 
   useEffect(() => {
     document.title = `${t("farm_title")} | AFYA MAZINGIRA`;
   }, [t]);
-
-  useEffect(() => { load(crop, stage); }, [crop, stage, load]);
 
   const adv = data?.advisory;
   const wb = adv?.water_balance;
