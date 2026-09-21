@@ -12,6 +12,10 @@ next-env.d.ts
 .DS_Store
 data/raw/
 ml/artifacts/
+# Raw GADM Kenya admin boundaries (county/subcounty/ward shapefiles) — kept
+# locally for future location-picker work, too large/binary for git. When
+# actually wired in, convert to a trimmed GeoJSON like public/geo/counties.geojson.
+gadm41_KEN_shp/
 .vercel
 .env*
 .agents/

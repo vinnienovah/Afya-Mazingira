@@ -361,6 +361,7 @@ function CountyPanel({
   county: CountyFeature["properties"]; onClose: () => void; lang: string; t: (k: string) => string;
 }) {
   const p = county;
+  const hasGround = p.sources.includes("Conduit station");
   return (
     <Card>
       <div className="flex items-start justify-between mb-3">
@@ -372,6 +373,19 @@ function CountyPanel({
           <X className="w-4 h-4" strokeWidth={2} />
         </button>
       </div>
+
+      <div
+        className={cn(
+          "mb-3 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold tracking-wide",
+          hasGround ? "border-afya-green/40 bg-afya-green/8 text-afya-green" : "border-[#247B78]/40 bg-[#247B78]/8 text-[#247B78]",
+        )}
+      >
+        <span className={cn("w-1.5 h-1.5 rounded-full", hasGround ? "bg-afya-green" : "bg-[#247B78]")} aria-hidden="true" />
+        {hasGround ? t("ground_regional_intelligence") : t("regional_intelligence")}
+      </div>
+      <p className="text-[10px] text-afya-muted/70 mb-3 -mt-2">
+        {hasGround ? t("ground_regional_sub") : t("regional_intelligence_sub")}
+      </p>
 
       <RiskChip level={p.outlook_category} size="md" />
 
