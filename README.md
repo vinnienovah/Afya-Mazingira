@@ -96,7 +96,7 @@ The last two columns score what people act on: how often the forecast puts the h
 | **Forecast** | Measured WBGT with the 15-minute forecast and its band, shaded by state |
 | **Plan Activity** | Best-time search for an activity, duration and time window, with reasons, an alternative and saved plans |
 | **Farm Advisory** | Irrigation depth in mm and litres per m², spray and field-work windows, crop heat stress and planting outlook for 7 crops and 4 growth stages |
-| **Risk Map** | 11 county boundaries with outlook, heat, rain, vegetation layers and a time slider; station-backed versus regional marked on each |
+| **Risk Map** | Leaflet on OpenStreetMap: 11 county boundaries with outlook, heat, rain and vegetation layers and a time slider; station-backed versus regional marked on each |
 | **Dashboard** | Live climate variables, a climate history explorer over any date range, and historical replay: step through a past day with the future hidden, then reveal what the station recorded |
 | **Station Health** | Sensor-group status for the last 24 hours, the daily health score since June 2025, firmware and thermometer audits, the rules, and findings to report to JHUB |
 | **Why?** | Data quality flags, the state timeline, the fitted model table with test-month scores, and the regional context |
@@ -200,13 +200,7 @@ Methods: Stull (2011), *J. Appl. Meteor. Climatol.* 50, 2267-2269 (wet bulb); IS
 
 ## 11. AI usage
 
-_To be completed by Vincent: which AI tools were used to build the project and for what._ Draft from what the repository shows:
-
-- Anthropic's Claude was used as a coding assistant from 18 to 21 September 2026.
-- The changes of 21 September (fitted models, WBGT, data handling, tests, this README) were made with AI assistance.
-- Inside the product, language models only reword results the code has already computed, and their replies are checked against those results.
-
-Both team members can explain any part of the code.
+The AI tool used in this project is Anthropic's Claude: Claude Code, and Claude in Cowork during planning. It was used for debugging and explaining code errors, for writing code, tests and documentation, and for research and data analysis. The team reviewed and ran every change and can explain each part of the solution.
 
 ## 12. Screenshots / demo
 
@@ -218,12 +212,19 @@ Demo video: _link to be added_
 
 ![Station Health](docs/screenshots/station-health.png)
 
+![Risk Map on OpenStreetMap](docs/screenshots/risk-map.png)
+
 ![Operations](docs/screenshots/operations.png)
 
 ## 13. Team members
 
-- **Vincent Kongo** ([@vinnienovah](https://github.com/vinnienovah)), _role_
-- **George Kamundia** ([@GKamundia](https://github.com/GKamundia)), _role_
+| Member | Role |
+|---|---|
+| **Vincent Kongo** ([@vinnienovah](https://github.com/vinnienovah)) | Data scientist and environmental specialist |
+| **Phillip Muchemi** | Data scientist and GIS specialist |
+| **George Kamundia** ([@GKamundia](https://github.com/GKamundia)) | Computer scientist, machine learning and AI specialist |
+
+Between them the team covers the environmental science behind the heat and farm advice, the GIS behind the regional map and county boundaries, and the machine learning behind the forecast, the environmental states and the station health checks.
 
 ## 14. Future development
 

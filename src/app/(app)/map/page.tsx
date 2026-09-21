@@ -13,8 +13,7 @@ import { StateChip } from "@/components/ui/StateChip";
 import { RiskChip } from "@/components/ui/RiskChip";
 import {
   X, ChevronRight, ChevronLeft, Play, Pause, Info,
-  Layers, Radio, Thermometer, Droplets, Leaf, Mountain,
-} from "lucide-react";
+  Layers, Radio, Thermometer, Droplets, Leaf, } from "lucide-react";
 import type { CountyFeature, SatelliteAcquisition } from "@/lib/afya/map-data";
 import type { MapLayerKey } from "@/components/map/CountyLeafletMap";
 import { cn } from "@/lib/utils";
@@ -35,7 +34,6 @@ const LAYER_META: { key: MapLayerKey; icon: React.ReactNode; label_en: string; l
   { key: "thermal",    icon: <Thermometer className="w-4 h-4" />, label_en: "Thermal Context",       label_sw: "Muktadha wa Joto" },
   { key: "rain",       icon: <Droplets className="w-4 h-4" />,    label_en: "Rain Context",          label_sw: "Muktadha wa Mvua" },
   { key: "vegetation", icon: <Leaf className="w-4 h-4" />,        label_en: "Vegetation Context",    label_sw: "Muktadha wa Mimea" },
-  { key: "lst",        icon: <Mountain className="w-4 h-4" />,    label_en: "Land Surface Temp",     label_sw: "Joto la Uso wa Ardhi" },
 ];
 
 const TIMES = ["09:00", "12:00", "15:00", "18:00"];
