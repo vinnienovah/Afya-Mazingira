@@ -147,7 +147,7 @@ export default function SituationPage() {
             {/* Exposure */}
             <div className="rounded-xl bg-white/8 border border-white/10 p-3">
               <div className="text-[11px] text-white/50 mb-1">{t("thermal_exposure")}</div>
-              <RiskChip level={risk.thermal} size="sm" />
+              <RiskChip level={risk.thermal} size="sm" onDark />
               <div className="text-xs text-white/60 mt-1.5">{current.wbgt_c.toFixed(1)}°C WBGT</div>
             </div>
             {/* Expected peak */}
