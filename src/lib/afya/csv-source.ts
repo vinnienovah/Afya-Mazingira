@@ -104,3 +104,28 @@ export function getCsvSeries(anchorIso: string, lookbackHours: number): CsvSerie
 
   return { series: grid, realtime };
 }
+
+/** The CSV archive's actual date coverage, for bounding a date-range picker. */
+export function getCsvCoverage(): { minIso: string; maxIso: string } | null {
+  const loaded = loadCsv();
+  if (!loaded) return null;
+  return { minIso: new Date(loaded.minMs).toISOString(), maxIso: new Date(loaded.maxMs).toISOString() };
+}
+
+/**
+ * Real recorded observations for an arbitrary [from, to] range (inclusive),
+ * for the Climate History dashboard — unlike getCsvSeries, this isn't
+ * anchored to "now" or a fixed lookback; the caller picks any window the
+ * archive covers, e.g. the last 6 months.
+ */
+export function getCsvRange(fromIso: string, toIso: string): DemoObservation[] {
+  const loaded = loadCsv();
+  if (!loaded) return [];
+  const fromMs = new Date(fromIso).getTime();
+  const toMs = new Date(toIso).getTime();
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) return [];
+
+  const rows = loaded.rows.filter((r) => r.tsMs >= fromMs && r.tsMs <= toMs).map((r) => r.rec);
+  if (rows.length < 2) return [];
+  return cleanAndGrid(rows);
+}

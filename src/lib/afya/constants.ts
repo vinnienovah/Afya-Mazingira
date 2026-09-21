@@ -122,6 +122,25 @@ export const PROVENANCE_LABELS: Record<string, { en: string; sw: string; icon: s
 export const JKUAT_COORDS = { lat: -1.0931, lng: 37.0149 };
 export const JKUAT_NAME = "JKUAT / Juja Conduit Station";
 
+// ─── Climate History dashboard locations ─────────────────────────────────────
+// JKUAT (real Conduit station) plus the same 11 counties the regional outlook
+// map covers (centroids — see public/geo/counties.geojson) — used to pick a
+// location for the ERA5-Land historical series, since ERA5 works anywhere.
+export const CLIMATE_LOCATIONS: { key: string; name: string; name_sw: string; lat: number; lng: number }[] = [
+  { key: "jkuat", name: "JKUAT / Juja", name_sw: "JKUAT / Juja", lat: -1.0931, lng: 37.0149 },
+  { key: "embu", name: "Embu", name_sw: "Embu", lat: -0.6785, lng: 37.6297 },
+  { key: "kajiado", name: "Kajiado", name_sw: "Kajiado", lat: -1.9599, lng: 36.9701 },
+  { key: "kiambu", name: "Kiambu", name_sw: "Kiambu", lat: -1.0721, lng: 36.9059 },
+  { key: "kirinyaga", name: "Kirinyaga", name_sw: "Kirinyaga", lat: -0.6186, lng: 37.3120 },
+  { key: "kitui", name: "Kitui", name_sw: "Kitui", lat: -1.6904, lng: 38.1698 },
+  { key: "machakos", name: "Machakos", name_sw: "Machakos", lat: -1.2355, lng: 37.4374 },
+  { key: "makueni", name: "Makueni", name_sw: "Makueni", lat: -2.1161, lng: 37.8014 },
+  { key: "muranga", name: "Murang'a", name_sw: "Murang'a", lat: -0.8529, lng: 37.1005 },
+  { key: "nairobi", name: "Nairobi", name_sw: "Nairobi", lat: -1.2861, lng: 36.8994 },
+  { key: "nyandarua", name: "Nyandarua", name_sw: "Nyandarua", lat: -0.3722, lng: 36.4830 },
+  { key: "nyeri", name: "Nyeri", name_sw: "Nyeri", lat: -0.3488, lng: 36.9114 },
+];
+
 // ─── Demo account (public, documented credential — always auto-verified) ─────
 export const DEMO_EMAIL = "demo@afyahewa.dev";
 export const DEMO_PASSWORD = "afyahewa2026";
