@@ -36,7 +36,7 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
   } = options;
 
   // ── Step 1: Data ingestion (live → CSV archive → synthetic demo) ─────────
-  const bundle = getObservationSeries(anchorIso, lookbackHours);
+  const bundle = await getObservationSeries(anchorIso, lookbackHours);
   const series: DemoObservation[] = bundle.series;
   const isDemo = bundle.source === "demo";
   const anchor = bundle.anchorIso || anchorIso;

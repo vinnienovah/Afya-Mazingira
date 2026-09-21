@@ -12,7 +12,7 @@ export const maxDuration = 30;
 export async function GET() {
   try {
     const now = new Date().toISOString();
-    const bundle = getObservationSeries(now, 30); // last 30h at 15-min resolution
+    const bundle = await getObservationSeries(now, 30); // last 30h at 15-min resolution
 
     const [era5, dailyRainfall] = await Promise.all([
       getEra5Series(),

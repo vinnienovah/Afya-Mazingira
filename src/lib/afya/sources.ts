@@ -30,23 +30,29 @@ function hasConduitCreds(): boolean {
 
 /**
  * Get the observation series for the pipeline.
- * - If Conduit credentials exist and the anchor is near "now", prefer live data
- *   (serving the cached bundle while a background refresh runs).
+ * - If Conduit credentials exist and the anchor is near "now", prefer live data.
+ *   On a cold cache this `await`s the real fetch directly — a fire-and-forget
+ *   background refresh doesn't reliably finish on Vercel, where a function
+ *   can be frozen the instant its response is sent (same reasoning as the
+ *   ERA5/Sentinel adapters in sources-external.ts). Once a live bundle
+ *   exists, a stale-but-still-usable one is served immediately with a
+ *   background refresh kicked off for next time — that optimization is safe
+ *   because we already have real, recent data to fall back on either way.
  * - Otherwise, prefer the recorded Conduit CSV archive (data/*.csv) — real
  *   station data beats synthetic data even when it isn't real-time.
  * - Only synthesize a demo series when neither real source covers the anchor.
  */
-export function getObservationSeries(anchorIso: string, lookbackHours = 30): SeriesBundle {
+export async function getObservationSeries(anchorIso: string, lookbackHours = 30): Promise<SeriesBundle> {
   const anchorMs = new Date(anchorIso).getTime();
   const nearNow = Date.now() - anchorMs < 3 * 3600 * 1000;
 
   if (hasConduitCreds() && nearNow) {
-    if (liveBundle) {
-      if (Date.now() - liveBundle.fetchedAt > LIVE_TTL_MS) void refreshLive();
-      if (Date.now() - liveBundle.fetchedAt < LIVE_MAX_STALE_MS) return liveBundle;
-    } else {
+    if (!liveBundle) {
+      await refreshLive();
+    } else if (Date.now() - liveBundle.fetchedAt > LIVE_TTL_MS) {
       void refreshLive();
     }
+    if (liveBundle && Date.now() - liveBundle.fetchedAt < LIVE_MAX_STALE_MS) return liveBundle;
   }
 
   const csv = getCsvSeries(anchorIso, lookbackHours);
