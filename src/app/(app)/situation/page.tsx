@@ -147,6 +147,7 @@ export default function SituationPage() {
             <div className="rounded-xl bg-white/8 border border-white/10 p-3">
               <div className="text-[11px] text-white/50 mb-1">{t("thermal_exposure")}</div>
               <RiskChip level={risk.thermal} size="sm" />
+              <div className="text-xs text-white/60 mt-1.5">{current.wbgt_c.toFixed(1)}°C WBGT</div>
             </div>
             {/* Expected peak */}
             <div className="rounded-xl bg-white/8 border border-white/10 p-3">
@@ -186,8 +187,10 @@ export default function SituationPage() {
             </div>
           </div>
 
-          {/* Recommended action */}
-          {quality.status !== "POOR" ? (
+          {/* Recommended action — omitted when quality is POOR; the
+              standalone "Data quality notice" panel below already covers
+              that case, so we don't show a second, less-detailed message. */}
+          {quality.status !== "POOR" && (
             <div className="rounded-xl bg-white/10 border border-white/15 p-4 mb-6">
               <div className="text-xs font-semibold text-white/60 uppercase tracking-wider mb-2">
                 {t("recommended_action")}
@@ -210,10 +213,6 @@ export default function SituationPage() {
                   {fmtWindow(best_time.recommended.start, best_time.recommended.end)}
                 </div>
               )}
-            </div>
-          ) : (
-            <div className="rounded-xl bg-afya-red/20 border border-afya-red/30 p-4 mb-6" role="alert">
-              <p className="text-white text-sm font-medium">{t("quality_poor_message")}</p>
             </div>
           )}
 

@@ -1,27 +1,17 @@
 "use client";
 
 import { useLanguage } from "@/lib/contexts/language";
-import type { CurrentObservation, Provenance } from "@/lib/afya/types";
+import type { CurrentObservation } from "@/lib/afya/types";
 import { fmtAgo } from "@/lib/afya/format";
-import { Thermometer, Droplets, Wind, Sun, Gauge, Eye, Activity } from "lucide-react";
+import { Thermometer, Droplets, Wind, Sun, Gauge, Eye, Activity, CloudRain, Radio } from "lucide-react";
 
 interface MeasureItem {
   icon: React.ReactNode;
   label_en: string;
   label_sw: string;
   value: string;
-  provenance: Provenance;
-  note?: string;
+  accent: string;
 }
-
-const PROVENANCE_LABELS: Record<Provenance, { en: string; sw: string }> = {
-  MEASURED: { en: "MEASURED", sw: "ILIPIMEWA" },
-  PREDICTED: { en: "PREDICTED", sw: "ILITABIRIWA" },
-  SATELLITE_DERIVED: { en: "SATELLITE-DERIVED", sw: "KUTOKA SAYETI" },
-  REGIONAL_MODEL: { en: "REGIONAL MODEL", sw: "MFUMO WA KIKANDA" },
-  HISTORICAL: { en: "HISTORICAL", sw: "KIHISTORIA" },
-  DERIVED: { en: "AFYA MAZINGIRA DERIVED", sw: "IMECHAKATWA" },
-};
 
 export default function MeasurementStrip({
   obs,
@@ -37,71 +27,85 @@ export default function MeasurementStrip({
       icon: <Thermometer className="w-4 h-4" />,
       label_en: "Temperature", label_sw: "Joto",
       value: `${obs.temperature_c.toFixed(1)}°C`,
-      provenance: "MEASURED",
+      accent: "#E27832",
     },
     {
       icon: <Droplets className="w-4 h-4" />,
       label_en: "Humidity", label_sw: "Unyevu",
       value: `${obs.humidity_pct.toFixed(0)}%`,
-      provenance: "MEASURED",
+      accent: "#3786B5",
     },
     {
       icon: <Wind className="w-4 h-4" />,
       label_en: "Wind", label_sw: "Upepo",
       value: `${obs.wind_speed_ms.toFixed(1)} m/s`,
-      provenance: "MEASURED",
+      accent: "#6B8F71",
     },
     {
       icon: <Sun className="w-4 h-4" />,
       label_en: "IR Radiation", label_sw: "Mionzi",
       value: obs.infrared_signal > 0 ? `${Math.round(obs.infrared_signal)}` : "—",
-      provenance: "MEASURED",
+      accent: "#F2B705",
     },
     {
       icon: <Gauge className="w-4 h-4" />,
       label_en: "Pressure", label_sw: "Shinikizo",
       value: `${obs.pressure_hpa.toFixed(1)} hPa`,
-      provenance: "MEASURED",
+      accent: "#68756f",
     },
     {
       icon: <Activity className="w-4 h-4" />,
       label_en: "Wet Bulb", label_sw: "Bulbu Iliyonyevunyevu",
       value: `${obs.wet_bulb_c.toFixed(1)}°C`,
-      provenance: "MEASURED",
+      accent: "#247B78",
     },
     {
       icon: <Eye className="w-4 h-4" />,
       label_en: "WBGT-like", label_sw: "WBGT",
       value: `${obs.wbgt_c.toFixed(1)}°C`,
-      provenance: "MEASURED",
+      accent: "#103D2C",
     },
     {
-      icon: <Droplets className="w-4 h-4" />,
-      label_en: "Rain", label_sw: "Mvua",
+      icon: <CloudRain className="w-4 h-4" />,
+      label_en: "Rain (this reading)", label_sw: "Mvua (kipimo hiki)",
       value: obs.rain_observed ? (lang === "sw" ? "Inaonekana" : "Observed") : (lang === "sw" ? "Hakuna" : "None"),
-      provenance: "MEASURED",
+      accent: "#3786B5",
     },
   ];
 
   return (
     <div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      {/* Single source note replaces a per-card "MEASURED · Conduit" tag */}
+      <div className="flex items-center gap-1.5 mb-3 text-[11px] font-semibold text-afya-muted">
+        <Radio className="w-3.5 h-3.5 text-afya-green" strokeWidth={2} aria-hidden="true" />
+        {lang === "sw"
+          ? "Vipimo vyote vimepimwa moja kwa moja na kituo cha Conduit JKUAT"
+          : "All readings measured directly by the JKUAT Conduit ground station"}
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
         {items.map((item, i) => (
           <div
             key={i}
-            className="rounded-xl border border-afya-border bg-white p-3 flex flex-col gap-1.5"
+            className="rounded-xl border border-afya-border bg-white p-3.5 flex flex-col gap-2"
           >
-            <span className="text-afya-muted" aria-hidden="true">{item.icon}</span>
-            <span className="text-base font-bold text-afya-charcoal leading-none">{item.value}</span>
-            <span className="text-[11px] text-afya-muted">{lang === "sw" ? item.label_sw : item.label_en}</span>
-            <span className="text-[9px] font-semibold text-afya-muted/60 tracking-wide uppercase">
-              {PROVENANCE_LABELS[item.provenance][lang]} · Conduit
+            <span
+              className="w-7 h-7 rounded-lg flex items-center justify-center"
+              style={{ backgroundColor: `${item.accent}15`, color: item.accent }}
+              aria-hidden="true"
+            >
+              {item.icon}
             </span>
+            <div>
+              <div className="text-lg font-bold text-afya-charcoal leading-none">{item.value}</div>
+              <div className="text-[11px] text-afya-muted mt-1">{lang === "sw" ? item.label_sw : item.label_en}</div>
+            </div>
           </div>
         ))}
       </div>
+
       {freshnessMinutes !== undefined && (
-        <p className="mt-2 text-[11px] text-afya-muted/70 text-right">
+        <p className="mt-3 text-[11px] text-afya-muted/70 text-right">
           {lang === "sw" ? `Imesasishwa ${fmtAgo(freshnessMinutes, "sw")}` : `Updated ${fmtAgo(freshnessMinutes, "en")}`}
         </p>
       )}

@@ -111,7 +111,7 @@ const PIPELINE: { en: string; sw: string }[] = [
   { en: "Quality control", sw: "Udhibiti wa ubora" },
   { en: "Feature engineering", sw: "Uhandisi wa vipengele" },
   { en: "Climate Reflex state", sw: "Hali ya Climate Reflex" },
-  { en: "Forecast +1/+3/+6h", sw: "Utabiri +1/+3/+6s" },
+  { en: "Forecast +1/+3/+6/+9h", sw: "Utabiri +1/+3/+6/+9s" },
   { en: "Risk interpretation", sw: "Tafsiri ya hatari" },
   { en: "Best-Time engine", sw: "Injini ya Wakati-Bora" },
   { en: "Grounded explanation", sw: "Maelezo ya kuthibitishwa" },
@@ -341,7 +341,7 @@ export default function Landing() {
             {[
               { v: "45,043", l: c.stats_observations },
               { v: "4", l: c.stats_states },
-              { v: "+1/+3/+6h", l: c.stats_horizons },
+              { v: "+1/+3/+6/+9h", l: c.stats_horizons },
               { v: "EN · SW", l: c.stats_languages },
             ].map((s) => (
               <div key={s.l}>
