@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useSituation } from "@/lib/contexts/situation";
 import { useLanguage } from "@/lib/contexts/language";
-import { STATES, RISK_META, MODEL_VERSIONS } from "@/lib/afya/constants";
+import { STATES, RISK_META } from "@/lib/afya/constants";
+import { horizonScores, FORECAST_PERIODS } from "@/lib/afya/forecast-engine";
 import { fmtTime, fmtAgo } from "@/lib/afya/format";
 import { Card, CardTitle, CardMeta } from "@/components/ui/Card";
 import { StateChip } from "@/components/ui/StateChip";
@@ -14,6 +15,8 @@ import StateTimeline from "@/components/charts/StateTimeline";
 import AiPanel from "@/components/ai/AiPanel";
 import { SkeletonCard } from "@/components/ui/Skeleton";
 import { AlertTriangle, Cpu, Globe, CloudRain, Satellite, Database, TrendingUp, Info, ChevronRight } from "lucide-react";
+
+const HORIZONS = ["1h", "3h", "6h", "9h"] as const;
 
 export default function IntelligencePage() {
   const { situation, isLoading, error } = useSituation();
@@ -183,10 +186,10 @@ export default function IntelligencePage() {
             </thead>
             <tbody className="divide-y divide-afya-border/50">
               {[
-                { label: lang === "sw" ? "Algorithm" : "Algorithm", vals: [MODEL_VERSIONS["1h"].algorithm, MODEL_VERSIONS["3h"].algorithm, MODEL_VERSIONS["6h"].algorithm, MODEL_VERSIONS["9h"].algorithm] },
-                { label: lang === "sw" ? "Toleo" : "Version", vals: Object.values(MODEL_VERSIONS).map((m) => m.version) },
-                { label: "MAE", vals: Object.values(MODEL_VERSIONS).map((m) => `${m.mae}°C`) },
-                { label: lang === "sw" ? "Lengo" : "Target", vals: ["wet_bulb_globe_temp", "wet_bulb_globe_temp", "wet_bulb_globe_temp", "wet_bulb_globe_temp"] },
+                { label: lang === "sw" ? "Kosa la wastani (MAE)" : "Mean error (MAE)", vals: HORIZONS.map((h) => `${horizonScores(h).mae.toFixed(2)}°C`) },
+                { label: lang === "sw" ? "Bila mabadiliko" : "No-change baseline", vals: HORIZONS.map((h) => `${horizonScores(h).persistence_mae.toFixed(2)}°C`) },
+                { label: lang === "sw" ? "Upana wa bendi 80%" : "80% band", vals: HORIZONS.map((h) => `±${horizonScores(h).band80.toFixed(2)}°C`) },
+                { label: lang === "sw" ? "Ndani ya bendi" : "Inside the band", vals: HORIZONS.map((h) => `${Math.round(horizonScores(h).coverage80 * 100)}%`) },
               ].map((row, i) => (
                 <tr key={i}>
                   <th scope="row" className="py-2 pr-4 text-xs font-semibold text-afya-muted text-left">{row.label}</th>
@@ -198,6 +201,11 @@ export default function IntelligencePage() {
             </tbody>
           </table>
         </div>
+        <p className="mt-3 text-xs text-afya-muted">
+          {lang === "sw"
+            ? `Regresheni ya ridge kwa kila hatua ya dakika 15, iliyofunzwa kwa data ya Conduit ${FORECAST_PERIODS.train[0]} hadi ${FORECAST_PERIODS.train[1]}. Bendi imewekwa kutoka ${FORECAST_PERIODS.calibration[0]} hadi ${FORECAST_PERIODS.calibration[1]}, na alama zote zimetoka ${FORECAST_PERIODS.test[0]} hadi ${FORECAST_PERIODS.test[1]}, miezi ambayo modeli haikuiona. Lengo ni WBGT kivulini.`
+            : `Ridge regression for each 15-minute step, fitted on Conduit data from ${FORECAST_PERIODS.train[0]} to ${FORECAST_PERIODS.train[1]}. The band is set from ${FORECAST_PERIODS.calibration[0]} to ${FORECAST_PERIODS.calibration[1]}, and every score comes from ${FORECAST_PERIODS.test[0]} to ${FORECAST_PERIODS.test[1]}, months the model never saw. The target is WBGT in shade.`}
+        </p>
       </Card>
 
       {/* ERA5 context */}

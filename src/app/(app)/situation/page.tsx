@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSituation } from "@/lib/contexts/situation";
 import { useLanguage } from "@/lib/contexts/language";
 import { STATES } from "@/lib/afya/constants";
+import { horizonScores } from "@/lib/afya/forecast-engine";
 import { fmtTime, fmtWindow } from "@/lib/afya/format";
 import { StateChip } from "@/components/ui/StateChip";
 import { RiskChip } from "@/components/ui/RiskChip";
@@ -304,17 +305,20 @@ export default function SituationPage() {
 
       {/* ── HORIZON CARD STRIP ───────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { f: f1h, key: "horizon_1h", model: "ExtraTrees" },
-          { f: f3h, key: "horizon_3h", model: "CatBoost" },
-          { f: f6h, key: "horizon_6h", model: "ExtraTrees" },
-          { f: f9h, key: "horizon_9h", model: "CatBoost" },
-        ].map(({ f, key, model }) => f ? (
+        {([
+          { f: f1h, key: "horizon_1h", horizon: "1h" },
+          { f: f3h, key: "horizon_3h", horizon: "3h" },
+          { f: f6h, key: "horizon_6h", horizon: "6h" },
+          { f: f9h, key: "horizon_9h", horizon: "9h" },
+        ] as const).map(({ f, key, horizon }) => f ? (
           <Card key={key}>
             <div className="flex items-start justify-between mb-3">
               <span className="text-sm font-semibold text-afya-charcoal">{t(key)}</span>
-              <span className="text-[10px] text-afya-muted/60 border border-afya-border rounded px-1.5 py-0.5">
-                {model}
+              <span
+                className="text-[10px] text-afya-muted/60 border border-afya-border rounded px-1.5 py-0.5"
+                title={lang === "sw" ? "Kosa la wastani kwenye miezi ya majaribio" : "Mean error on the test months"}
+              >
+                ±{horizonScores(horizon).mae.toFixed(1)}°C
               </span>
             </div>
             <div className="text-3xl font-bold text-afya-charcoal mb-1">

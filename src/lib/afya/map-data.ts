@@ -1,26 +1,21 @@
-// ─── Regional Environmental Outlook data ─────────────────────────────────────
-// Real county boundaries (public/geo/counties.geojson) with per-county
-// indicators derived from real sources wherever practical:
-//   - Weather (temp/humidity/wind/rain/soil moisture): batched Open-Meteo
-//     forecast API, one request for every county centroid, no key required.
-//   - Thermal risk category: the same wbgtToRisk() classification the rest
-//     of the app uses, fed a shade-only WBGT approximation (Australian BoM
-//     formula) from the real temperature/humidity above — a coarse regional
-//     proxy, not the sensor-grade WBGT computed for the JKUAT station.
-//   - NDVI: real Copernicus Sentinel-2 statistics per county, best-effort
-//     (unfiltered for cloud cover — see copernicus.ts), when CDSE credentials
-//     are configured.
-//   - LST: intentionally left null. As elsewhere in this codebase, land
-//     surface temperature requires SLSTR thermal statistics and is never
-//     estimated from a proxy.
-// The county actually hosting the Conduit station (Kiambu — JKUAT/Juja) uses
-// the real current pipeline output (measured WBGT, observed rain) instead of
-// the Open-Meteo proxy, when real (non-demo) pipeline data is available.
+// Regional outlook: real county boundaries (public/geo/counties.geojson) with
+// indicators per county.
+//   - Weather (temperature, humidity, wind, rain, soil moisture): one batched
+//     Open-Meteo request for every county centroid, no key required.
+//   - Thermal category: the same wbgtToRisk() bands as the rest of the app,
+//     applied to shade WBGT from temperature and humidity (Stull wet bulb),
+//     the same method the station uses, with no sun term.
+//   - NDVI: Copernicus Sentinel-2 statistics per county when CDSE credentials
+//     are configured (not filtered for cloud; see copernicus.ts).
+//   - Land surface temperature: left null. It needs SLSTR thermal statistics
+//     and is not estimated from anything else.
+// Kiambu, the county the Conduit station stands in, uses the station pipeline
+// (station WBGT, observed rain) whenever station data is available.
 
 import fs from "fs";
 import path from "path";
 import type { Geometry } from "geojson";
-import { wbgtToRisk, approxWbgtShade } from "./constants";
+import { wbgtToRisk, shadeWbgtFromHumidity } from "./constants";
 import { hasCopernicusCreds, cdseToken, ndviStatisticsForBbox, type Bbox } from "./copernicus";
 
 export interface CountyFeature {
@@ -154,10 +149,10 @@ async function fetchRegionalWeather(counties: LoadedCounty[]): Promise<(CountyWe
 
     const hourlyCategories = OUTLOOK_HOURS.map((hour) => {
       const idx = loc.hourly!.time.findIndex((t) => t.endsWith(`T${hour}`));
-      if (idx < 0) return { hour, category: wbgtToRisk(approxWbgtShade(tempC, rh)) };
+      if (idx < 0) return { hour, category: wbgtToRisk(shadeWbgtFromHumidity(tempC, rh)) };
       const t = loc.hourly!.temperature_2m[idx];
       const h = loc.hourly!.relative_humidity_2m[idx];
-      return { hour, category: wbgtToRisk(approxWbgtShade(t, h)) };
+      return { hour, category: wbgtToRisk(shadeWbgtFromHumidity(t, h)) };
     });
 
     // Trend: compare "now" against ~3h ahead in the same local-time series.
@@ -281,7 +276,7 @@ export async function getRegionalOutlook(stationOverride?: StationOverride): Pro
       trend = w?.trend ?? "stable";
       outlookHours = w?.hourlyCategories ?? OUTLOOK_HOURS.map((hour) => ({ hour, category: wbgtToRisk(wbgtEstimate) }));
     } else if (w) {
-      wbgtEstimate = approxWbgtShade(w.tempC, w.rh);
+      wbgtEstimate = shadeWbgtFromHumidity(w.tempC, w.rh);
       confidence = "MODERATE";
       sources = ["Open-Meteo"];
       rain24h = w.rain24hMm;

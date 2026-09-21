@@ -251,7 +251,7 @@ export async function getRegionalForecastSeries(lat: number, lng: number): Promi
     return regionalForecastCache.points;
   }
 
-  const { approxWbgtShade } = await import("./constants");
+  const { shadeWbgtFromHumidity } = await import("./constants");
   const params = new URLSearchParams({
     latitude: String(lat),
     longitude: String(lng),
@@ -278,7 +278,7 @@ export async function getRegionalForecastSeries(lat: number, lng: number): Promi
         time: t.endsWith("Z") ? t : `${t}Z`,
         temp_c: temp,
         humidity_pct: rh,
-        wbgt_like: Math.round(approxWbgtShade(temp, rh) * 10) / 10,
+        wbgt_like: Math.round(shadeWbgtFromHumidity(temp, rh) * 10) / 10,
       };
     });
 

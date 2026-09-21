@@ -1,0 +1,196 @@
+{
+ "fitted_on": "data/conduit_master_2025_2026.csv",
+ "method": "k-means, 4 clusters, on the training months; named by their centres",
+ "periods": {
+  "train": [
+   "2025-06-01",
+   "2026-03-31"
+  ]
+ },
+ "features": [
+  "temp_sht",
+  "humidity_sht",
+  "si1145_vis",
+  "si1145_ir",
+  "wind_spd",
+  "wet_bulb_globe_temp",
+  "wet_bulb_temp",
+  "temp_delta_1h",
+  "humidity_delta_1h",
+  "radiation_delta_1h",
+  "temp_mean_1h",
+  "wbgt_mean_1h",
+  "temp_std_1h",
+  "hour_sin",
+  "hour_cos"
+ ],
+ "feature_mean": [
+  20.48281,
+  68.05982,
+  414.5959,
+  1891.78653,
+  0.40418,
+  17.4781,
+  16.19036,
+  0.02915,
+  -0.10049,
+  9.26712,
+  20.47198,
+  17.47174,
+  0.46175,
+  0.00999,
+  -0.02159
+ ],
+ "feature_std": [
+  4.40022,
+  17.74591,
+  239.83879,
+  2565.01352,
+  0.47465,
+  2.71554,
+  2.14107,
+  1.53197,
+  5.80702,
+  1714.41781,
+  4.36536,
+  2.6931,
+  0.39699,
+  0.70706,
+  0.70675
+ ],
+ "centroids": [
+  [
+   -0.9214,
+   0.8782,
+   -0.5686,
+   -0.5648,
+   -0.5838,
+   -0.8798,
+   -0.7824,
+   -0.1033,
+   0.153,
+   0.0564,
+   -0.92,
+   -0.8817,
+   -0.5983,
+   0.8401,
+   0.5119
+  ],
+  [
+   0.5697,
+   -0.4707,
+   1.3439,
+   1.3487,
+   0.5234,
+   0.621,
+   0.6234,
+   1.4394,
+   -1.4401,
+   1.2687,
+   0.3814,
+   0.4457,
+   1.0934,
+   0.3562,
+   -1.1794
+  ],
+  [
+   1.4812,
+   -1.3065,
+   0.9387,
+   0.9229,
+   1.0031,
+   1.3736,
+   1.1842,
+   0.113,
+   -0.1996,
+   -0.9982,
+   1.4972,
+   1.3996,
+   0.4847,
+   -0.7987,
+   -0.9643
+  ],
+  [
+   0.0913,
+   -0.2051,
+   -0.5765,
+   -0.5745,
+   -0.0879,
+   0.0676,
+   0.0421,
+   -0.806,
+   0.7872,
+   -0.1827,
+   0.1947,
+   0.1614,
+   -0.0576,
+   -1.0102,
+   0.5829
+  ]
+ ],
+ "summary": [
+  {
+   "state": 0,
+   "share_of_training_slots": 0.409,
+   "mean_temp_c": 16.4,
+   "mean_humidity_pct": 83.6,
+   "mean_ir_counts": 443,
+   "mean_temp_change_c_per_h": -0.13,
+   "median_local_hour": 5
+  },
+  {
+   "state": 1,
+   "share_of_training_slots": 0.158,
+   "mean_temp_c": 23,
+   "mean_humidity_pct": 59.7,
+   "mean_ir_counts": 5351,
+   "mean_temp_change_c_per_h": 2.23,
+   "median_local_hour": 10
+  },
+  {
+   "state": 2,
+   "share_of_training_slots": 0.178,
+   "mean_temp_c": 27,
+   "mean_humidity_pct": 44.9,
+   "mean_ir_counts": 4259,
+   "mean_temp_change_c_per_h": 0.2,
+   "median_local_hour": 14
+  },
+  {
+   "state": 3,
+   "share_of_training_slots": 0.255,
+   "mean_temp_c": 20.9,
+   "mean_humidity_pct": 64.4,
+   "mean_ir_counts": 418,
+   "mean_temp_change_c_per_h": -1.21,
+   "median_local_hour": 19
+  }
+ ],
+ "transitions": [
+  {
+   "from": 0,
+   "to": 1,
+   "probability": 0.89,
+   "changes": 657
+  },
+  {
+   "from": 1,
+   "to": 2,
+   "probability": 0.83,
+   "changes": 1552
+  },
+  {
+   "from": 2,
+   "to": 1,
+   "probability": 0.61,
+   "changes": 1369
+  },
+  {
+   "from": 3,
+   "to": 0,
+   "probability": 0.66,
+   "changes": 716
+  }
+ ],
+ "n_training_slots": 27931
+}

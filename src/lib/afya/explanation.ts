@@ -1,3 +1,4 @@
+import { FORECAST_METHOD, horizonScores } from "./forecast-engine";
 import type { SituationResult, RiskAssessment, Lang } from "./types";
 import { STATES, RISK_META } from "./constants";
 import { fmtTime, fmtWindow } from "./format";
@@ -109,8 +110,8 @@ export function buildExplanationFacts(situation: SituationResult): ExplanationFa
     chirps_7d_mm: f.chirps.chirps_7d_mm,
     sentinel2_ndvi: f.sentinel.sentinel2_ndvi_mean ?? null,
     sentinel3_lst: f.sentinel.sentinel3_lst_c ?? null,
-    model_3h_algorithm: MODEL_VERSIONS_META["3h"].algorithm,
-    model_3h_mae: MODEL_VERSIONS_META["3h"].mae,
+    model_3h_algorithm: FORECAST_METHOD,
+    model_3h_mae: horizonScores("3h").mae,
   };
 }
 
@@ -187,12 +188,6 @@ export function buildFarmExplanationFacts(advisory: {
     farm_peak_crop_temp_c: advisory.stress.peak_temp_c,
   };
 }
-
-const MODEL_VERSIONS_META: Record<string, { algorithm: string; mae: number }> = {
-  "1h": { algorithm: "ExtraTrees", mae: 0.57 },
-  "3h": { algorithm: "CatBoost", mae: 0.93 },
-  "6h": { algorithm: "ExtraTrees", mae: 1.23 },
-};
 
 // ─── Deterministic English template ───────────────────────────────────────────
 
