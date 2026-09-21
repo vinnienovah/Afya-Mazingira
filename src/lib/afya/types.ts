@@ -152,6 +152,10 @@ export interface SituationResult {
   era5: Era5Context;
   chirps: ChirpsContext;
   sentinel: SentinelContext;
+  // Real Open-Meteo forecast (not the ERA5 archive), independent of the
+  // Conduit station's freshness — the only channel that still supports
+  // planning once the ground-truth forecast has aged past its own horizon.
+  regional_outlook: { time: string; wbgt_like: number }[];
 }
 
 // ─── Candidate window for the Best-Time engine ───────────────────────────────

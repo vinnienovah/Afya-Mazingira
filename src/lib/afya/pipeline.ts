@@ -4,14 +4,14 @@ import type {
 } from "./types";
 import type { DemoObservation } from "./demo-observations";
 import { getObservationSeries } from "./sources";
-import { getEra5ContextLive, getSentinelContextLive, getRainfallContext } from "./sources-external";
+import { getEra5ContextLive, getSentinelContextLive, getRainfallContext, getRegionalForecastSeries } from "./sources-external";
 import { computeFeatures } from "./feature-engine";
 import { classifyState, buildStateHistory, stateSince, getNextTransition } from "./state-engine";
 import { predictHorizon, buildForecastSeries, findExpectedPeak } from "./forecast-engine";
 import { computeThermalRisk, computeRainProbability, computeUncertainty } from "./risk-engine";
 import { findBestWindowFromNow } from "./best-time-engine";
 import { evaluateQuality } from "./data-quality";
-import { MODEL_VERSIONS } from "./constants";
+import { MODEL_VERSIONS, JKUAT_COORDS } from "./constants";
 
 // ─── AFYA MAZINGIRA Intelligence Pipeline ─────────────────────────────────────────
 // CONDUIT → QC → FEATURES → STATE → FORECAST → RISK → BEST-TIME → EXPLANATION
@@ -114,10 +114,11 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
   // ── Step 7: Context (live adapters with graceful fallback) ─────────────────
   // Skip the real fetch entirely for a genuine historical replay anchor — a
   // fresh ERA5/Sentinel read is only meaningful for "now" (spec §40).
-  const [era5, sentinel, chirps] = await Promise.all([
+  const [era5, sentinel, chirps, regionalOutlook] = await Promise.all([
     getEra5ContextLive(anchor, currentObs.temp_sht, currentObs.humidity_sht, bundle.realtime),
     getSentinelContextLive(bundle.realtime),
     getRainfallContext(anchor, bundle.realtime),
+    bundle.realtime ? getRegionalForecastSeries(JKUAT_COORDS.lat, JKUAT_COORDS.lng) : Promise.resolve([]),
   ]);
 
   // ── Step 8: Risk / exposure ────────────────────────────────────────────────
@@ -183,6 +184,7 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
     era5,
     chirps,
     sentinel,
+    regional_outlook: regionalOutlook.map((p) => ({ time: p.time, wbgt_like: p.wbgt_like })),
   };
 }
 

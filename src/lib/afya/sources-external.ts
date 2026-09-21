@@ -220,6 +220,76 @@ export async function getEra5Series(): Promise<Era5SeriesPoint[]> {
   }));
 }
 
+// ─── Regional day-ahead outlook (real Open-Meteo forecast, no key needed) ────
+// Unlike everything else in this file (which reads the ERA5-Land *archive*,
+// i.e. the recent past), this hits Open-Meteo's actual forecast product —
+// genuine future model output, not a proxy of it. It exists specifically so
+// planning still works when the Conduit ground station has gone quiet for
+// longer than the +9h forecast horizon: the ML forecast is anchored to the
+// last real observation and becomes meaningless once "now" has moved past
+// its own horizon, but a regional model forecast doesn't depend on the
+// station at all. Always labeled REGIONAL_MODEL — a real forecast, but a
+// shade-only WBGT approximation for a ~9km grid cell, not the sensor-grade
+// ground truth Conduit provides when it's reporting.
+export interface RegionalOutlookPoint {
+  time: string;
+  wbgt_like: number;
+  temp_c: number;
+  humidity_pct: number;
+}
+
+const REGIONAL_FORECAST_TTL = 3 * 3600_000;
+let regionalForecastCache: { at: number; lat: number; lng: number; points: RegionalOutlookPoint[] } | null = null;
+
+export async function getRegionalForecastSeries(lat: number, lng: number): Promise<RegionalOutlookPoint[]> {
+  if (
+    regionalForecastCache &&
+    Date.now() - regionalForecastCache.at < REGIONAL_FORECAST_TTL &&
+    Math.abs(regionalForecastCache.lat - lat) < 0.001 &&
+    Math.abs(regionalForecastCache.lng - lng) < 0.001
+  ) {
+    return regionalForecastCache.points;
+  }
+
+  const { approxWbgtShade } = await import("./constants");
+  const params = new URLSearchParams({
+    latitude: String(lat),
+    longitude: String(lng),
+    hourly: "temperature_2m,relative_humidity_2m",
+    forecast_days: "3",
+    timezone: "UTC",
+  });
+
+  try {
+    const res = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`, {
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) throw new Error(`Open-Meteo forecast HTTP ${res.status}`);
+    const json = (await res.json()) as {
+      hourly?: { time?: string[]; temperature_2m?: number[]; relative_humidity_2m?: number[] };
+    };
+    const h = json.hourly;
+    if (!h?.time?.length) throw new Error("Open-Meteo forecast: empty hourly series");
+
+    const points: RegionalOutlookPoint[] = h.time.map((t, i) => {
+      const temp = h.temperature_2m?.[i] ?? 20;
+      const rh = h.relative_humidity_2m?.[i] ?? 60;
+      return {
+        time: t.endsWith("Z") ? t : `${t}Z`,
+        temp_c: temp,
+        humidity_pct: rh,
+        wbgt_like: Math.round(approxWbgtShade(temp, rh) * 10) / 10,
+      };
+    });
+
+    regionalForecastCache = { at: Date.now(), lat, lng, points };
+    return points;
+  } catch (err) {
+    console.warn("[afya] Regional forecast unavailable:", err instanceof Error ? err.message : err);
+    return regionalForecastCache?.points ?? [];
+  }
+}
+
 /** Real daily rainfall totals (UTC calendar days) for a bar-chart timeline. */
 export async function getDailyRainfallSeries(): Promise<{ date: string; mm: number }[]> {
   if (!era5Cache || Date.now() - era5Cache.at > ERA5_TTL) await refreshEra5();
