@@ -48,6 +48,7 @@ export default async function BriefingPage() {
   const f1h = forecast.find((f) => f.horizon === "1h");
   const f3h = forecast.find((f) => f.horizon === "3h");
   const f6h = forecast.find((f) => f.horizon === "6h");
+  const f9h = forecast.find((f) => f.horizon === "9h");
 
   const provenance = [
     {
@@ -214,6 +215,7 @@ export default async function BriefingPage() {
                 { f: f1h, label: t("horizon_1h") },
                 { f: f3h, label: t("horizon_3h") },
                 { f: f6h, label: t("horizon_6h") },
+                { f: f9h, label: t("horizon_9h") },
               ].filter((r) => r.f).map((r) => (
                 <tr key={r.label} className="text-afya-charcoal">
                   <td className="py-2.5 pr-3 font-medium">{r.label}</td>

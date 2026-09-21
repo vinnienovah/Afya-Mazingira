@@ -156,7 +156,7 @@ For an activity + duration + availability window, every 15-minute candidate slot
         │  │ data-quality.ts   GOOD / DEGRADED / POOR               ││
         │  │ feature-engine.ts 15-min lags, deltas, rolling, cyclic  ││
         │  │ state-engine.ts   Climate Reflex state classifier       ││
-        │  │ forecast-engine.ts +1h/+3h/+6h + conformal uncertainty  ││
+        │  │ forecast-engine.ts +1h/+3h/+6h/+9h + conformal uncert.  ││
         │  │ risk-engine.ts    activity-aware WBGT tiers             ││
         │  │ best-time-engine.ts lexicographic sliding window         ││
         │  │ farm-engine.ts    Hargreaves ET₀ · FAO-56 Kc · water    ││

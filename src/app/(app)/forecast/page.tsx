@@ -47,6 +47,7 @@ export default function ForecastPage() {
   const f1h = horizons.find((h) => h.horizon === "1h");
   const f3h = horizons.find((h) => h.horizon === "3h");
   const f6h = horizons.find((h) => h.horizon === "6h");
+  const f9h = horizons.find((h) => h.horizon === "9h");
 
   const trend = f6h && situation
     ? f6h.value > situation.current.wbgt_c + 0.5 ? "up" : f6h.value < situation.current.wbgt_c - 0.5 ? "down" : "flat"
@@ -100,11 +101,12 @@ export default function ForecastPage() {
       </Card>
 
       {/* Horizon cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { h: f1h, key: "horizon_1h", mae: "0.57" },
           { h: f3h, key: "horizon_3h", mae: "0.93" },
           { h: f6h, key: "horizon_6h", mae: "1.23" },
+          { h: f9h, key: "horizon_9h", mae: "1.58" },
         ].map(({ h, key, mae }) => h ? (
           <Card key={key}>
             <div className="flex items-start justify-between mb-2">

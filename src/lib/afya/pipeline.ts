@@ -48,10 +48,10 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
 
   // ── Step 2: Quality control ────────────────────────────────────────────────
   const quality: DataQuality = evaluateQuality(series, effectiveNow);
-  // If the +6h forecast horizon has fully elapsed, the situation is too stale
+  // If the +9h forecast horizon has fully elapsed, the situation is too stale
   // to act on → suppress strong recommendations (spec §52: never present
   // stale data as actionable).
-  const horizonEndMs = new Date(anchor).getTime() + 6 * 3600 * 1000;
+  const horizonEndMs = new Date(anchor).getTime() + 9 * 3600 * 1000;
   if (
     bundle.realtime &&
     horizonEndMs <= new Date(effectiveNow).getTime() &&
@@ -86,6 +86,7 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
   const raw1h = predictHorizon(fv, "1h", stateId);
   const raw3h = predictHorizon(fv, "3h", stateId);
   const raw6h = predictHorizon(fv, "6h", stateId);
+  const raw9h = predictHorizon(fv, "9h", stateId);
   let forecast_series = buildForecastSeries(fv, stateId, anchor);
 
   const degraded = quality.status === "DEGRADED";
@@ -98,8 +99,8 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
     forecast_series = forecast_series.map((p) => ({ ...p, ...widen(p.value, p.lower, p.upper) }));
   }
   const forecast = degraded
-    ? [raw1h, raw3h, raw6h].map((f) => ({ ...f, ...widen(f.value, f.lower, f.upper) }))
-    : [raw1h, raw3h, raw6h];
+    ? [raw1h, raw3h, raw6h, raw9h].map((f) => ({ ...f, ...widen(f.value, f.lower, f.upper) }))
+    : [raw1h, raw3h, raw6h, raw9h];
   const f3h = forecast[1];
   const expected_peak = findExpectedPeak(forecast_series);
 

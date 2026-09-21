@@ -16,6 +16,7 @@ export interface ExplanationFacts {
   forecast_1h: number;
   forecast_3h: number;
   forecast_6h: number;
+  forecast_9h: number;
   forecast_3h_lower: number;
   forecast_3h_upper: number;
   peak_time: string | null;
@@ -62,6 +63,7 @@ export function buildExplanationFacts(situation: SituationResult): ExplanationFa
     forecast_1h: f.forecast[0]?.value ?? 0,
     forecast_3h: f3h?.value ?? 0,
     forecast_6h: f.forecast[2]?.value ?? 0,
+    forecast_9h: f.forecast[3]?.value ?? 0,
     forecast_3h_lower: f3h?.lower ?? 0,
     forecast_3h_upper: f3h?.upper ?? 0,
     peak_time: f.expected_peak?.time ?? null,
@@ -142,7 +144,8 @@ export function deterministicExplanationEn(facts: ExplanationFacts): string {
     stateDesc,
     `Current WBGT-like exposure is ${facts.current_wbgt.toFixed(1)}°C.`,
     `The +3 hour forecast is ${facts.forecast_3h.toFixed(1)}°C ` +
-      `(interval: ${facts.forecast_3h_lower.toFixed(1)}–${facts.forecast_3h_upper.toFixed(1)}°C, ${facts.uncertainty.toLowerCase()} uncertainty).`,
+      `(interval: ${facts.forecast_3h_lower.toFixed(1)}–${facts.forecast_3h_upper.toFixed(1)}°C, ${facts.uncertainty.toLowerCase()} uncertainty), ` +
+      `reaching ${facts.forecast_9h.toFixed(1)}°C by +9 hours.`,
     `Thermal exposure risk is ${facts.thermal_risk_en}. ${riskDesc}`,
     transitionPart,
     peakPart,
@@ -176,7 +179,8 @@ export function deterministicExplanationSw(facts: ExplanationFacts): string {
     stateDesc,
     `Kupatwa na WBGT kwa sasa ni ${facts.current_wbgt.toFixed(1)}°C.`,
     `Utabiri wa +saa 3 ni ${facts.forecast_3h.toFixed(1)}°C ` +
-      `(kipindi: ${facts.forecast_3h_lower.toFixed(1)}–${facts.forecast_3h_upper.toFixed(1)}°C, utata ${facts.uncertainty.toLowerCase()}).`,
+      `(kipindi: ${facts.forecast_3h_lower.toFixed(1)}–${facts.forecast_3h_upper.toFixed(1)}°C, utata ${facts.uncertainty.toLowerCase()}), ` +
+      `ikifika ${facts.forecast_9h.toFixed(1)}°C kwa +saa 9.`,
     `Hatari ya kupatwa na joto ni ${facts.thermal_risk_sw}.`,
     transitionPart,
     peakPart,
@@ -693,6 +697,7 @@ function isExplanationGrounded(text: string, facts: ExplanationFacts): boolean {
     facts.forecast_1h,
     facts.forecast_3h,
     facts.forecast_6h,
+    facts.forecast_9h,
     facts.forecast_3h_lower,
     facts.forecast_3h_upper,
     facts.peak_wbgt,
