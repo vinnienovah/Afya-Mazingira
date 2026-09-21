@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { runPipeline } from "@/lib/afya/pipeline";
-import { generateExplanation, buildExplanationFacts } from "@/lib/afya/explanation";
+import { generateExplanation, buildExplanationFacts, buildFarmExplanationFacts } from "@/lib/afya/explanation";
+import { buildFarmAdvisory, type GrowthStage } from "@/lib/afya/farm-engine";
 import type { Lang } from "@/lib/afya/types";
 
 // Safety net for the (usually much faster) real ERA5/Sentinel fetches in
@@ -16,6 +17,12 @@ const ExplainSchema = z.object({
   // "standard" = full technical explanation
   // "plain"    = simplified, non-technical wording (same validated facts)
   mode: z.enum(["standard", "plain"]).default("standard"),
+  // Which page is asking — lets the AI draw on that page's own facts (e.g.
+  // the Farm Advisory page's irrigation decision) instead of only the
+  // general situation/forecast facts, which have nothing about crops.
+  context: z.string().optional(),
+  crop: z.string().optional(),
+  stage: z.enum(["establishment", "vegetative", "flowering", "maturity"]).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -26,16 +33,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "invalid_input" }, { status: 400 });
     }
 
-    const { lang, question, force_fallback, mode } = parsed.data;
+    const { lang, question, force_fallback, mode, context, crop, stage } = parsed.data;
 
     const situation = await runPipeline();
     const facts = buildExplanationFacts(situation);
+    const extraFacts = context === "farm"
+      ? buildFarmExplanationFacts(buildFarmAdvisory(situation, crop ?? "maize", (stage ?? "vegetative") as GrowthStage))
+      : undefined;
     const result = await generateExplanation(
       situation,
       lang as Lang,
       question,
       force_fallback,
       mode,
+      extraFacts,
     );
 
     return NextResponse.json({

@@ -114,6 +114,80 @@ export function buildExplanationFacts(situation: SituationResult): ExplanationFa
   };
 }
 
+// ─── Farm advisory context facts ──────────────────────────────────────────────
+// The base ExplanationFacts above cover the general Situation/Forecast pages
+// only — they have no notion of a crop, growth stage, irrigation decision or
+// spray window. Without this, a question asked on the Farm Advisory page
+// (e.g. "should I irrigate today?") has genuinely no relevant fact to answer
+// from, and the AI correctly (if unhelpfully) says so. This gives it the
+// real, already-computed farm advisory facts to draw on instead.
+const FARM_REASON_EN: Record<string, string> = {
+  farm_reason_rain_expected: "rain is expected soon, so irrigating now would waste water",
+  farm_reason_deficit_but_rain: "there is a soil water deficit, but expected rain should cover it",
+  farm_reason_high_depletion: "root-zone water is substantially depleted",
+  farm_reason_demand_exceeds_rain: "crop water demand has exceeded recent rainfall",
+  farm_reason_high_et: "evaporative demand is high today",
+  farm_reason_moderate_depletion: "root-zone water is moderately depleted",
+  farm_reason_low_recent_rain: "little rainfall in the past 7 days",
+  farm_reason_low_soil_moisture: "the real ERA5-Land soil moisture reading is low for this root zone",
+  farm_reason_adequate_moisture: "soil moisture is adequate for this stage",
+  farm_reason_rain_meets_demand: "recent rainfall meets crop water demand",
+  farm_reason_buffered_by_rootzone: "rainfall is below demand, but the root zone still holds enough reserve",
+  farm_reason_wind_drift: "wind is too strong, risking spray drift",
+  farm_reason_wind_too_calm: "wind is very light, giving poor spray deposition",
+  farm_reason_wind_suitable: "wind speed is suitable for spraying",
+  farm_reason_washoff: "rain is likely, which may wash off applied product",
+  farm_reason_rain_possible: "some rain is possible within the spray window",
+  farm_reason_low_rain_risk: "rain risk during application is low",
+  farm_reason_evaporation: "high temperature will make droplets evaporate quickly",
+  farm_reason_data_limited: "station data is limited, so confidence is reduced",
+  farm_reason_severe_heat: "forecast temperature is well above the crop's comfortable range",
+  farm_reason_moderate_heat: "forecast temperature is above the crop's comfortable range",
+  farm_reason_mild_heat: "forecast temperature is at the edge of the comfortable range",
+  farm_reason_no_heat_stress: "temperatures stay within the crop's comfortable range",
+  farm_reason_flowering_sensitive: "flowering is the most heat-sensitive stage",
+  farm_reason_dry_soil_compounds: "dry soil makes heat stress worse",
+};
+
+/** Import shape kept loose (not the full FarmAdvisory type) so this stays
+ * decoupled from farm-engine.ts and easy to call with whatever advisory
+ * object the route already built. */
+export function buildFarmExplanationFacts(advisory: {
+  crop: { label_en: string };
+  stage: string;
+  water_balance: {
+    et0_mm_day: number; etc_mm_day: number; rain_7d_mm: number; rain_30d_mm: number;
+    balance_7d_mm: number; balance_30d_mm: number; soil_moisture_pct: number; depletion_pct: number;
+  };
+  irrigation: { action: string; depth_mm: number; reason_keys: string[] };
+  spray_window: { quality: string; reason_keys: string[] };
+  planting: { favourable: boolean; message_key: string; rain_30d_mm: number; required_mm: number };
+  stress: { level: string; peak_temp_c: number };
+}): Record<string, unknown> {
+  const reasonText = (keys: string[]) => keys.map((k) => FARM_REASON_EN[k] ?? k).join("; ");
+  return {
+    farm_crop: advisory.crop.label_en,
+    farm_growth_stage: advisory.stage,
+    farm_irrigation_action: advisory.irrigation.action,
+    farm_irrigation_depth_mm: advisory.irrigation.depth_mm,
+    farm_irrigation_reasons: reasonText(advisory.irrigation.reason_keys),
+    farm_soil_moisture_pct: advisory.water_balance.soil_moisture_pct,
+    farm_root_zone_depletion_pct: advisory.water_balance.depletion_pct,
+    farm_rain_7d_mm: advisory.water_balance.rain_7d_mm,
+    farm_rain_30d_mm: advisory.water_balance.rain_30d_mm,
+    farm_water_balance_7d_mm: advisory.water_balance.balance_7d_mm,
+    farm_water_balance_30d_mm: advisory.water_balance.balance_30d_mm,
+    farm_daily_water_demand_mm: advisory.water_balance.etc_mm_day,
+    farm_spray_window_quality: advisory.spray_window.quality,
+    farm_spray_window_reasons: reasonText(advisory.spray_window.reason_keys),
+    farm_planting_outlook: advisory.planting.favourable ? "favourable" : "unfavourable",
+    farm_planting_rain_30d_mm: advisory.planting.rain_30d_mm,
+    farm_planting_required_mm: advisory.planting.required_mm,
+    farm_heat_stress_level: advisory.stress.level,
+    farm_peak_crop_temp_c: advisory.stress.peak_temp_c,
+  };
+}
+
 const MODEL_VERSIONS_META: Record<string, { algorithm: string; mae: number }> = {
   "1h": { algorithm: "ExtraTrees", mae: 0.57 },
   "3h": { algorithm: "CatBoost", mae: 0.93 },
@@ -441,6 +515,7 @@ export async function generateExplanation(
   userQuestion?: string,
   forceFallback = false,
   mode: ExplanationMode = "standard",
+  extraFacts?: Record<string, unknown>,
 ): Promise<{
   text: string;
   source: "llm" | "deterministic";
@@ -464,8 +539,16 @@ export async function generateExplanation(
     peak_time: facts.peak_time ? fmtTime(facts.peak_time) : null,
     best_window_start: facts.best_window_start ? fmtTime(facts.best_window_start) : null,
     best_window_end: facts.best_window_end ? fmtTime(facts.best_window_end) : null,
+    ...extraFacts,
   };
   const factsJson = JSON.stringify(communicationFacts, null, 2);
+  // Extra numeric facts (e.g. a farm advisory's peak crop temperature) are
+  // real, validated values too — the grounding check must accept them, not
+  // just the base situation facts, or the LLM's correct answer gets rejected
+  // as an unrecognized number and silently replaced by the generic fallback.
+  const extraAllowedNumbers = extraFacts
+    ? Object.values(extraFacts).filter((v): v is number => typeof v === "number" && Number.isFinite(v))
+    : [];
   const systemPrompt = mode === "plain"
     ? (lang === "sw" ? PLAIN_SYSTEM_PROMPT_SW : PLAIN_SYSTEM_PROMPT_EN)
     : (lang === "sw" ? LLM_SYSTEM_PROMPT_SW : LLM_SYSTEM_PROMPT_EN);
@@ -504,7 +587,7 @@ export async function generateExplanation(
     if (!provider.configured) continue;
     try {
       const text = (await provider.run()).trim();
-      if (!text || !isExplanationGrounded(text, facts)) continue;
+      if (!text || !isExplanationGrounded(text, facts, extraAllowedNumbers)) continue;
       return { text, source: "llm", provider: provider.name, mode };
     } catch (error) {
       // Provider failure is non-fatal and must never block deterministic science.
@@ -672,7 +755,7 @@ function parseStructuredExplanation(raw: string | undefined): string {
  * this validator controls scientific fidelity. Any mismatch falls through to
  * the next provider or the deterministic template.
  */
-function isExplanationGrounded(text: string, facts: ExplanationFacts): boolean {
+function isExplanationGrounded(text: string, facts: ExplanationFacts, extraAllowedNumbers: number[] = []): boolean {
   // Never permit medical diagnosis or unsupported disease claims.
   const medical = /\b(diagnos|malaria|cholera|asthma attack|clinical diagnosis|hospital)\b/i;
   if (medical.test(text)) return false;
@@ -715,6 +798,7 @@ function isExplanationGrounded(text: string, facts: ExplanationFacts): boolean {
     facts.peak_wbgt,
     facts.era5_temp_anomaly,
     facts.sentinel3_lst,
+    ...extraAllowedNumbers,
   ].filter((n): n is number => typeof n === "number" && Number.isFinite(n));
   const temperatures = [...text.matchAll(/(-?\d+(?:\.\d+)?)\s*°\s*C/gi)].map((m) => Number(m[1]));
   for (const value of temperatures) {

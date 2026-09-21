@@ -7,6 +7,10 @@ import { Sparkles, Send, Loader2, BookOpen, GraduationCap } from "lucide-react";
 interface AiPanelProps {
   context?: string; // optional context hint (e.g. "situation", "map")
   initialQuestions?: string[];
+  // Extra fields merged into the /api/ai/explain request body — e.g. the
+  // selected crop/stage on the Farm Advisory page, so the AI can answer
+  // farm-specific questions instead of only general situation facts.
+  extraParams?: Record<string, string>;
 }
 
 const SUGGESTED_EN = [
@@ -34,7 +38,7 @@ interface Message {
   question?: string; // the question that produced this answer (for re-asking)
 }
 
-export default function AiPanel({ context = "situation", initialQuestions }: AiPanelProps) {
+export default function AiPanel({ context = "situation", initialQuestions, extraParams }: AiPanelProps) {
   const { t, lang } = useLanguage();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -60,7 +64,7 @@ export default function AiPanel({ context = "situation", initialQuestions }: AiP
       const res = await fetch("/api/ai/explain", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lang, question, context, mode: askMode }),
+        body: JSON.stringify({ lang, question, context, mode: askMode, ...extraParams }),
       });
       const data = await res.json();
       setMessages((m) => [...m, {
