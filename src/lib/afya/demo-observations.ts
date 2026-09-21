@@ -212,6 +212,7 @@ export function generateReplayDay(
 // Context generators (ERA5, CHIRPS, Sentinel)
 
 export function generateEra5Context(anchor: string, currentTemp: number, currentHum: number): {
+  available: boolean;
   era5_temp_c: number;
   era5_dewpoint_c: number;
   era5_relative_humidity: number;
@@ -242,6 +243,7 @@ export function generateEra5Context(anchor: string, currentTemp: number, current
   const era5_solar_wm2 = Math.round(solar * 850);
 
   return {
+    available: false,
     era5_temp_c,
     era5_dewpoint_c,
     era5_relative_humidity: era5_rh,
@@ -258,6 +260,7 @@ export function generateEra5Context(anchor: string, currentTemp: number, current
 }
 
 export function generateChirpsContext(anchor: string): {
+  available: boolean;
   chirps_mm: number;
   chirps_7d_mm: number;
   chirps_30d_mm: number;
@@ -270,6 +273,7 @@ export function generateChirpsContext(anchor: string): {
   const d = new Date(anchor);
   const validDate = d.toISOString().slice(0, 10);
   return {
+    available: false,
     chirps_mm: 1.8,
     chirps_7d_mm: 14.7,
     chirps_30d_mm: 48.2,
@@ -288,12 +292,13 @@ export function generateSentinelContext(): {
   sentinel3_acquired: string | null;
   sentinel3_lst_c: number | null;
 } {
+  // Without a real catalogue answer there is nothing to show; no stand-in values.
   return {
-    sentinel2_available: true,
-    sentinel2_acquired: "2026-09-05",
-    sentinel2_ndvi_mean: 0.42,
-    sentinel3_available: true,
-    sentinel3_acquired: "2026-09-06",
-    sentinel3_lst_c: 34.7,
+    sentinel2_available: false,
+    sentinel2_acquired: null,
+    sentinel2_ndvi_mean: null,
+    sentinel3_available: false,
+    sentinel3_acquired: null,
+    sentinel3_lst_c: null,
   };
 }

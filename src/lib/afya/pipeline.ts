@@ -126,6 +126,10 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
     bundle.realtime ? getRegionalForecastSeries(JKUAT_COORDS.lat, JKUAT_COORDS.lng) : Promise.resolve([]),
   ]);
 
+  if (bundle.realtime && (era5.available === false || chirps.available === false)) {
+    quality.flags.push("regional_context_unavailable");
+  }
+
   // Step 8: Risk / exposure
   const thermalRisk = computeThermalRisk(f3h.value, 0);
   const uncertainty = computeUncertainty(f3h.lower, f3h.upper);

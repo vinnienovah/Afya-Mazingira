@@ -96,6 +96,8 @@ export interface BestTimeResult {
 }
 
 export interface Era5Context {
+  // False when ERA5-Land could not be fetched and the values are placeholders.
+  available?: boolean;
   era5_temp_c: number;
   era5_dewpoint_c: number;
   era5_relative_humidity: number;
@@ -111,6 +113,8 @@ export interface Era5Context {
 }
 
 export interface ChirpsContext {
+  // False when the rainfall could not be fetched and the values are placeholders.
+  available?: boolean;
   chirps_mm: number;
   chirps_7d_mm: number;
   chirps_30d_mm: number;
