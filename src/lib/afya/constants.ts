@@ -161,7 +161,3 @@ export const CLIMATE_LOCATIONS: { key: string; name: string; name_sw: string; la
   { key: "nyandarua", name: "Nyandarua", name_sw: "Nyandarua", lat: -0.3722, lng: 36.4830 },
   { key: "nyeri", name: "Nyeri", name_sw: "Nyeri", lat: -0.3488, lng: 36.9114 },
 ];
-
-// ─── Demo account (public, documented credential — always auto-verified) ─────
-export const DEMO_EMAIL = "demo@afyahewa.dev";
-export const DEMO_PASSWORD = "afyahewa2026";
