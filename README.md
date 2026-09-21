@@ -4,6 +4,32 @@ Heat and weather decisions for the JKUAT campus in Juja, Kenya, built on the Con
 
 Live at **[afya-mazingira.vercel.app](https://afya-mazingira.vercel.app)**. Built for Hack The Weather 2026 (JHUB Africa).
 
+`Next.js 16` · `React 19` · `TypeScript` · `Tailwind CSS 4` · `PostgreSQL / Drizzle` · `Recharts` · `Leaflet`
+
+---
+
+## Table of contents
+
+1. [Project name](#1-project-name)
+2. [Problem statement](#2-problem-statement)
+3. [Solution](#3-solution)
+4. [How Conduit@Empathy data is used](#4-how-conduitempathy-data-is-used)
+5. [Features](#5-features)
+6. [Technology stack](#6-technology-stack)
+7. [Architecture](#7-architecture)
+8. [Installation and setup](#8-installation-and-setup)
+9. [Usage](#9-usage)
+10. [Data sources](#10-data-sources)
+11. [AI usage](#11-ai-usage)
+12. [Screenshots / demo](#12-screenshots--demo)
+13. [Team members](#13-team-members)
+14. [Future development](#14-future-development)
+15. [Licence](#15-licence)
+16. [Known limitations](#known-limitations)
+17. [Reproducibility](#reproducibility)
+
+---
+
 **In one example.** A site supervisor in Juja is planning tomorrow's concrete pour. The station's own record shows how much the season matters: from January to March 2026 about half of all working hours were in the HIGH heat band for outdoor work, against about 3 % in July and August 2025. Afya Mazingira reads the station every 15 minutes, forecasts WBGT for the next nine hours, and tells the supervisor which daylight hours carry the least heat risk for construction, in English or Kiswahili.
 
 ---
@@ -159,6 +185,8 @@ Also: sign-in with email and password or Google, email verification, saved plans
 
 ## 7. Architecture
 
+Three real, redundant station feeds and Sentinel's quality checks feed one deterministic pipeline. A language model only rewords what the pipeline has already computed — it never produces a number, a time or a risk band itself.
+
 ```
 Conduit API --+
 CHORDS live --+--> 15-minute grid --> Sentinel checks --> features --+--> state (k-means)
@@ -273,6 +301,8 @@ Between them the team covers the environmental science behind the heat and farm 
 - **Reach people without a smartphone.** Send the daily best window and heat alerts by SMS and WhatsApp. The first partner to approach is the Kiambu county agricultural extension service, which already advises farmers around Juja.
 - **CHIRPS rainfall** by point extraction from its gridded files, in place of ERA5-Land.
 - **Partners:** JHUB Africa for station access, Kiambu county agriculture officers for the farm advisory, and the JKUAT sports and estates departments as first users.
+- **Localize by location.** Use GPS (or a chosen pin, backed by Conduit/CHORDS station coverage and regional ERA5-Land data) so someone can select where they are and get a localized picture, rather than only JKUAT and the fixed 11-county list.
+- **More datasets on the Risk Map.** Bring in further regional layers — air quality, a drought index, additional satellite products — so the map covers more than heat, rain and vegetation.
 
 ## 15. Licence
 
@@ -286,9 +316,7 @@ MIT. See [LICENSE](LICENSE). Station and reanalysis data remain under their prov
 - **The risk bands are our own.** 18, 21 and 24 °C WBGT and the activity adjustments are screening bands chosen by the project, not a published occupational or medical limit.
 - **The forecast under-warns more in the hot season.** Tested month by month, it put the hour in too low a risk band 17.1 % of the time from January to March 2026, against 7.8 % in other months. Treat hot-season forecasts near a band boundary as the higher band.
 - **Rain probability is a rule of thumb** (falling pressure and high humidity raise it), not fitted: the station's rain gauges are too sparse to fit it on.
-- **Rainfall context is ERA5-Land,** not CHIRPS.
 - **Farm advice is indicative.** It uses ERA5-Land's top soil layer at about 9 km and typical clay-soil values, not a measurement in the field.
-- **When ERA5-Land or the satellite catalogue cannot be reached** (and in historical replay, which does not fetch past context), their panels show "-" instead of numbers and data quality carries a `regional_context_unavailable` flag. No stand-in values are shown as data.
 - **The flood page shows conditions,** rainfall and soil saturation, not a flood forecast.
 - **The Conduit API can lag by most of a day;** the CHORDS feed covers for it, but carries no rain readings, so live rain is only seen when the Conduit API is current. Rainfall totals always come from ERA5-Land.
 - **Rate limits are per server instance,** so they are weak on a serverless host.
