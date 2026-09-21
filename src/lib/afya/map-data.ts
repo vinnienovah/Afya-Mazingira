@@ -1,26 +1,21 @@
-// ─── Regional Environmental Outlook data ─────────────────────────────────────
-// Real county boundaries (public/geo/counties.geojson) with per-county
-// indicators derived from real sources wherever practical:
-//   - Weather (temp/humidity/wind/rain/soil moisture): batched Open-Meteo
-//     forecast API, one request for every county centroid, no key required.
-//   - Thermal risk category: the same wbgtToRisk() classification the rest
-//     of the app uses, fed a shade-only WBGT approximation (Australian BoM
-//     formula) from the real temperature/humidity above — a coarse regional
-//     proxy, not the sensor-grade WBGT computed for the JKUAT station.
-//   - NDVI: real Copernicus Sentinel-2 statistics per county, best-effort
-//     (unfiltered for cloud cover — see copernicus.ts), when CDSE credentials
-//     are configured.
-//   - LST: intentionally left null. As elsewhere in this codebase, land
-//     surface temperature requires SLSTR thermal statistics and is never
-//     estimated from a proxy.
-// The county actually hosting the Conduit station (Kiambu — JKUAT/Juja) uses
-// the real current pipeline output (measured WBGT, observed rain) instead of
-// the Open-Meteo proxy, when real (non-demo) pipeline data is available.
+// Regional outlook: real county boundaries (public/geo/counties.geojson) with
+// indicators per county.
+//   - Weather (temperature, humidity, wind, rain, soil moisture): one batched
+//     Open-Meteo request for every county centroid, no key required.
+//   - Thermal category: the same wbgtToRisk() bands as the rest of the app,
+//     applied to shade WBGT from temperature and humidity (Stull wet bulb),
+//     the same method the station uses, with no sun term.
+//   - NDVI: Copernicus Sentinel-2 statistics per county when CDSE credentials
+//     are configured (not filtered for cloud; see copernicus.ts).
+//   - Land surface temperature: left null. It needs SLSTR thermal statistics
+//     and is not estimated from anything else.
+// Kiambu, the county the Conduit station stands in, uses the station pipeline
+// (station WBGT, observed rain) whenever station data is available.
 
 import fs from "fs";
 import path from "path";
 import type { Geometry } from "geojson";
-import { wbgtToRisk, approxWbgtShade } from "./constants";
+import { wbgtToRisk, shadeWbgtFromHumidity } from "./constants";
 import { hasCopernicusCreds, cdseToken, ndviStatisticsForBbox, type Bbox } from "./copernicus";
 
 export interface CountyFeature {
@@ -60,7 +55,7 @@ export interface StationOverride {
 
 const OUTLOOK_HOURS = ["09:00", "12:00", "15:00", "18:00"];
 
-// ─── County boundaries (real GeoJSON, loaded once) ──────────────────────────
+// County boundaries (real GeoJSON, loaded once)
 
 interface LoadedCounty {
   name: string;
@@ -122,7 +117,7 @@ function centroidAndBbox(ring: [number, number][]): { centroid: { lat: number; l
   };
 }
 
-// ─── Weather (real, batched Open-Meteo) ─────────────────────────────────────
+// Weather (real, batched Open-Meteo)
 
 interface CountyWeather {
   tempC: number;
@@ -154,10 +149,10 @@ async function fetchRegionalWeather(counties: LoadedCounty[]): Promise<(CountyWe
 
     const hourlyCategories = OUTLOOK_HOURS.map((hour) => {
       const idx = loc.hourly!.time.findIndex((t) => t.endsWith(`T${hour}`));
-      if (idx < 0) return { hour, category: wbgtToRisk(approxWbgtShade(tempC, rh)) };
+      if (idx < 0) return { hour, category: wbgtToRisk(shadeWbgtFromHumidity(tempC, rh)) };
       const t = loc.hourly!.temperature_2m[idx];
       const h = loc.hourly!.relative_humidity_2m[idx];
-      return { hour, category: wbgtToRisk(approxWbgtShade(t, h)) };
+      return { hour, category: wbgtToRisk(shadeWbgtFromHumidity(t, h)) };
     });
 
     // Trend: compare "now" against ~3h ahead in the same local-time series.
@@ -170,7 +165,7 @@ async function fetchRegionalWeather(counties: LoadedCounty[]): Promise<(CountyWe
     }
 
     // Real per-county soil moisture (0-1cm layer, m³/m³) from the same
-    // batched call — falls back to a documented regional default only if
+    // batched call, falls back to a documented regional default only if
     // Open-Meteo omits the field for this location.
     const soilSeries = loc.hourly.soil_moisture_0_to_1cm;
     const soilMoisture = soilSeries?.length
@@ -198,7 +193,7 @@ interface OpenMeteoLocation {
 }
 
 /** Shade-only WBGT approximation (Australian Bureau of Meteorology formula). */
-// ─── NDVI (real, per-county Copernicus Sentinel-2 statistics) ──────────────
+// NDVI (real, per-county Copernicus Sentinel-2 statistics)
 
 const NDVI_TTL_MS = 6 * 3600_000;
 const NDVI_BOX_HALF_DEG = 0.02; // ~2 km half-width sample box around each centroid
@@ -212,7 +207,7 @@ async function getRegionalNdvi(counties: LoadedCounty[]): Promise<Record<string,
   try {
     const token = await cdseToken();
     // Sentinel-2's ~5 day revisit means a single day often misses these small
-    // per-county sample boxes entirely — average over the last 14 days instead.
+    // per-county sample boxes entirely, average over the last 14 days instead.
     const from = new Date(Date.now() - 14 * 86400_000).toISOString().slice(0, 10);
     const to = new Date(Date.now() - 86400_000).toISOString().slice(0, 10);
     const results = await Promise.allSettled(
@@ -238,7 +233,7 @@ async function getRegionalNdvi(counties: LoadedCounty[]): Promise<Record<string,
   }
 }
 
-// ─── Assembly ────────────────────────────────────────────────────────────────
+// Assembly
 
 function round1(n: number): number {
   return Math.round(n * 10) / 10;
@@ -281,7 +276,7 @@ export async function getRegionalOutlook(stationOverride?: StationOverride): Pro
       trend = w?.trend ?? "stable";
       outlookHours = w?.hourlyCategories ?? OUTLOOK_HOURS.map((hour) => ({ hour, category: wbgtToRisk(wbgtEstimate) }));
     } else if (w) {
-      wbgtEstimate = approxWbgtShade(w.tempC, w.rh);
+      wbgtEstimate = shadeWbgtFromHumidity(w.tempC, w.rh);
       confidence = "MODERATE";
       sources = ["Open-Meteo"];
       rain24h = w.rain24hMm;
@@ -312,7 +307,7 @@ export async function getRegionalOutlook(stationOverride?: StationOverride): Pro
         soil_moisture: soilMoisture,
         flood_risk: computeFloodRisk(rain24h, soilMoisture),
         ndvi_mean: ndvi,
-        lst_c: null, // never estimated — see file header
+        lst_c: null, // never estimated, see file header
         sources,
         trend,
         outlook_hours: outlookHours,
@@ -329,14 +324,14 @@ export async function getRegionalOutlook(stationOverride?: StationOverride): Pro
 
 /**
  * Flood-conducive-conditions indicator: real recent rainfall + real ERA5-Land
- * soil saturation — the same two signals operational flash-flood guidance
+ * soil saturation, the same two signals operational flash-flood guidance
  * systems use before any terrain modelling. This is deliberately NOT a
  * flood-susceptibility map: that would require a DEM, flow-accumulation or
  * proximity-to-drainage data this project doesn't have, and faking a
  * per-location hazard zone from data that can't actually support one would
  * violate the same honesty principle applied everywhere else in the app.
  * Thresholds: soil moisture ≥0.30 m³/m³ is close to field capacity for the
- * loam assumption used elsewhere (farm-engine.ts) — already-saturated ground
+ * loam assumption used elsewhere (farm-engine.ts), already-saturated ground
  * sheds new rain as runoff rather than absorbing it.
  */
 export function computeFloodRisk(rain24hMm: number, soilMoisture: number): "LOW" | "ELEVATED" | "HIGH" {
@@ -351,9 +346,8 @@ function ringToPolygonCoords(geometry: Geometry): [number, number][][] {
   return [[]];
 }
 
-// ─── Satellite acquisitions metadata (demo fallback; live path in
-// sources-external.ts uses real Copernicus catalog search when configured) ──
-
+// Satellite acquisitions metadata (demo fallback; live path in
+// sources-external.ts uses real Copernicus catalog search when configured)
 export interface SatelliteAcquisition {
   id: string;
   sensor: "Sentinel-2" | "Sentinel-3";

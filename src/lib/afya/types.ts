@@ -1,5 +1,5 @@
-// ─── AFYA MAZINGIRA shared domain types ──────────────────────────────────────────
-// Language-neutral. No UI strings here — only scientific values and categories.
+// AFYA MAZINGIRA shared domain types
+// Language-neutral. No UI strings here, only scientific values and categories.
 
 export type QualityStatus = "GOOD" | "DEGRADED" | "POOR";
 export type RiskLevel = "LOW" | "ELEVATED" | "HIGH" | "VERY_HIGH";
@@ -96,6 +96,8 @@ export interface BestTimeResult {
 }
 
 export interface Era5Context {
+  // False when ERA5-Land could not be fetched and the values are placeholders.
+  available?: boolean;
   era5_temp_c: number;
   era5_dewpoint_c: number;
   era5_relative_humidity: number;
@@ -111,6 +113,8 @@ export interface Era5Context {
 }
 
 export interface ChirpsContext {
+  // False when the rainfall could not be fetched and the values are placeholders.
+  available?: boolean;
   chirps_mm: number;
   chirps_7d_mm: number;
   chirps_30d_mm: number;
@@ -139,6 +143,8 @@ export interface SituationResult {
   location: string;
   demo_mode: boolean;
   data_source: "CONDUIT_LIVE" | "CONDUIT_ARCHIVE" | "DEMO";
+  // Which live feed served the station data: JHUB's Conduit API or the CHORDS portal.
+  data_feed?: "jhub" | "chords" | null;
   quality: DataQuality;
   current: CurrentObservation;
   state: EnvironmentalState;
@@ -153,12 +159,12 @@ export interface SituationResult {
   chirps: ChirpsContext;
   sentinel: SentinelContext;
   // Real Open-Meteo forecast (not the ERA5 archive), independent of the
-  // Conduit station's freshness — the only channel that still supports
+  // Conduit station's freshness, the only channel that still supports
   // planning once the ground-truth forecast has aged past its own horizon.
   regional_outlook: { time: string; wbgt_like: number }[];
 }
 
-// ─── Candidate window for the Best-Time engine ───────────────────────────────
+// Candidate window for the Best-Time engine
 export interface CandidateWindow {
   start: string; // ISO
   end: string;

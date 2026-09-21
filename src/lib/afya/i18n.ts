@@ -1,7 +1,6 @@
 import type { Lang } from "./types";
 
-// ─── Static reviewed UI strings ───────────────────────────────────────────────
-// Kiswahili strings are natural, not literal. They are reviewed, not generated.
+// Interface text in English and Kiswahili.
 
 export const STRINGS: Record<Lang, Record<string, string>> = {
   en: {
@@ -29,7 +28,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     updated_ago: "Updated",
     min_ago: "min ago",
     demo_mode: "DEMO MODE",
-    demo_notice: "Showing demo data — not a live observation",
+    demo_notice: "Showing demo data, not a live observation",
     conduit_archive_badge: "STATION ARCHIVE",
     conduit_live_badge: "LIVE · CONDUIT",
     archive_notice: "Showing the most recently recorded station data, not real-time",
@@ -85,8 +84,8 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     end_time: "Available until",
     plan_day_today: "Today",
     plan_day_tomorrow: "Tomorrow",
-    plan_day_tomorrow_note: "Tomorrow's plan uses the real regional forecast (Open-Meteo), not the ground station — the station's own forecast only looks ~9 hours ahead.",
-    plan_regional_notice: "This recommendation is based on the real regional forecast, not the JKUAT ground station — either because you're planning ahead, or because the station hasn't reported recently enough for its own forecast to reach this far.",
+    plan_day_tomorrow_note: "Tomorrow's plan uses the real regional forecast (Open-Meteo), not the ground station, the station's own forecast only looks ~9 hours ahead.",
+    plan_regional_notice: "This recommendation is based on the real regional forecast, not the JKUAT ground station, either because you're planning ahead, or because the station hasn't reported recently enough for its own forecast to reach this far.",
     find_best_time: "Find Best Time",
     best_window_result: "BEST AVAILABLE WINDOW",
     alternative_window: "ALTERNATIVE WINDOW",
@@ -134,9 +133,9 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     hide_technical: "Hide Technical Details",
     technical_measurements: "Technical Measurements",
     contributor_title: "Top Model Contributors",
-    contributor_note: "These are model contributors and environmental signals — not causes.",
+    contributor_note: "These are model contributors and environmental signals, not causes.",
     uncertainty_by_horizon: "Uncertainty by Horizon",
-    uncertainty_by_horizon_note: "How the forecast's confidence band widens the further ahead it looks — a shorter bar means a tighter, more confident range.",
+    uncertainty_by_horizon_note: "How the forecast's confidence band widens the further ahead it looks, a shorter bar means a tighter, more confident range.",
     explore_climate_history: "Explore Climate History",
     explore_climate_history_note: "Pick any date range up to a year back, daily or hourly, and compare against ERA5-Land for any location.",
     explore_dashboard: "Open the Dashboard",
@@ -150,8 +149,8 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     climate_variables_title: "Climate Variables",
     climate_variables_sub: "Conduit · ERA5-Land, real recorded/regional data",
     climate_history_title: "Climate History",
-    climate_history_sub: "Real recorded and regional data — pick any date range, granularity and location.",
-    dashboard_sub: "Live station variables, date-range Climate History, and Historical Replay — all in one place.",
+    climate_history_sub: "Real recorded and regional data, pick any date range, granularity and location.",
+    dashboard_sub: "Live station variables, date-range Climate History, and Historical Replay, all in one place.",
     dashboard_tab_live: "Live",
     dashboard_tab_history: "History",
     dashboard_tab_replay: "Replay",
@@ -176,7 +175,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     regional_context: "Regional Context",
     model_version: "Model Version",
     era5_context: "ERA5-Land Regional Context",
-    chirps_context: "CHIRPS Rainfall Context",
+    chirps_context: "Rainfall Context (ERA5-Land)",
     satellite_context: "Satellite Context",
     data_quality_events: "Data Quality Events",
     local_vs_regional: "Local vs Regional Anomaly",
@@ -187,7 +186,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     suggested_questions: "Suggested questions",
     ask_placeholder: "Ask about the environmental situation…",
     send: "Send",
-    ai_disclaimer: "AFYA AI explains validated AFYA MAZINGIRA results. It does not forecast independently.",
+    ai_disclaimer: "AFYA AI explains results AFYA MAZINGIRA has already computed and checked. It does not forecast on its own.",
     no_ai: "AI explanation temporarily unavailable. Deterministic fallback shown.",
 
     // Map
@@ -219,7 +218,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     regional_intelligence_sub: "Climate + satellite + geospatial coverage",
     data_sources: "Data Sources",
     era5_layer: "ERA5-Land",
-    chirps_layer: "CHIRPS",
+    chirps_layer: "ERA5-Land rain",
     ndvi_layer: "Sentinel-2 NDVI",
     lst_layer: "Sentinel-3 LST",
     terrain_layer: "Terrain / DEM",
@@ -321,8 +320,8 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
 
     // Errors
     error_generic: "Something went wrong. Please try again.",
-    error_conduit: "Current Conduit observations could not be refreshed. Your last validated observation is shown. AFYA MAZINGIRA has temporarily reduced recommendation confidence.",
-    error_offline: "You appear to be offline. Showing last validated data.",
+    error_conduit: "Current Conduit observations could not be refreshed. The last quality-checked observation is shown. AFYA MAZINGIRA has temporarily reduced recommendation confidence.",
+    error_offline: "You appear to be offline. Showing the last quality-checked data.",
     error_not_found: "Not found.",
 
     // Empty states
@@ -431,25 +430,25 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     ai_mode_standard: "Standard",
     ai_mode_plain: "Plain language",
     ai_mode_standard_hint: "Full explanation with measurements, forecasts and model terms.",
-    ai_mode_plain_hint: "Simple everyday wording — no technical terms.",
+    ai_mode_plain_hint: "Simple everyday wording, no technical terms.",
     ai_explain_simply: "Explain simply",
 
     // Navigation additions
     nav_farm: "Farm Advisory",
-    nav_stories: "Case Studies",
+    nav_stories: "Example Scenarios",
     nav_flood: "Flood Risk",
-    flood_subtitle: "Real rainfall + soil saturation across the 11 monitored counties — conditions that make flash flooding more likely.",
-    flood_honesty_note: "This shows current rainfall and soil-saturation conditions, computed from real ERA5-Land data — it is not a flood-susceptibility map. A true susceptibility map needs terrain/drainage data (elevation, flow accumulation, river proximity) that this deployment doesn't have, so it isn't shown here rather than approximated.",
+    flood_subtitle: "Real rainfall + soil saturation across the 11 monitored counties, conditions that make flash flooding more likely.",
+    flood_honesty_note: "This shows current rainfall and soil-saturation conditions, computed from real ERA5-Land data, it is not a flood-susceptibility map. A true susceptibility map needs terrain/drainage data (elevation, flow accumulation, river proximity) that this deployment doesn't have, so it isn't shown here rather than approximated.",
     flood_high_count: "HIGH risk counties",
     flood_elevated_count: "ELEVATED risk counties",
     flood_counties_monitored: "Counties monitored",
     flood_soil_moisture: "Soil moisture",
-    flood_data_note: "Rainfall and soil moisture: real ERA5-Land data, refreshed every 5 minutes. Risk level: rain (last 24h) and soil saturation compared against thresholds documented in the codebase — a coarse, real-data indicator, not a hazard model.",
+    flood_data_note: "Rainfall and soil moisture: real ERA5-Land data, refreshed every 5 minutes. Risk level: rain (last 24h) and soil saturation compared against thresholds documented in the codebase, a coarse, real-data indicator, not a hazard model.",
 
     // Map
     map_boundaries_note: "County boundaries: official Kenya administrative dataset",
 
-    // ── Farm Advisory ──
+    // Farm Advisory
     farm_title: "Farm Advisory",
     farm_sub: "Irrigation, spraying and field-work decisions from live station data",
     farm_select_crop: "Which crop are you managing?",
@@ -460,7 +459,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     farm_no_water_needed: "No irrigation water is needed right now.",
     farm_action_irrigate_now: "Irrigate now",
     farm_action_irrigate_soon: "Irrigate soon",
-    farm_action_hold_rain_expected: "Hold — rain expected",
+    farm_action_hold_rain_expected: "Hold, rain expected",
     farm_action_no_irrigation: "No irrigation needed",
     farm_conf_low: "Low confidence",
     farm_conf_moderate: "Moderate confidence",
@@ -497,7 +496,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     farm_method_body: "Reference evapotranspiration uses the Hargreaves–Samani equation from station temperature. Crop water demand applies FAO-56 single crop coefficients for the selected crop and growth stage. The balance compares that demand with CHIRPS measured rainfall and ERA5-Land soil moisture. Spray and field-work windows come from the same deterministic engine used across AFYA MAZINGIRA.",
     farm_disclaimer: "This is agronomic decision support. It does not predict yield, diagnose plant disease or pests, and does not replace extension-officer judgement or local knowledge of your soil.",
     // Farm reasons
-    farm_reason_rain_expected: "Rain is expected soon — irrigating now would waste water",
+    farm_reason_rain_expected: "Rain is expected soon, irrigating now would waste water",
     farm_reason_deficit_but_rain: "There is a soil water deficit, but expected rain should cover it",
     farm_reason_high_depletion: "Root-zone water is substantially depleted",
     farm_reason_demand_exceeds_rain: "Crop water demand has exceeded recent rainfall",
@@ -508,13 +507,13 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     farm_reason_rain_meets_demand: "Recent rainfall meets crop water demand",
     farm_reason_buffered_by_rootzone: "Rainfall is below demand, but the root zone still holds enough reserve",
     farm_reason_low_soil_moisture: "Real ERA5-Land soil moisture reading is low for this root zone",
-    farm_reason_wind_drift: "Wind too strong — spray drift risk",
-    farm_reason_wind_too_calm: "Very little wind — poor spray deposition",
+    farm_reason_wind_drift: "Wind too strong, spray drift risk",
+    farm_reason_wind_too_calm: "Very little wind, poor spray deposition",
     farm_reason_wind_suitable: "Wind speed is suitable for spraying",
-    farm_reason_washoff: "Rain likely — product may wash off",
+    farm_reason_washoff: "Rain likely, product may wash off",
     farm_reason_rain_possible: "Some rain possible within the spray window",
     farm_reason_low_rain_risk: "Low rain risk during application",
-    farm_reason_evaporation: "High temperature — droplets evaporate quickly",
+    farm_reason_evaporation: "High temperature, droplets evaporate quickly",
     farm_reason_data_limited: "Station data is limited, so confidence is reduced",
     farm_reason_severe_heat: "Forecast temperature is well above the crop's comfortable range",
     farm_reason_moderate_heat: "Forecast temperature is above the crop's comfortable range",
@@ -529,13 +528,13 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     farm_plant_insufficient: "Accumulated rainfall is still below the usual requirement for this crop.",
     farm_plant_dryspell: "Rainfall is adequate, but a long dry spell adds risk to establishment.",
 
-    // ── Case studies ──
-    stories_title: "Case Studies",
-    stories_sub: "Who benefits, and what actually changes — from data to early action",
+    // Example scenarios
+    stories_title: "Example Scenarios",
+    stories_sub: "Illustrative users, not real case studies: who could benefit, and what would change",
     stories_problem: "The problem",
     stories_try_it: "Try this yourself",
     stories_scale: "How this scales",
-    stories_scale_body: "AFYA MAZINGIRA scales by adding validated ground anchors, not by stretching one station across a region. Each new Conduit station becomes another high-frequency intelligence node inside the same regional outlook, and every capability shown here — states, forecasts, Best-Time, farm advisory and bilingual explanation — applies immediately at that new location.",
+    stories_scale_body: "AFYA MAZINGIRA scales by adding ground stations, not by stretching one station across a region. Each new Conduit station becomes another high-frequency intelligence node inside the same regional outlook, and every capability shown here, states, forecasts, Best-Time, farm advisory and bilingual explanation, applies immediately at that new location.",
   },
 
   sw: {
@@ -561,7 +560,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     updated_ago: "Imesasishwa",
     min_ago: "dakika zilizopita",
     demo_mode: "HALI YA ONYO",
-    demo_notice: "Inaonyesha data ya mfano — si uchunguzi wa moja kwa moja",
+    demo_notice: "Inaonyesha data ya mfano, si uchunguzi wa moja kwa moja",
     conduit_archive_badge: "KUMBUKUMBU YA KITUO",
     conduit_live_badge: "MOJA KWA MOJA · CONDUIT",
     archive_notice: "Inaonyesha data ya hivi punde iliyorekodiwa na kituo, si ya wakati halisi",
@@ -613,8 +612,8 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     end_time: "Hadi",
     plan_day_today: "Leo",
     plan_day_tomorrow: "Kesho",
-    plan_day_tomorrow_note: "Mpango wa kesho unatumia utabiri halisi wa kikanda (Open-Meteo), si kituo cha ardhini — utabiri wa kituo mwenyewe unaangalia karibu masaa 9 tu mbele.",
-    plan_regional_notice: "Pendekezo hili linatokana na utabiri halisi wa kikanda, si kituo cha ardhini cha JKUAT — ama kwa sababu unapanga mbeleni, au kwa sababu kituo hakijatoa taarifa hivi karibuni vya kutosha kwa utabiri wake mwenyewe kufika mbali hivi.",
+    plan_day_tomorrow_note: "Mpango wa kesho unatumia utabiri halisi wa kikanda (Open-Meteo), si kituo cha ardhini, utabiri wa kituo mwenyewe unaangalia karibu masaa 9 tu mbele.",
+    plan_regional_notice: "Pendekezo hili linatokana na utabiri halisi wa kikanda, si kituo cha ardhini cha JKUAT, ama kwa sababu unapanga mbeleni, au kwa sababu kituo hakijatoa taarifa hivi karibuni vya kutosha kwa utabiri wake mwenyewe kufika mbali hivi.",
     find_best_time: "Tafuta Wakati Bora",
     best_window_result: "DIRISHA BORA LA KUPATIKANA",
     alternative_window: "DIRISHA M badala",
@@ -660,9 +659,9 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     hide_technical: "Ficha Maelezo ya Kiufundi",
     technical_measurements: "Vipimo vya Kiufundi",
     contributor_title: "Vichangiaji Vikuu vya Mfumo",
-    contributor_note: "Hivi ni vichangiaji vya mfumo na ishara za mazingira — si sababu.",
+    contributor_note: "Hivi ni vichangiaji vya mfumo na ishara za mazingira, si sababu.",
     uncertainty_by_horizon: "Utata kwa Kipindi",
-    uncertainty_by_horizon_note: "Jinsi kipimo cha uhakika wa utabiri kinavyopanuka kadri kinavyoangalia mbali zaidi — mstari mfupi unamaanisha uhakika zaidi.",
+    uncertainty_by_horizon_note: "Jinsi kipimo cha uhakika wa utabiri kinavyopanuka kadri kinavyoangalia mbali zaidi, mstari mfupi unamaanisha uhakika zaidi.",
     explore_climate_history: "Chunguza Historia ya Hali ya Hewa",
     explore_climate_history_note: "Chagua kipindi chochote hadi mwaka mmoja uliopita, kila siku au kila saa, na linganisha na ERA5-Land kwa eneo lolote.",
     explore_dashboard: "Fungua Dashibodi",
@@ -675,8 +674,8 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     climate_variables_title: "Vigezo vya Hali ya Hewa",
     climate_variables_sub: "Conduit · ERA5-Land, data halisi iliyorekodiwa/kikanda",
     climate_history_title: "Historia ya Hali ya Hewa",
-    climate_history_sub: "Data halisi iliyorekodiwa na ya kikanda — chagua muda, kipimo na eneo lolote.",
-    dashboard_sub: "Vipimo vya moja kwa moja vya kituo, Historia ya Hali ya Hewa, na Marudio ya Kihistoria — vyote mahali pamoja.",
+    climate_history_sub: "Data halisi iliyorekodiwa na ya kikanda, chagua muda, kipimo na eneo lolote.",
+    dashboard_sub: "Vipimo vya moja kwa moja vya kituo, Historia ya Hali ya Hewa, na Marudio ya Kihistoria, vyote mahali pamoja.",
     dashboard_tab_live: "Moja kwa Moja",
     dashboard_tab_history: "Historia",
     dashboard_tab_replay: "Marudio",
@@ -701,7 +700,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     regional_context: "Muktadha wa Kikanda",
     model_version: "Toleo la Mfumo",
     era5_context: "Muktadha wa Kikanda wa ERA5-Land",
-    chirps_context: "Muktadha wa Mvua wa CHIRPS",
+    chirps_context: "Muktadha wa Mvua (ERA5-Land)",
     satellite_context: "Muktadha wa Sayeti",
     data_quality_events: "Matukio ya Ubora wa Data",
     local_vs_regional: "Tofauti ya Kimaeneo na Kikanda",
@@ -712,7 +711,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     suggested_questions: "Maswali yaliyopendekezwa",
     ask_placeholder: "Uliza kuhusu hali ya mazingira…",
     send: "Tuma",
-    ai_disclaimer: "AFYA AI hueleza matokeo yaliyoidhinishwa ya AFYA MAZINGIRA. Haitabirí kwa uhuru.",
+    ai_disclaimer: "AFYA AI hueleza matokeo ambayo AFYA MAZINGIRA imeshakokotoa na kukagua. Haitabiri yenyewe.",
     no_ai: "Maelezo ya AI hayapatikani kwa sasa. Inaonyeshwa mbadala wa kisayansi.",
 
     map_title: "Muonekano wa Kikanda wa Mazingira",
@@ -743,7 +742,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     regional_intelligence_sub: "Hali ya hewa + setilaiti + data za kijiografia",
     data_sources: "Vyanzo vya Data",
     era5_layer: "ERA5-Land",
-    chirps_layer: "CHIRPS",
+    chirps_layer: "Mvua ya ERA5-Land",
     ndvi_layer: "Sentinel-2 NDVI",
     lst_layer: "Sentinel-3 LST",
     terrain_layer: "Eneo la Juu / DEM",
@@ -839,8 +838,8 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     jkuat_prov: "Mazingira ya uthibitisho wa dhana · JKUAT / Juja, Kenya",
 
     error_generic: "Hitilafu imetokea. Tafadhali jaribu tena.",
-    error_conduit: "Uchunguzi wa sasa wa Conduit hauwezi kusasishwa. Uchunguzi wako wa mwisho ulioidhinishwa unaonyeshwa. AFYA MAZINGIRA imepunguza kwa muda uhakika wa mapendekezo.",
-    error_offline: "Inaonekana uko nje ya mtandao. Inaonyesha data iliyothibitishwa ya mwisho.",
+    error_conduit: "Uchunguzi wa sasa wa Conduit hauwezi kusasishwa. Uchunguzi wa mwisho uliokaguliwa unaonyeshwa. AFYA MAZINGIRA imepunguza kwa muda uhakika wa mapendekezo.",
+    error_offline: "Inaonekana uko nje ya mtandao. Inaonyesha data ya mwisho iliyokaguliwa.",
     error_not_found: "Haijapatikana.",
 
     empty_activity: "Hakuna mipango ya shughuli bado",
@@ -945,25 +944,25 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     ai_mode_standard: "Kawaida",
     ai_mode_plain: "Lugha rahisi",
     ai_mode_standard_hint: "Maelezo kamili yenye vipimo, utabiri na maneno ya mfumo.",
-    ai_mode_plain_hint: "Maneno rahisi ya kila siku — bila maneno ya kiufundi.",
+    ai_mode_plain_hint: "Maneno rahisi ya kila siku, bila maneno ya kiufundi.",
     ai_explain_simply: "Eleza kwa urahisi",
 
     // Navigation additions
     nav_farm: "Ushauri wa Shamba",
-    nav_stories: "Hadithi za Matumizi",
+    nav_stories: "Mifano ya Matumizi",
     nav_flood: "Hatari ya Mafuriko",
-    flood_subtitle: "Mvua halisi + unyevu wa udongo katika kaunti 11 zinazofuatiliwa — hali zinazoongeza uwezekano wa mafuriko ya ghafla.",
-    flood_honesty_note: "Hii inaonyesha hali za sasa za mvua na unyevu wa udongo, zilizohesabiwa kutoka data halisi ya ERA5-Land — si ramani ya uwezekano wa mafuriko. Ramani halisi ya uwezekano inahitaji data ya ardhi/mifereji (mwinuko, mtiririko, ukaribu wa mto) ambayo mradi huu hauna, hivyo haionyeshwi hapa badala ya kukisiwa.",
+    flood_subtitle: "Mvua halisi + unyevu wa udongo katika kaunti 11 zinazofuatiliwa, hali zinazoongeza uwezekano wa mafuriko ya ghafla.",
+    flood_honesty_note: "Hii inaonyesha hali za sasa za mvua na unyevu wa udongo, zilizohesabiwa kutoka data halisi ya ERA5-Land, si ramani ya uwezekano wa mafuriko. Ramani halisi ya uwezekano inahitaji data ya ardhi/mifereji (mwinuko, mtiririko, ukaribu wa mto) ambayo mradi huu hauna, hivyo haionyeshwi hapa badala ya kukisiwa.",
     flood_high_count: "Kaunti za hatari JUU",
     flood_elevated_count: "Kaunti za hatari ILIYOINUKA",
     flood_counties_monitored: "Kaunti zinazofuatiliwa",
     flood_soil_moisture: "Unyevu wa udongo",
-    flood_data_note: "Mvua na unyevu wa udongo: data halisi ya ERA5-Land, inasasishwa kila dakika 5. Kiwango cha hatari: mvua (saa 24 zilizopita) na unyevu wa udongo vinalinganishwa na vipimo vilivyowekwa kwenye msimbo — kiashiria halisi lakini chepesi, si mfumo wa hatari.",
+    flood_data_note: "Mvua na unyevu wa udongo: data halisi ya ERA5-Land, inasasishwa kila dakika 5. Kiwango cha hatari: mvua (saa 24 zilizopita) na unyevu wa udongo vinalinganishwa na vipimo vilivyowekwa kwenye msimbo, kiashiria halisi lakini chepesi, si mfumo wa hatari.",
 
     // Map
     map_boundaries_note: "Mipaka ya kaunti: data rasmi ya utawala ya Kenya",
 
-    // ── Farm Advisory ──
+    // Farm Advisory
     farm_title: "Ushauri wa Shamba",
     farm_sub: "Maamuzi ya umwagiliaji, unyunyiziaji na kazi za shambani kutoka data ya kituo",
     farm_select_crop: "Unalima zao gani?",
@@ -974,7 +973,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     farm_no_water_needed: "Hakuna maji ya umwagiliaji yanayohitajika sasa.",
     farm_action_irrigate_now: "Mwagilia sasa",
     farm_action_irrigate_soon: "Mwagilia hivi karibuni",
-    farm_action_hold_rain_expected: "Subiri — mvua inatarajiwa",
+    farm_action_hold_rain_expected: "Subiri, mvua inatarajiwa",
     farm_action_no_irrigation: "Hakuna umwagiliaji unaohitajika",
     farm_conf_low: "Uhakika mdogo",
     farm_conf_moderate: "Uhakika wa wastani",
@@ -1011,7 +1010,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     farm_method_body: "Uvukizi wa marejeleo hutumia mlinganyo wa Hargreaves–Samani kutoka joto la kituo. Mahitaji ya maji ya zao hutumia vigezo vya FAO-56 kwa zao na hatua uliyochagua. Mizani hulinganisha mahitaji hayo na mvua iliyopimwa ya CHIRPS na unyevu wa udongo wa ERA5-Land. Madirisha ya kunyunyizia na kazi za shambani hutoka kwenye injini ile ile inayotumika AFYA MAZINGIRA kote.",
     farm_disclaimer: "Huu ni msaada wa maamuzi ya kilimo. Hautabiri mavuno, hautambui magonjwa au wadudu wa mimea, na haubadilishi ushauri wa afisa ugani au ujuzi wako wa udongo wako.",
     // Farm reasons
-    farm_reason_rain_expected: "Mvua inatarajiwa hivi karibuni — kumwagilia sasa kutapoteza maji",
+    farm_reason_rain_expected: "Mvua inatarajiwa hivi karibuni, kumwagilia sasa kutapoteza maji",
     farm_reason_deficit_but_rain: "Kuna upungufu wa maji ya udongo, lakini mvua inayotarajiwa itatosha",
     farm_reason_high_depletion: "Maji ya eneo la mizizi yamepungua sana",
     farm_reason_demand_exceeds_rain: "Mahitaji ya maji ya zao yamezidi mvua ya hivi karibuni",
@@ -1022,13 +1021,13 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     farm_reason_rain_meets_demand: "Mvua ya hivi karibuni inakidhi mahitaji ya zao",
     farm_reason_buffered_by_rootzone: "Mvua iko chini ya mahitaji, lakini eneo la mizizi bado lina akiba ya kutosha",
     farm_reason_low_soil_moisture: "Kipimo halisi cha unyevu wa udongo wa ERA5-Land ni kidogo kwa eneo hili la mizizi",
-    farm_reason_wind_drift: "Upepo mkali sana — hatari ya dawa kupeperushwa",
-    farm_reason_wind_too_calm: "Upepo mdogo sana — dawa haitatua vizuri",
+    farm_reason_wind_drift: "Upepo mkali sana, hatari ya dawa kupeperushwa",
+    farm_reason_wind_too_calm: "Upepo mdogo sana, dawa haitatua vizuri",
     farm_reason_wind_suitable: "Kasi ya upepo inafaa kunyunyizia",
-    farm_reason_washoff: "Mvua inawezekana — dawa inaweza kuoshwa",
+    farm_reason_washoff: "Mvua inawezekana, dawa inaweza kuoshwa",
     farm_reason_rain_possible: "Mvua kidogo inawezekana wakati wa kunyunyizia",
     farm_reason_low_rain_risk: "Hatari ndogo ya mvua wakati wa kunyunyizia",
-    farm_reason_evaporation: "Joto kali — matone yatakauka haraka",
+    farm_reason_evaporation: "Joto kali, matone yatakauka haraka",
     farm_reason_data_limited: "Data ya kituo ni finyu, hivyo uhakika umepungua",
     farm_reason_severe_heat: "Joto linalotarajiwa liko juu sana ya kiwango cha zao",
     farm_reason_moderate_heat: "Joto linalotarajiwa liko juu ya kiwango cha zao",
@@ -1043,13 +1042,13 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     farm_plant_insufficient: "Mvua iliyokusanyika bado iko chini ya mahitaji ya kawaida ya zao hili.",
     farm_plant_dryspell: "Mvua inatosha, lakini kipindi kirefu kikavu kinaongeza hatari ya kuota.",
 
-    // ── Case studies ──
-    stories_title: "Hadithi za Matumizi",
-    stories_sub: "Nani ananufaika, na nini kinabadilika — kutoka data hadi hatua za mapema",
+    // Example scenarios
+    stories_title: "Mifano ya Matumizi",
+    stories_sub: "Watumiaji wa mfano, si visa halisi: nani anaweza kunufaika, na nini kingebadilika",
     stories_problem: "Tatizo",
     stories_try_it: "Jaribu mwenyewe",
     stories_scale: "Jinsi inavyokua",
-    stories_scale_body: "AFYA MAZINGIRA hukua kwa kuongeza vituo vilivyothibitishwa vya ardhini, si kwa kunyoosha kituo kimoja katika eneo lote. Kila kituo kipya cha Conduit huwa nodi nyingine ya ujasusi ndani ya muonekano ule ule wa kikanda, na kila kipengele kilichoonyeshwa hapa — hali, utabiri, Wakati-Bora, ushauri wa shamba na maelezo ya lugha mbili — hutumika mara moja katika eneo hilo jipya.",
+    stories_scale_body: "AFYA MAZINGIRA hukua kwa kuongeza vituo vya ardhini, si kwa kunyoosha kituo kimoja katika eneo lote. Kila kituo kipya cha Conduit huwa nodi nyingine ya ujasusi ndani ya muonekano ule ule wa kikanda, na kila kipengele kilichoonyeshwa hapa, hali, utabiri, Wakati-Bora, ushauri wa shamba na maelezo ya lugha mbili, hutumika mara moja katika eneo hilo jipya.",
   },
 };
 

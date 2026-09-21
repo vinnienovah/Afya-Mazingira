@@ -12,7 +12,7 @@ import { STATES } from "@/lib/afya/constants";
 import { fmtAgo } from "@/lib/afya/format";
 import type { SituationResult, Lang } from "@/lib/afya/types";
 
-// ─── Bilingual landing copy (reviewed, not generated) ────────────────────────
+// Landing page text in English and Kiswahili
 const L: Record<Lang, Record<string, string>> = {
   en: {
     nav_open_app: "Open the App",
@@ -20,7 +20,7 @@ const L: Record<Lang, Record<string, string>> = {
     hero_title_a: "From environmental data",
     hero_title_b: "to early action.",
     hero_sub:
-      "AFYA MAZINGIRA turns live Conduit observations into environmental states, short-horizon forecasts, activity-aware risk and a recommended best time to act — before conditions peak.",
+      "AFYA MAZINGIRA turns live Conduit observations into environmental states, short-horizon forecasts, activity-aware risk and a recommended best time to act, before conditions peak.",
     hero_cta_primary: "Open the Dashboard",
     hero_cta_secondary: "Plan an Activity",
     live_label: "Current station situation",
@@ -31,7 +31,7 @@ const L: Record<Lang, Record<string, string>> = {
     stats_languages: "languages",
     problem_kicker: "The interpretation gap",
     problem_title: "Sensors tell you what. They don't tell you what to do.",
-    problem_sub: "A person does not need temperature, humidity and wind. They need to know whether conditions are becoming more demanding — and what to change.",
+    problem_sub: "A person does not need temperature, humidity and wind. They need to know whether conditions are becoming more demanding, and what to change.",
     problem_card_a_title: "A conventional dashboard",
     problem_card_a_note: "The user still has to work out what these numbers mean.",
     problem_card_b_title: "AFYA MAZINGIRA",
@@ -39,20 +39,20 @@ const L: Record<Lang, Record<string, string>> = {
     problem_card_b_tag: "Example output",
     pipeline_kicker: "Deterministic pipeline",
     pipeline_title: "Every recommendation is computed, not guessed",
-    pipeline_note: "The AI communication layer sits strictly downstream of this validated chain. It explains results — it never produces them.",
+    pipeline_note: "The AI communication layer sits strictly downstream of this quality-checked chain. It explains results, it never produces them.",
     states_kicker: "Climate Reflex",
     states_title: "The environment has four states",
-    states_sub: "Discovered from real station behaviour — not imposed by hand.",
+    states_sub: "Discovered from real station behaviour, not imposed by hand.",
     features_kicker: "Product",
     features_title: "Built for decisions",
     provenance_kicker: "Data provenance",
     provenance_title: "Every number has a source",
-    provenance_sub: "Measured, predicted, satellite-derived and regional-model data are always visually distinct — never blurred together.",
+    provenance_sub: "Measured, predicted, satellite-derived and regional-model data are always visually distinct, never blurred together.",
     nongoals_kicker: "Scientific honesty",
     nongoals_title: "What AFYA MAZINGIRA does not claim",
     nongoals_sub: "A smaller number of defensible capabilities beats a longer list of impressive-sounding claims.",
-    cta_title: "See it working — right now",
-    cta_sub: "Live station data, deterministic forecasts and a recommended window — in English or Kiswahili.",
+    cta_title: "See it working, right now",
+    cta_sub: "Live station data, deterministic forecasts and a recommended window, in English or Kiswahili.",
     cta_button: "Open AFYA MAZINGIRA",
     footer_motto: "From environmental data to early action.",
     footer_disclaimer: "AFYA MAZINGIRA provides environmental decision support. It does not provide medical diagnosis, emergency-response instructions, or clinical advice.",
@@ -65,7 +65,7 @@ const L: Record<Lang, Record<string, string>> = {
     hero_title_a: "Kutoka data ya mazingira",
     hero_title_b: "hadi hatua za mapema.",
     hero_sub:
-      "AFYA MAZINGIRA hubadilisha vipimo vya moja kwa moja vya Conduit kuwa hali za mazingira, utabiri wa muda mfupi, hatari inayolingana na shughuli, na wakati bora wa kutenda — kabla ya hali kufikia kilele.",
+      "AFYA MAZINGIRA hubadilisha vipimo vya moja kwa moja vya Conduit kuwa hali za mazingira, utabiri wa muda mfupi, hatari inayolingana na shughuli, na wakati bora wa kutenda, kabla ya hali kufikia kilele.",
     hero_cta_primary: "Fungua Dashibodi",
     hero_cta_secondary: "Panga Shughuli",
     live_label: "Hali ya sasa ya kituo",
@@ -76,7 +76,7 @@ const L: Record<Lang, Record<string, string>> = {
     stats_languages: "lugha",
     problem_kicker: "Mgogoro wa tafsiri",
     problem_title: "Vipimo vinaambia nini kimefanyika. Havinaambi nini ufanye.",
-    problem_sub: "Mtu hahitaji joto, unyevu na upepo pekee. Anahitaji kujua kama hali inazidi kuwa ngumu — na nini abadilishe.",
+    problem_sub: "Mtu hahitaji joto, unyevu na upepo pekee. Anahitaji kujua kama hali inazidi kuwa ngumu, na nini abadilishe.",
     problem_card_a_title: "Dashibodi ya kawaida",
     problem_card_a_note: "Mtumiaji bado lazima afikiri nini maana ya namba hizi.",
     problem_card_b_title: "AFYA MAZINGIRA",
@@ -84,20 +84,20 @@ const L: Record<Lang, Record<string, string>> = {
     problem_card_b_tag: "Mfano wa matokeo",
     pipeline_kicker: "Mnyororo wa kisayansi",
     pipeline_title: "Kila pendekezo linahesabiwa, halikuchaguliwa kwa bahati",
-    pipeline_note: "Safu ya AI ya mawasiliano iko chini kabisa ya mnyororo huu uliothibitishwa. Hueleza matokeo — haitoi matokeo.",
+    pipeline_note: "Safu ya AI ya mawasiliano iko chini kabisa ya mnyororo huu uliothibitishwa. Hueleza matokeo, haitoi matokeo.",
     states_kicker: "Climate Reflex",
     states_title: "Mazingira yana hali nne",
-    states_sub: "Ziligunduliwa kutoka kitendo halisi cha kituo — hazikuwekwa kwa mkono.",
+    states_sub: "Ziligunduliwa kutoka kitendo halisi cha kituo, hazikuwekwa kwa mkono.",
     features_kicker: "Bidhaa",
     features_title: "Imejengwa kwa maamuzi",
     provenance_kicker: "Chanzo cha data",
     provenance_title: "Kila namba ina chanzo",
-    provenance_sub: "Data iliyopimwa, iliyotabiriwa, ya sayeti na ya kikanda huonyeshwa tofauti kila wakati — hazichanganywi.",
+    provenance_sub: "Data iliyopimwa, iliyotabiriwa, ya sayeti na ya kikanda huonyeshwa tofauti kila wakati, hazichanganywi.",
     nongoals_kicker: "Uaminifu wa kisayansi",
     nongoals_title: "AFYA MAZINGIRA haijidai yapi?",
     nongoals_sub: "Idadi ndogo ya uwezo unaoweza kuthibitishwa ni bora kuliko orodha ndefu ya madai yenye mwonekano tu.",
-    cta_title: "Ona inavyofanya kazi — sasa hivi",
-    cta_sub: "Data ya moja kwa moja ya kituo, utabiri wa kisayansi na dirisha lililopendekezwa — kwa Kiingereza au Kiswahili.",
+    cta_title: "Ona inavyofanya kazi, sasa hivi",
+    cta_sub: "Data ya moja kwa moja ya kituo, utabiri wa kisayansi na dirisha lililopendekezwa, kwa Kiingereza au Kiswahili.",
     cta_button: "Fungua AFYA MAZINGIRA",
     footer_motto: "Kutoka data ya mazingira hadi hatua za mapema.",
     footer_disclaimer: "AFYA MAZINGIRA hutoa msaada wa maamuzi ya mazingira. Haitoi utambuzi wa matibabu, maelekezo ya dharura, au ushauri wa kliniki.",
@@ -125,11 +125,11 @@ const STATE_DESCRIPTIONS: Record<number, { en: string; sw: string; time_en: stri
 };
 
 const FEATURES = [
-  { icon: LayoutDashboard, href: "/situation", en: "Situation", sw: "Hali ya Sasa", d_en: "The current state, exposure level and recommended action — in seconds.", d_sw: "Hali ya sasa, kiwango cha kupatwa na hatua inayopendekezwa — kwa sekunde chache." },
+  { icon: LayoutDashboard, href: "/situation", en: "Situation", sw: "Hali ya Sasa", d_en: "The current state, exposure level and recommended action, in seconds.", d_sw: "Hali ya sasa, kiwango cha kupatwa na hatua inayopendekezwa, kwa sekunde chache." },
   { icon: TrendingUp, href: "/forecast", en: "Forecast", sw: "Utabiri", d_en: "Measured history, dashed forecast and calibrated uncertainty bands.", d_sw: "Historia iliyopimwa, utabiri na utata uliorekebishwa." },
   { icon: CalendarCheck, href: "/plan", en: "Plan My Activity", sw: "Panga Shughuli", d_en: "Deterministic best-time windows for your activity and duration.", d_sw: "Madirisha bora ya kisayansi kwa shughuli na muda wako." },
   { icon: MapIcon, href: "/map", en: "Risk Map", sw: "Ramani ya Hatari", d_en: "Regional environmental outlook with full provenance for every layer.", d_sw: "Muonekano wa mazingira wa kikanda wenye vyanzo kamili." },
-  { icon: History, href: "/replay", en: "Historical Replay", sw: "Marudio", d_en: "Replay any day with the future hidden — then reveal what actually happened.", d_sw: "Rudia siku yoyote na wakati ujao umejifichwa — kisha funua yaliyotokea." },
+  { icon: History, href: "/replay", en: "Historical Replay", sw: "Marudio", d_en: "Replay any day with the future hidden, then reveal what actually happened.", d_sw: "Rudia siku yoyote na wakati ujao umejifichwa, kisha funua yaliyotokea." },
   { icon: Building2, href: "/operations", en: "Operations", sw: "Uendeshaji", d_en: "A lightweight environmental command center for institutional teams.", d_sw: "Kitovu cha amri cha mazingira kwa timu za taasisi." },
 ];
 
@@ -137,7 +137,7 @@ const PROVENANCE = [
   { icon: Radio, label: "GROUND MEASUREMENT", source: "Conduit", meta: "~15 min · JKUAT/Juja station", d_en: "Local temperature, humidity, pressure, wind, radiation, rain and a WBGT-like signal.", d_sw: "Joto, unyevu, shinikizo, upepo, mionzi, mvua na ishara ya WBGT ya kimaeneo.", color: "#006B3C" },
   { icon: Wind, label: "REGIONAL MODEL", source: "ERA5-Land", meta: "~9 km · hourly", d_en: "The wider atmospheric background behind local-versus-regional anomalies.", d_sw: "Mandhari ya anga ya kikanda kwa tofauti za kimaeneo na kikanda.", color: "#3786B5" },
   { icon: Satellite, label: "SATELLITE-DERIVED", source: "Sentinel-2 / Sentinel-3", meta: "10 m vegetation · ~1 km surface temperature", d_en: "Landscape and thermal context, always shown with real acquisition dates.", d_sw: "Muktadha wa mandhari na joto, wenye tarehe halisi za uchukuzi.", color: "#247B78" },
-  { icon: CloudRain, label: "HISTORICAL CLIMATE", source: "CHIRPS", meta: "daily · 0.05°", d_en: "Rainfall memory: 7-day and 30-day totals against climatology.", d_sw: "Kumbukumbu ya mvua: jumla ya siku 7 na 30 dhidi ya tabia ya hali ya hewa.", color: "#68756F" },
+  { icon: CloudRain, label: "HISTORICAL CLIMATE", source: "ERA5-Land", meta: "daily · ~9 km", d_en: "Rainfall memory: 7-day and 30-day totals against climatology.", d_sw: "Kumbukumbu ya mvua: jumla ya siku 7 na 30 dhidi ya tabia ya hali ya hewa.", color: "#68756F" },
 ];
 
 const NON_GOALS = [
@@ -149,8 +149,8 @@ const NON_GOALS = [
   { en: "Universal “safe” or “dangerous” thresholds", sw: "Viwango vya “salama” au “hatari” vya kila mahali" },
 ];
 
-// ─── Section background photography (Unsplash, resized via their own CDN
-// params — no attribution required under the Unsplash license) ─────────────
+// Section background photography (Unsplash, resized via their own CDN
+// params, no attribution required under the Unsplash license)
 const SECTION_IMAGES = {
   problem: "https://images.unsplash.com/photo-1611418612389-3e442c6c8a26",
   pipeline: "https://images.unsplash.com/photo-1789414615226-5b479d9b52ea",
@@ -203,7 +203,7 @@ function SectionBanner({
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
-// ─── Live station chip (real data, graceful degradation) ─────────────────────
+// Live station chip (real data, graceful degradation)
 function LiveStatus({ copy }: { copy: Record<string, string> }) {
   const { lang } = useLanguage();
   const { data } = useSWR<SituationResult>("/api/situation", fetcher, { refreshInterval: 60_000 });
@@ -248,7 +248,7 @@ function LiveStatus({ copy }: { copy: Record<string, string> }) {
   );
 }
 
-// ─── Landing page ─────────────────────────────────────────────────────────────
+// Landing page
 export default function Landing() {
   const { lang, setLang } = useLanguage();
   const c = L[lang];
@@ -256,7 +256,7 @@ export default function Landing() {
   return (
     <div className="min-h-screen bg-afya-canvas">
 
-      {/* ─── Navigation ──────────────────────────────────────────────────── */}
+      {/* Navigation */}
       <header className="sticky top-0 z-50 border-b border-afya-border/60 bg-afya-canvas/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
           <Link href="/" className="flex items-center gap-2.5" aria-label="AFYA MAZINGIRA home">
@@ -289,7 +289,7 @@ export default function Landing() {
         </div>
       </header>
 
-      {/* ─── Hero ────────────────────────────────────────────────────────── */}
+      {/* Hero */}
       <section
         className="relative overflow-hidden"
         style={{ background: "linear-gradient(160deg, #103D2C 0%, #0B2E20 55%, #071E15 100%)" }}
@@ -330,7 +330,7 @@ export default function Landing() {
             </Link>
           </div>
 
-          {/* Live station status — real data */}
+          {/* Live station status, real data */}
           <div className="mt-10">
             <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/40">{c.live_label}</p>
             <LiveStatus copy={c} />
@@ -355,7 +355,7 @@ export default function Landing() {
         <div className="h-1" style={{ background: "linear-gradient(90deg, #006B3C, #F2B705)" }} aria-hidden="true" />
       </section>
 
-      {/* ─── The interpretation gap ──────────────────────────────────────── */}
+      {/* The interpretation gap */}
       <section aria-labelledby="problem-title">
         <SectionBanner
           image={SECTION_IMAGES.problem}
@@ -431,7 +431,7 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ─── Pipeline ────────────────────────────────────────────────────── */}
+      {/* Pipeline */}
       <section className="border-y border-afya-border/60" aria-labelledby="pipeline-title">
         <SectionBanner
           image={SECTION_IMAGES.pipeline}
@@ -468,12 +468,12 @@ export default function Landing() {
             ))}
           </ol>
           <p className="mt-6 max-w-2xl text-sm leading-relaxed text-afya-muted">
-            <span className="font-semibold text-afya-charcoal">✦</span> {c.pipeline_note}
+            <span className="font-semibold text-afya-charcoal"></span> {c.pipeline_note}
           </p>
         </div>
       </section>
 
-      {/* ─── Climate Reflex states ───────────────────────────────────────── */}
+      {/* Climate Reflex states */}
       <section
         className="relative overflow-hidden"
         style={{ background: "linear-gradient(160deg, #103D2C 0%, #0B2E20 100%)" }}
@@ -511,7 +511,7 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ─── Features ────────────────────────────────────────────────────── */}
+      {/* Features */}
       <section aria-labelledby="features-title">
         <SectionBanner
           image={SECTION_IMAGES.features}
@@ -543,7 +543,7 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ─── Provenance ──────────────────────────────────────────────────── */}
+      {/* Provenance */}
       <section className="border-y border-afya-border/60" aria-labelledby="provenance-title">
         <SectionBanner
           image={SECTION_IMAGES.provenance}
@@ -580,7 +580,7 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ─── Non-goals ───────────────────────────────────────────────────── */}
+      {/* Non-goals */}
       <section aria-labelledby="nongoals-title">
         <SectionBanner
           image={SECTION_IMAGES.nongoals}
@@ -604,7 +604,7 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ─── Final CTA ───────────────────────────────────────────────────── */}
+      {/* Final CTA */}
       <section
         className="relative overflow-hidden"
         style={{ background: "linear-gradient(160deg, #103D2C 0%, #0B2E20 100%)" }}
@@ -630,7 +630,7 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ─── Footer ──────────────────────────────────────────────────────── */}
+      {/* Footer */}
       <footer className="bg-[#071E15]">
         <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
           <div className="flex flex-wrap items-center gap-3">

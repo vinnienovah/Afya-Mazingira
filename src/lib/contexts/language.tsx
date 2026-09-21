@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, type ReactNode, useSyncExternalStore } from "react";
 import type { Lang } from "@/lib/afya/types";
 import { t as translate } from "@/lib/afya/i18n";
 
@@ -16,23 +16,30 @@ const LanguageContext = createContext<LanguageContextValue>({
   t: (key) => key,
 });
 
-export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<Lang>("en");
+function subscribeStorage(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  return () => window.removeEventListener("storage", onChange);
+}
 
+function readStoredLang(): Lang | null {
+  const stored = localStorage.getItem("afya_lang");
+  return stored === "en" || stored === "sw" ? stored : null;
+}
+
+export function LanguageProvider({ children }: { children: ReactNode }) {
+  const stored = useSyncExternalStore(subscribeStorage, readStoredLang, () => null);
+  const [chosen, setChosen] = useState<Lang | null>(null);
+  const lang: Lang = chosen ?? stored ?? "en";
+
+  // The cookie mirrors the choice so server-rendered pages (/briefing) can use
+  // the same language on first byte.
   useEffect(() => {
-    const stored = localStorage.getItem("afya_lang") as Lang | null;
-    if (stored === "en" || stored === "sw") {
-      setLangState(stored);
-      document.cookie = `afya_lang=${stored}; path=/; max-age=31536000; SameSite=Lax`;
-    }
-  }, []);
+    document.cookie = `afya_lang=${lang}; path=/; max-age=31536000; SameSite=Lax`;
+  }, [lang]);
 
   const setLang = (l: Lang) => {
-    setLangState(l);
+    setChosen(l);
     localStorage.setItem("afya_lang", l);
-    // Cookie mirrors preference so server-rendered pages (e.g. /briefing)
-    // can respect the same language on first byte.
-    document.cookie = `afya_lang=${l}; path=/; max-age=31536000; SameSite=Lax`;
   };
 
   const t = (key: string) => translate(lang, key);

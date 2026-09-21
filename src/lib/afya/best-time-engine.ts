@@ -2,9 +2,9 @@ import type { CandidateWindow, BestTimeResult, ForecastPoint, StateId, QualitySt
 import { wbgtToRisk, riskRank, getActivityProfile } from "./constants";
 import type { DataQuality } from "./types";
 
-// ─── Best-Time Engine ─────────────────────────────────────────────────────────
+// Best-Time Engine
 // Deterministic sliding-window algorithm.
-// The LLM NEVER selects the window — this function does.
+// The LLM NEVER selects the window, this function does.
 // Lexicographic ranking per spec section 30.
 
 const STEP_MINUTES = 15;

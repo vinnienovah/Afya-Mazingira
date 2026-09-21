@@ -4,7 +4,7 @@ import { runPipeline } from "@/lib/afya/pipeline";
 // Dynamic: forecasts follow the freshest cached observations.
 export const dynamic = "force-dynamic";
 // Safety net for the (usually much faster) real ERA5/Sentinel fetches in
-// runPipeline — Vercel's default function timeout is short.
+// runPipeline, Vercel's default function timeout is short.
 export const maxDuration = 30;
 
 export async function GET() {

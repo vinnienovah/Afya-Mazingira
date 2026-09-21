@@ -8,7 +8,7 @@ import { activityRecommendations } from "@/db/schema";
 import type { DataQuality, ForecastPoint } from "@/lib/afya/types";
 
 // Safety net for the (usually much faster) real ERA5/Sentinel fetches in
-// runPipeline — Vercel's default function timeout is short.
+// runPipeline, Vercel's default function timeout is short.
 export const maxDuration = 30;
 
 const RecommendSchema = z.object({
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     let source: "ground" | "regional" = "ground";
 
     // The ground (Conduit-anchored) forecast only ever covers ~9h ahead, and
-    // is refused outright when quality is POOR — neither supports planning
+    // is refused outright when quality is POOR, neither supports planning
     // "tomorrow" or planning through a station outage. Fall back to the real
     // Open-Meteo regional forecast (see getRegionalForecastSeries), which
     // covers the next 3 days regardless of the ground station's state.
@@ -50,9 +50,9 @@ export async function POST(req: NextRequest) {
       const regionalSeries: ForecastPoint[] = situation.regional_outlook.map((p) => ({
         time: p.time,
         value: p.wbgt_like,
-        // ±2°C: a deliberately wider band than the ground model's, reflecting
-        // the real added uncertainty of a shade-only regional proxy standing
-        // in for sensor-grade WBGT.
+        // ±2°C: wider than the station model's band, because a grid-cell
+        // estimate stands in for the station here. The width is a judgement,
+        // not fitted.
         lower: p.wbgt_like - 2,
         upper: p.wbgt_like + 2,
         horizon_minutes: 0,

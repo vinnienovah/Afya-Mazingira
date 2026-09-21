@@ -5,7 +5,7 @@ import { getEra5Series, getDailyRainfallSeries } from "@/lib/afya/sources-extern
 // Real time-series for the climate variables dashboard pane: Conduit
 // observations (live -> CSV archive -> demo, same source-of-truth as
 // /api/situation), ERA5-Land hourly context, and real daily rainfall
-// (derived from the same ERA5 precipitation — see sources-external.ts).
+// (derived from the same ERA5 precipitation, see sources-external.ts).
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 

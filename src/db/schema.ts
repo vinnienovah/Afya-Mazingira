@@ -1,11 +1,11 @@
-// ─── AFYA MAZINGIRA database schema ────────────────────────────────────────────────
+// AFYA MAZINGIRA database schema
 import {
   pgTable, serial, integer, text, real, boolean,
   timestamp, jsonb, date, uniqueIndex, index,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
-// ─── Users ────────────────────────────────────────────────────────────────────
+// Users
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -22,7 +22,7 @@ export const users = pgTable("users", {
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ─── Email verification tokens ─────────────────────────────────────────────────
+// Email verification tokens
 export const emailVerificationTokens = pgTable("email_verification_tokens", {
   id: serial("id").primaryKey(),
   token: text("token").notNull().unique(),
@@ -42,7 +42,7 @@ export const sessions = pgTable("sessions", {
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ─── User preferences ─────────────────────────────────────────────────────────
+// User preferences
 export const userPreferences = pgTable("user_preferences", {
   id: serial("id").primaryKey(),
   user_id: integer("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
@@ -53,7 +53,7 @@ export const userPreferences = pgTable("user_preferences", {
   updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ─── Activity plans ───────────────────────────────────────────────────────────
+// Activity plans
 export const activityPlans = pgTable("activity_plans", {
   id: serial("id").primaryKey(),
   user_id: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -69,7 +69,7 @@ export const activityPlans = pgTable("activity_plans", {
   updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ─── Saved activity profiles ──────────────────────────────────────────────────
+// Saved activity profiles
 export const savedActivityProfiles = pgTable("saved_activity_profiles", {
   id: serial("id").primaryKey(),
   user_id: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -79,7 +79,7 @@ export const savedActivityProfiles = pgTable("saved_activity_profiles", {
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ─── Notification rules ───────────────────────────────────────────────────────
+// Notification rules
 export const notificationRules = pgTable("notification_rules", {
   id: serial("id").primaryKey(),
   user_id: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -87,14 +87,14 @@ export const notificationRules = pgTable("notification_rules", {
   rule_type: text("rule_type").notNull(),
   activity_type: text("activity_type"),
   enabled: boolean("enabled").notNull().default(true),
-  // Bookkeeping for the cron-driven alert check (/api/cron/check-alerts) —
+  // Bookkeeping for the cron-driven alert check (/api/cron/check-alerts),
   // prevents re-emailing the same still-true condition on every run.
   last_triggered_at: timestamp("last_triggered_at", { withTimezone: true }),
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ─── Push subscriptions ───────────────────────────────────────────────────────
+// Push subscriptions
 export const pushSubscriptions = pgTable("push_subscriptions", {
   id: serial("id").primaryKey(),
   user_id: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -104,7 +104,7 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ─── Conduit observations (system-generated, read-only) ───────────────────────
+// Conduit observations (system-generated, read-only)
 export const conduitObservations = pgTable("conduit_observations", {
   id: serial("id").primaryKey(),
   ts: timestamp("ts", { withTimezone: true }).notNull(),
@@ -134,7 +134,7 @@ export const conduitObservations = pgTable("conduit_observations", {
   index("obs_ts_idx").on(t.ts),
 ]);
 
-// ─── Environmental states (system-generated) ──────────────────────────────────
+// Environmental states (system-generated)
 export const environmentalStates = pgTable("environmental_states", {
   id: serial("id").primaryKey(),
   ts: timestamp("ts", { withTimezone: true }).notNull(),
@@ -145,7 +145,7 @@ export const environmentalStates = pgTable("environmental_states", {
   index("env_states_ts_idx").on(t.ts),
 ]);
 
-// ─── Forecasts (system-generated) ────────────────────────────────────────────
+// Forecasts (system-generated)
 export const forecasts = pgTable("forecasts", {
   id: serial("id").primaryKey(),
   issued_at: timestamp("issued_at", { withTimezone: true }).notNull(),
@@ -162,7 +162,7 @@ export const forecasts = pgTable("forecasts", {
   index("forecasts_issued_idx").on(t.issued_at),
 ]);
 
-// ─── Activity recommendations (system audit log) ──────────────────────────────
+// Activity recommendations (system audit log)
 export const activityRecommendations = pgTable("activity_recommendations", {
   id: serial("id").primaryKey(),
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -177,7 +177,7 @@ export const activityRecommendations = pgTable("activity_recommendations", {
   explanation_json: jsonb("explanation_json").$type<unknown>(),
 });
 
-// ─── Data quality events ──────────────────────────────────────────────────────
+// Data quality events
 export const dataQualityEvents = pgTable("data_quality_events", {
   id: serial("id").primaryKey(),
   ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
@@ -187,7 +187,7 @@ export const dataQualityEvents = pgTable("data_quality_events", {
   message: text("message"),
 });
 
-// ─── Model metadata ───────────────────────────────────────────────────────────
+// Model metadata
 export const modelMetadata = pgTable("model_metadata", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -202,7 +202,7 @@ export const modelMetadata = pgTable("model_metadata", {
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ─── ERA5 context (demo-seeded) ───────────────────────────────────────────────
+// ERA5 context (demo-seeded)
 export const era5Context = pgTable("era5_context", {
   id: serial("id").primaryKey(),
   valid_time: timestamp("valid_time", { withTimezone: true }).notNull(),
@@ -218,7 +218,7 @@ export const era5Context = pgTable("era5_context", {
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ─── CHIRPS context (demo-seeded) ─────────────────────────────────────────────
+// CHIRPS context (demo-seeded)
 export const chirpsContext = pgTable("chirps_context", {
   id: serial("id").primaryKey(),
   valid_date: date("valid_date").notNull(),
@@ -231,7 +231,7 @@ export const chirpsContext = pgTable("chirps_context", {
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ─── Type exports ─────────────────────────────────────────────────────────────
+// Type exports
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type ActivityPlan = typeof activityPlans.$inferSelect;

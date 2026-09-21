@@ -7,22 +7,17 @@ import { evaluateRule, checkPlanImpact, coolingDown, pickSubject, pickLines } fr
 import { sendAlertEmail, hasResendConfigured } from "@/lib/afya/alert-email";
 import type { Lang } from "@/lib/afya/types";
 
-// Vercel Cron entry point (see vercel.json — runs once daily; the Hobby plan
-// doesn't allow a shorter interval, so this is a daily threshold/plan check,
-// not real-time push). Protected by CRON_SECRET: Vercel automatically sends
-// `Authorization: Bearer $CRON_SECRET` on scheduled invocations once that
-// env var is set — without it, this endpoint would let anyone trigger an
-// email blast to every user, so treat CRON_SECRET as required in production.
+// Vercel Cron entry point, run once a day (vercel.json; the Hobby plan allows
+// no shorter interval). Vercel sends `Authorization: Bearer $CRON_SECRET` on
+// scheduled runs. Without the secret the endpoint refuses every request:
+// anyone who can call it can email every user.
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const auth = req.headers.get("authorization");
-    if (auth !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    }
+  if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
   const situation = await runPipeline();
@@ -31,7 +26,7 @@ export async function GET(req: NextRequest) {
   let evaluated = 0;
   const errors: string[] = [];
 
-  // ── Rule-based threshold alerts ─────────────────────────────────────────
+  // Rule-based threshold alerts
   const rules = await db.select().from(notificationRules).where(eq(notificationRules.enabled, true));
   for (const rule of rules) {
     evaluated++;
@@ -57,7 +52,7 @@ export async function GET(req: NextRequest) {
     await db.update(notificationRules).set({ last_triggered_at: new Date() }).where(eq(notificationRules.id, rule.id));
   }
 
-  // ── Saved-plan impact alerts ─────────────────────────────────────────────
+  // Saved-plan impact alerts
   const plans = await db.select().from(activityPlans);
   for (const plan of plans) {
     const content = checkPlanImpact(plan, situation);

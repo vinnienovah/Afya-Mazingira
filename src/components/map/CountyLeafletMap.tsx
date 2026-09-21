@@ -88,7 +88,9 @@ export default function CountyLeafletMap({
   const [hovered, setHovered] = useState<string | null>(null);
   // Keep a ref so the style callback always sees current values
   const stateRef = useRef({ layer, mode, timeIdx, selectedCounty, hovered });
-  stateRef.current = { layer, mode, timeIdx, selectedCounty, hovered };
+  useEffect(() => {
+    stateRef.current = { layer, mode, timeIdx, selectedCounty, hovered };
+  });
 
   const styleFor = useMemo(
     () => (feature?: Feature<Geometry, CountyProps>): PathOptions => {

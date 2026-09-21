@@ -56,7 +56,7 @@ export default function MapPage() {
   const [satIdx, setSatIdx] = useState(0);
   const [showSatTimeline, setShowSatTimeline] = useState(false);
 
-  const counties: CountyFeature[] = data?.counties?.features ?? [];
+  const counties: CountyFeature[] = useMemo(() => data?.counties?.features ?? [], [data]);
   const satellites: SatelliteAcquisition[] = data?.satellites ?? [];
 
   // Indicator lookup keyed by county name (boundaries are authoritative geometry)
@@ -257,7 +257,7 @@ export default function MapPage() {
                 Conduit · {t("measured_label")} · JKUAT
               </span>
               <span className="text-[10px] text-afya-muted">ERA5-Land · {t("regional_model_label")} · ~9km</span>
-              <span className="text-[10px] text-afya-muted">CHIRPS · {t("historical_label")}</span>
+              <span className="text-[10px] text-afya-muted">ERA5-Land · {t("historical_label")}</span>
               <span className="text-[10px] text-afya-muted/70 ml-auto">{t("map_boundaries_note")}</span>
             </div>
           </Card>
@@ -324,7 +324,7 @@ export default function MapPage() {
                 <p className="text-[10px] text-afya-muted/70 pt-1">
                   {lang === "sw"
                     ? "Data ya sayeti inaonyesha wakati halisi wa uchukuzi, si uchunguzi wa muda usioishia."
-                    : "Satellite layers show actual acquisition times only — not continuous observations between acquisitions."}
+                    : "Satellite layers show actual acquisition times only, not continuous observations between acquisitions."}
                 </p>
               </div>
             )}
@@ -354,7 +354,7 @@ export default function MapPage() {
   );
 }
 
-// ─── County detail panel ──────────────────────────────────────────────────────
+// County detail panel
 function CountyPanel({
   county, onClose, lang, t,
 }: {
@@ -412,8 +412,8 @@ function CountyPanel({
             { l_en: "Temp Anomaly", l_sw: "Tofauti ya Joto", v: `${p.temperature_anomaly_c >= 0 ? "+" : ""}${p.temperature_anomaly_c}°C` },
             { l_en: "Rain 24h", l_sw: "Mvua saa 24", v: `${p.rain_24h_mm} mm` },
             { l_en: "Soil Moisture", l_sw: "Unyevu wa Udongo", v: `${(p.soil_moisture * 100).toFixed(0)}%` },
-            { l_en: "NDVI", l_sw: "NDVI", v: p.ndvi_mean !== null ? p.ndvi_mean.toFixed(2) : "—" },
-            { l_en: "LST", l_sw: "Joto la Uso", v: p.lst_c !== null ? `${p.lst_c.toFixed(1)}°C` : "—" },
+            { l_en: "NDVI", l_sw: "NDVI", v: p.ndvi_mean !== null ? p.ndvi_mean.toFixed(2) : "-" },
+            { l_en: "LST", l_sw: "Joto la Uso", v: p.lst_c !== null ? `${p.lst_c.toFixed(1)}°C` : "-" },
             { l_en: "Confidence", l_sw: "Uhakika", v: p.confidence },
           ].map((ind, i) => (
             <div key={i} className="rounded-lg border border-afya-border bg-afya-canvas/50 px-2.5 py-2">
@@ -435,15 +435,15 @@ function CountyPanel({
 
         <p className="text-[9px] text-afya-muted/70 leading-relaxed">
           {lang === "sw"
-            ? "Muonekano wa kikanda unatokana na data za ERA5-Land na CHIRPS. Si kipimo kutoka Conduit moja."
-            : "County outlook is derived from ERA5-Land regional reanalysis and CHIRPS rainfall data. It is not a Conduit measurement."}
+            ? "Muonekano wa kikanda unatokana na data za ERA5-Land, ikiwemo mvua yake. Si kipimo kutoka Conduit moja."
+            : "County outlook is derived from ERA5-Land reanalysis, including its rainfall. It is not a Conduit measurement."}
         </p>
       </div>
     </Card>
   );
 }
 
-// ─── Conduit station panel ────────────────────────────────────────────────────
+// Conduit station panel
 function StationPanel({
   situation, t,
 }: {
@@ -478,13 +478,13 @@ function StationPanel({
           <div className="flex items-center justify-between text-xs">
             <span className="text-afya-muted">{t("expected_peak")}</span>
             <span className="font-bold text-afya-charcoal tabular-nums">
-              {situation.expected_peak ? `${situation.expected_peak.wbgt_c.toFixed(1)}°C` : "—"}
+              {situation.expected_peak ? `${situation.expected_peak.wbgt_c.toFixed(1)}°C` : "-"}
             </span>
           </div>
           <div className="flex items-center justify-between text-xs">
             <span className="text-afya-muted">{t("horizon_3h")}</span>
             <span className="font-bold text-afya-charcoal tabular-nums">
-              {situation.forecast[1] ? `${situation.forecast[1].value.toFixed(1)}°C` : "—"}
+              {situation.forecast[1] ? `${situation.forecast[1].value.toFixed(1)}°C` : "-"}
             </span>
           </div>
           <div className="flex items-center justify-between text-xs">
@@ -505,7 +505,7 @@ function StationPanel({
   );
 }
 
-// ─── Explain outlook widget ───────────────────────────────────────────────────
+// Explain outlook widget
 function ExplainOutlookWidget({ lang, t, county }: {
   lang: string; t: (k: string) => string; county: string | null;
 }) {

@@ -1,7 +1,7 @@
 import type { RiskLevel, UncertaintyCategory } from "./types";
 import { wbgtToRisk, riskRank } from "./constants";
 
-// ─── Risk / Exposure Engine ───────────────────────────────────────────────────
+// Risk / Exposure Engine
 // Thermal exposure risk is activity-aware.
 // No universal health score. No medical claims.
 
@@ -25,8 +25,9 @@ export function computeUncertainty(lower: number, upper: number): UncertaintyCat
 }
 
 /**
- * Compute rain probability (0–1) for the next N hours.
- * Secondary capability — sparse in current data.
+ * Chance of rain in the next few hours, 0 to 1. A rule of thumb (falling
+ * pressure and high humidity raise it), not fitted to the station's rain
+ * record: the rain gauges are too sparse and unreliable to fit it on.
  */
 export function computeRainProbability(
   currentRainObserved: boolean,
@@ -42,34 +43,6 @@ export function computeRainProbability(
   if (humidityCurrent > 90) score += 0.10;
   return Math.min(0.92, score);
 }
-
-/**
- * WBGT-based activity guidance.
- * Returns guidance keys, i18n'd on client.
- * NOT medical advice — environmental decision support only.
- */
-export function getActivityGuidance(
-  wbgt: number,
-  activityKey: string,
-): { guidance_key: string; detail_key: string } {
-  const profile = ACTIVITY_OFFSETS[activityKey] ?? 0;
-  const effective = wbgt + profile;
-
-  if (effective < 18) return { guidance_key: "low_exposure", detail_key: "low_exposure_detail" };
-  if (effective < 21) return { guidance_key: "moderate_exposure", detail_key: "moderate_exposure_detail" };
-  if (effective < 24) return { guidance_key: "high_exposure", detail_key: "high_exposure_detail" };
-  return { guidance_key: "very_high_exposure", detail_key: "very_high_exposure_detail" };
-}
-
-const ACTIVITY_OFFSETS: Record<string, number> = {
-  walking: 2,
-  sports: -1.5,
-  outdoor_work: 0,
-  construction: -1.5,
-  outdoor_event: 0.5,
-  field_work: 0,
-  general: 1,
-};
 
 /**
  * Rank comparison between two risk levels.

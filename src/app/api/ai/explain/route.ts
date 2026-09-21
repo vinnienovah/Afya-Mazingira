@@ -6,7 +6,7 @@ import { buildFarmAdvisory, type GrowthStage } from "@/lib/afya/farm-engine";
 import type { Lang } from "@/lib/afya/types";
 
 // Safety net for the (usually much faster) real ERA5/Sentinel fetches in
-// runPipeline, plus the LLM call itself — Vercel's default function timeout
+// runPipeline, plus the LLM call itself, Vercel's default function timeout
 // is short.
 export const maxDuration = 30;
 
@@ -17,7 +17,7 @@ const ExplainSchema = z.object({
   // "standard" = full technical explanation
   // "plain"    = simplified, non-technical wording (same validated facts)
   mode: z.enum(["standard", "plain"]).default("standard"),
-  // Which page is asking — lets the AI draw on that page's own facts (e.g.
+  // Which page is asking, lets the AI draw on that page's own facts (e.g.
   // the Farm Advisory page's irrigation decision) instead of only the
   // general situation/forecast facts, which have nothing about crops.
   context: z.string().optional(),

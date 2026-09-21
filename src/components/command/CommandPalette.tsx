@@ -110,19 +110,16 @@ export default function CommandPalette() {
     }
   }, [open]);
 
-  // Clamp active index when results change
-  useEffect(() => {
-    if (active >= filtered.length) setActive(0);
-  }, [filtered, active]);
 
   if (!open) return null;
+  const current = active < filtered.length ? active : 0;
 
   const pages = filtered.filter((c) => c.group === "pages");
   const actions = filtered.filter((c) => c.group === "actions");
 
   function renderItem(cmd: CommandItem, flatIdx: number) {
     const Icon = cmd.icon;
-    const isActive = flatIdx === active;
+    const isActive = flatIdx === current;
     return (
       <li
         key={cmd.id}
@@ -175,7 +172,7 @@ export default function CommandPalette() {
             role="combobox"
             aria-expanded="true"
             aria-controls="cmd-list"
-            aria-activedescendant={`cmd-option-${active}`}
+            aria-activedescendant={`cmd-option-${current}`}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -191,9 +188,9 @@ export default function CommandPalette() {
                 e.preventDefault();
                 setActive((i) => Math.max(i - 1, 0));
               }
-              if (e.key === "Enter" && filtered[active]) {
+              if (e.key === "Enter" && filtered[current]) {
                 e.preventDefault();
-                execute(filtered[active]);
+                execute(filtered[current]);
               }
             }}
             placeholder={t("cmd_search")}
