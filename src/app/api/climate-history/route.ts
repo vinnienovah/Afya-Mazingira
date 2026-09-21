@@ -14,7 +14,9 @@ import type { DemoObservation } from "@/lib/afya/demo-observations";
 //   - era5: real ERA5-Land reanalysis, any of the supported locations (it's
 //     a global gridded product, so this works everywhere, unlike Conduit).
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+// Wide Conduit ranges are fetched in chunked batches (the live API rejects
+// any single request over ~a month) — a full year can mean several batches.
+export const maxDuration = 55;
 
 const MAX_RANGE_DAYS = 366;
 

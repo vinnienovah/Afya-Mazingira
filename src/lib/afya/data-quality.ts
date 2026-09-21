@@ -3,14 +3,19 @@ import type { DemoObservation } from "./demo-observations";
 
 // ─── Data Quality Engine ──────────────────────────────────────────────────────
 // Evaluates observation freshness, sensor agreement, and known field issues.
-// Spec §18 defines the GOOD / DEGRADED / POOR behaviour; the absolute age
-// thresholds below are calibrated to the station's observed upload cadence
-// (the Conduit endpoint currently publishes in daily batches) rather than
-// assuming a continuous 15-minute stream. The age itself is always displayed.
+// Spec §18 defines the GOOD / DEGRADED / POOR behaviour. Audited against 465
+// days of the real dataset, the station records roughly every
+// EXPECTED_INTERVAL_MINUTES (mean 96.9/day, median 95/day) — but that's the
+// recording interval, not a guarantee about how promptly the public API
+// reflects a new reading, and it has gone quiet for hours at a time in
+// practice. The thresholds below are deliberately several multiples of the
+// expected interval rather than assuming a strict continuous 15-min stream;
+// the age itself (from the observation's own timestamp, not from when we
+// last polled) is always displayed regardless of which band it falls in.
 
 const EXPECTED_INTERVAL_MINUTES = 15;
-const GOOD_MAX_AGE_MINUTES = 90;            // fresh intraday data
-const DEGRADED_MAX_AGE_MINUTES = 18 * 60;   // overnight batch delay tolerated
+const GOOD_MAX_AGE_MINUTES = 90;            // ~6x the expected interval
+const DEGRADED_MAX_AGE_MINUTES = 18 * 60;   // overnight/multi-hour gap tolerated
 const POOR_MAX_AGE_MINUTES = 30 * 60;       // station genuinely unavailable
 
 const CRITICAL_FIELDS: (keyof DemoObservation)[] = [
