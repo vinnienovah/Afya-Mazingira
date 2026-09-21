@@ -16,6 +16,8 @@ Live at **[afya-mazingira.vercel.app](https://afya-mazingira.vercel.app)**. Buil
 
 **Around Juja the work is outdoors.** Quarrying building stone is one of Juja's most significant economic activities, alongside construction and farming [2]. In a study of Kenyan farmers wearing sensors, outdoor WBGT peaked between 14:00 and 15:00 [3].
 
+**The station's own record shows how much the season matters.** Between 07:00 and 18:00 at JKUAT, shade WBGT reached 21 °C or more, the HIGH band for outdoor work, in 47 to 51 % of hours from January to March 2026, against about 3 % in July and August 2025. For construction the share was about 70 % from January to April. A tool tuned on the cool months would miss the risk; the 15-month archive does not.
+
 **Water is short and used inefficiently.** Kiambu's own climate risk assessment lists erratic rainfall and water scarcity among the county's hazards, reports yield losses from low soil moisture and late rains, and records inadequate irrigation capacity [4]. Where Kenyan smallholders irrigate, efficiency is low: 201 small-scale irrigators in the Lake Naivasha basin reached 31 % water-use efficiency [5], and farmer-led irrigation rarely gets information support [6].
 
 **The information people get is too coarse to act on.** Kenya Met defines heatwaves per town, for example three or more days above 32 °C for Nairobi [7]. The Kenya Agricultural Observatory Platform sends ward-level forecasts and advisories to about 250,000 farmers a month in five counties [8]. None of this says, for one site and one activity, which hours today are risky and when the work should move.
@@ -28,7 +30,7 @@ Afya Mazingira turns the station's readings into decisions, in English and Kiswa
 
 - **What is happening:** the current environmental state (cool and humid, rapid warming, hot, cooling), learned from 15 months of the station's own record.
 - **What comes next:** WBGT every 15 minutes out to nine hours, with an uncertainty band tested on months the model never saw.
-- **What it means for you:** a risk band for the activity you choose (walking, sports, construction, field work, events) and the best window to do it.
+- **What it means for you:** a risk band for the activity you choose (walking, sports, construction, field work, events) and the best daylight window to do it.
 - **For farms:** irrigation depth, spraying and field-work windows, crop heat stress and a planting outlook from station temperature and ERA5-Land rainfall and soil moisture.
 - **Around the region:** the same heat method applied to ten neighbouring counties from reanalysis, clearly marked as regional rather than measured.
 
@@ -162,7 +164,7 @@ Open the app and start at **Situation**. Choose an activity to see its risk and 
 | Command | What it does |
 |---|---|
 | `npm run dev` | Development server on http://localhost:3000 |
-| `npm test` | 30 tests, no network |
+| `npm test` | 32 tests, no network |
 | `npm run typecheck` / `npm run lint` | Type check and lint |
 | `npm run fit` | Refit the forecast and states from the archive |
 | `npm run station-report` | Rerun the station health checks over the archive |
