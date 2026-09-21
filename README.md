@@ -58,7 +58,7 @@ The station (Conduit@Empathy1, JKUAT, lat -1.0997, lon 37.0145, 1,523 m) is the 
 - the gust-direction column is a copy of the gust speed on every day;
 - the firmware wet bulb agrees with Stull (2011) to 0.032 °C, so the app uses it.
 
-These go on the page as findings to report to JHUB.
+These go on the page as findings to report to JHUB. The same checks also run live, unchanged, on other 3D-PAWS stations on the CHORDS portal: the page's station selector adds KALRO Thika, Machakos Stoni Athi and Embu, the nearby stations that were reporting on 21 September 2026.
 
 **WBGT from the station's own sensors.** The station's firmware WBGT column reads **below the wet bulb in 63.6 % of the archive**, which a real WBGT cannot do. We do not use it. WBGT here is the ISO 7243 form without solar load, 0.7 x wet bulb + 0.3 x air temperature, from the station's wet bulb (which agrees with Stull (2011) to 0.03 °C) and its air temperature. When the firmware value falls below the wet bulb, the Why? page says so.
 
@@ -175,7 +175,7 @@ Open the app and start at **Situation**. Choose an activity to see its risk and 
 | Command | What it does |
 |---|---|
 | `npm run dev` | Development server on http://localhost:3000 |
-| `npm test` | 32 tests, no network |
+| `npm test` | 48 tests, no network |
 | `npm run typecheck` / `npm run lint` | Type check and lint |
 | `npm run fit` | Refit the forecast and states from the archive |
 | `npm run station-report` | Rerun the station health checks over the archive |
@@ -191,7 +191,7 @@ Main API routes (JSON):
 | `POST /api/farm` | Advisory for `{crop, stage}` |
 | `POST /api/replay` | Hour-by-hour replay of a past day `{date}` |
 | `GET /api/map` | County indicators and satellite acquisitions |
-| `GET /api/station-health` | The archive health report and the same checks on the last 24 hours |
+| `GET /api/station-health` | The archive health report and the same checks on the last 24 hours; `?instrument=10` runs them on another CHORDS station |
 | `GET /api/climate-history` | Any date range, daily or hourly, station or ERA5-Land |
 
 ## 10. Data sources
@@ -240,7 +240,7 @@ Between them the team covers the environmental science behind the heat and farm 
 ## 14. Future development
 
 - **Add the sun to WBGT.** Calibrate the station's light sensor to irradiance so direct-sun WBGT can be computed, not only shade WBGT.
-- **More stations.** The CHORDS portal lists 75 3D-PAWS instruments in Kenya. The live feed address is a setting, and `npm run fit` refits from any station's archive in the same format.
+- **More stations.** The station health checks already run on any 3D-PAWS station on the CHORDS portal (75 instruments in Kenya); the forecast needs each station's archive to refit with `npm run fit`.
 - **Refit monthly** as the archive grows, and publish the scores each time.
 - **Reach people without a smartphone.** Send the daily best window and heat alerts by SMS and WhatsApp. The first partner to approach is the Kiambu county agricultural extension service, which already advises farmers around Juja.
 - **CHIRPS rainfall** by point extraction from its gridded files, in place of ERA5-Land.
