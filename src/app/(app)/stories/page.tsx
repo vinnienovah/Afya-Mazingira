@@ -7,8 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
 import {
   Sprout, Trophy, HardHat, Building2, ArrowRight,
-  Database, Cpu, Target, TrendingUp, Quote,
-} from "lucide-react";
+  Database, Cpu, Target, TrendingUp, } from "lucide-react";
 
 interface Story {
   key: string;
@@ -22,7 +21,6 @@ interface Story {
   insight_en: string; insight_sw: string;
   decision_en: string; decision_sw: string;
   impact_en: string; impact_sw: string;
-  quote_en: string; quote_sw: string;
   cta_href: string;
   cta_en: string; cta_sw: string;
 }
@@ -44,8 +42,6 @@ const STORIES: Story[] = [
     decision_sw: "\"Subiri, mvua inatarajiwa\" badala ya kumwagilia, au kina hasa cha mm wakati eneo la mizizi limekauka kweli.",
     impact_en: "Water and pumping fuel are only spent when the crop actually needs them, and irrigation happens before stress rather than after visible wilting.",
     impact_sw: "Maji na mafuta ya pampu hutumika tu wakati zao linahitaji, na umwagiliaji hufanyika kabla ya msongo badala ya baada ya kunyauka.",
-    quote_en: "I stopped watering the day before it rained.",
-    quote_sw: "Niliacha kumwagilia siku moja kabla ya mvua kunyesha.",
     cta_href: "/farm",
     cta_en: "Open Farm Advisory", cta_sw: "Fungua Ushauri wa Shamba",
   },
@@ -65,8 +61,6 @@ const STORIES: Story[] = [
     decision_sw: "Injini ya Wakati-Bora hupanga kila dirisha la dakika 15 na kurudisha muda mahususi wenye kupatwa kidogo, pamoja na mbadala.",
     impact_en: "High-intensity sessions move out of the exposure peak without cancelling training, and the decision is defensible to the athletics department.",
     impact_sw: "Vipindi vizito huhama kutoka kilele cha kupatwa bila kufuta mazoezi, na uamuzi unaweza kutetewa mbele ya idara ya riadha.",
-    quote_en: "We moved the session, not cancelled it.",
-    quote_sw: "Tulihamisha kipindi, hatukukifuta.",
     cta_href: "/plan",
     cta_en: "Plan an activity", cta_sw: "Panga shughuli",
   },
@@ -86,8 +80,6 @@ const STORIES: Story[] = [
     decision_sw: "Dashibodi ya uendeshaji huonyesha shughuli zipi zimepangwa ndani ya kilele na kupendekeza madirisha mbadala.",
     impact_en: "Crew scheduling shifts before conditions peak, supported by a printable briefing for the site file and the safety officer.",
     impact_sw: "Ratiba ya wafanyakazi hubadilika kabla ya kilele, ikiungwa mkono na taarifa inayochapishwa kwa faili ya tovuti.",
-    quote_en: "The briefing goes in the site file every morning.",
-    quote_sw: "Taarifa huingia kwenye faili ya tovuti kila asubuhi.",
     cta_href: "/operations",
     cta_en: "Open Operations", cta_sw: "Fungua Uendeshaji",
   },
@@ -107,8 +99,6 @@ const STORIES: Story[] = [
     decision_sw: "Mwonekano mmoja huonyesha tahadhari, vipindi vilivyoathiriwa na madirisha bora ya uendeshaji ya siku.",
     impact_en: "Departments coordinate from one environmental source of truth, and Historical Replay lets the team audit whether past advice was sound.",
     impact_sw: "Idara huratibu kutoka chanzo kimoja, na Marudio ya Kihistoria huruhusu timu kukagua kama ushauri wa zamani ulikuwa sahihi.",
-    quote_en: "Everyone plans from the same picture now.",
-    quote_sw: "Sasa kila mtu anapanga kutoka picha moja.",
     cta_href: "/replay",
     cta_en: "Try Historical Replay", cta_sw: "Jaribu Marudio",
   },
@@ -207,12 +197,6 @@ export default function StoriesPage() {
             {lang === "sw" ? story.problem_sw : story.problem_en}
           </p>
 
-          <div className="mt-6 flex items-start gap-2.5 rounded-xl border border-white/15 bg-white/5 px-4 py-3 max-w-xl">
-            <Quote className="h-4 w-4 shrink-0 mt-0.5" style={{ color: story.colour }} aria-hidden="true" />
-            <p className="text-sm italic text-white/80">
-              {lang === "sw" ? story.quote_sw : story.quote_en}
-            </p>
-          </div>
         </div>
         <div className="h-1" style={{ background: story.colour }} aria-hidden="true" />
       </div>
