@@ -44,7 +44,7 @@ export default function MeasurementStrip({
     {
       icon: <Sun className="w-4 h-4" />,
       label_en: "IR Radiation", label_sw: "Mionzi",
-      value: obs.infrared_signal > 0 ? `${Math.round(obs.infrared_signal)}` : "—",
+      value: obs.infrared_signal > 0 ? `${Math.round(obs.infrared_signal)}` : "-",
       accent: "#F2B705",
     },
     {

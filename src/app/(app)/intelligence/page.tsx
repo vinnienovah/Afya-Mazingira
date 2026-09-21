@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useSituation } from "@/lib/contexts/situation";
 import { useLanguage } from "@/lib/contexts/language";
-import { STATES, RISK_META, MODEL_VERSIONS } from "@/lib/afya/constants";
+import { STATES, RISK_META } from "@/lib/afya/constants";
+import { horizonScores, FORECAST_PERIODS } from "@/lib/afya/forecast-engine";
 import { fmtTime, fmtAgo } from "@/lib/afya/format";
 import { Card, CardTitle, CardMeta } from "@/components/ui/Card";
 import { StateChip } from "@/components/ui/StateChip";
@@ -14,6 +15,8 @@ import StateTimeline from "@/components/charts/StateTimeline";
 import AiPanel from "@/components/ai/AiPanel";
 import { SkeletonCard } from "@/components/ui/Skeleton";
 import { AlertTriangle, Cpu, Globe, CloudRain, Satellite, Database, TrendingUp, Info, ChevronRight } from "lucide-react";
+
+const HORIZONS = ["1h", "3h", "6h", "9h"] as const;
 
 export default function IntelligencePage() {
   const { situation, isLoading, error } = useSituation();
@@ -43,6 +46,8 @@ export default function IntelligencePage() {
   }
 
   const { current, state, forecast, quality, risk, era5, chirps, sentinel, contributors, state_history_24h } = situation;
+  const era5Ok = era5.available !== false;
+  const rainOk = chirps.available !== false;
   const f3h = forecast.find((f) => f.horizon === "3h");
   const transition = state.transition_likelihood;
 
@@ -76,7 +81,7 @@ export default function IntelligencePage() {
     {
       icon: <Database className="w-5 h-5 text-afya-rain" />,
       title_en: "HOW CERTAIN?", title_sw: "NI UHAKIKA KUPI?",
-      body_en: `Data quality: ${quality.status}. Forecast uncertainty: ${risk.uncertainty.toLowerCase()}. Interval for +3h: ${f3h?.lower.toFixed(1)}–${f3h?.upper.toFixed(1)}°C. ${quality.status !== "GOOD" ? "Confidence is reduced — strong recommendations are suppressed." : ""}`,
+      body_en: `Data quality: ${quality.status}. Forecast uncertainty: ${risk.uncertainty.toLowerCase()}. Interval for +3h: ${f3h?.lower.toFixed(1)}–${f3h?.upper.toFixed(1)}°C. ${quality.status !== "GOOD" ? "Confidence is reduced, strong recommendations are suppressed." : ""}`,
       body_sw: `Ubora wa data: ${quality.status}. Utata wa utabiri: ${risk.uncertainty.toLowerCase()}. Kipindi cha +saa 3: ${f3h?.lower.toFixed(1)}–${f3h?.upper.toFixed(1)}°C.`,
     },
   ];
@@ -119,7 +124,7 @@ export default function IntelligencePage() {
           <CardTitle>{t("thermal_exposure")}</CardTitle>
           <RiskChip level={risk.thermal} size="lg" />
           <div className="mt-3 text-xs text-afya-muted">
-            {lang === "sw" ? "Hatari kutokana na utabiri wa +saa 3" : "Risk from +3h forecast"}: {f3h ? `${f3h.value.toFixed(1)}°C` : "—"}
+            {lang === "sw" ? "Hatari kutokana na utabiri wa +saa 3" : "Risk from +3h forecast"}: {f3h ? `${f3h.value.toFixed(1)}°C` : "-"}
           </div>
         </Card>
         <Card>
@@ -145,7 +150,7 @@ export default function IntelligencePage() {
 
       {/* Live climate variables now live on the consolidated Dashboard
           (/climate) alongside Climate History and Historical Replay,
-          rather than duplicated here — this page stays focused on
+          rather than duplicated here, this page stays focused on
           why/explanation. */}
       <Link
         href="/climate"
@@ -183,10 +188,10 @@ export default function IntelligencePage() {
             </thead>
             <tbody className="divide-y divide-afya-border/50">
               {[
-                { label: lang === "sw" ? "Algorithm" : "Algorithm", vals: [MODEL_VERSIONS["1h"].algorithm, MODEL_VERSIONS["3h"].algorithm, MODEL_VERSIONS["6h"].algorithm, MODEL_VERSIONS["9h"].algorithm] },
-                { label: lang === "sw" ? "Toleo" : "Version", vals: Object.values(MODEL_VERSIONS).map((m) => m.version) },
-                { label: "MAE", vals: Object.values(MODEL_VERSIONS).map((m) => `${m.mae}°C`) },
-                { label: lang === "sw" ? "Lengo" : "Target", vals: ["wet_bulb_globe_temp", "wet_bulb_globe_temp", "wet_bulb_globe_temp", "wet_bulb_globe_temp"] },
+                { label: lang === "sw" ? "Kosa la wastani (MAE)" : "Mean error (MAE)", vals: HORIZONS.map((h) => `${horizonScores(h).mae.toFixed(2)}°C`) },
+                { label: lang === "sw" ? "Bila mabadiliko" : "No-change baseline", vals: HORIZONS.map((h) => `${horizonScores(h).persistence_mae.toFixed(2)}°C`) },
+                { label: lang === "sw" ? "Upana wa bendi 80%" : "80% band", vals: HORIZONS.map((h) => `±${horizonScores(h).band80.toFixed(2)}°C`) },
+                { label: lang === "sw" ? "Ndani ya bendi" : "Inside the band", vals: HORIZONS.map((h) => `${Math.round(horizonScores(h).coverage80 * 100)}%`) },
               ].map((row, i) => (
                 <tr key={i}>
                   <th scope="row" className="py-2 pr-4 text-xs font-semibold text-afya-muted text-left">{row.label}</th>
@@ -198,6 +203,11 @@ export default function IntelligencePage() {
             </tbody>
           </table>
         </div>
+        <p className="mt-3 text-xs text-afya-muted">
+          {lang === "sw"
+            ? `Regresheni ya ridge kwa kila hatua ya dakika 15, iliyofunzwa kwa data ya Conduit ${FORECAST_PERIODS.train[0]} hadi ${FORECAST_PERIODS.train[1]}. Bendi imewekwa kutoka ${FORECAST_PERIODS.calibration[0]} hadi ${FORECAST_PERIODS.calibration[1]}, na alama zote zimetoka ${FORECAST_PERIODS.test[0]} hadi ${FORECAST_PERIODS.test[1]}, miezi ambayo modeli haikuiona. Lengo ni WBGT kivulini.`
+            : `Ridge regression for each 15-minute step, fitted on Conduit data from ${FORECAST_PERIODS.train[0]} to ${FORECAST_PERIODS.train[1]}. The band is set from ${FORECAST_PERIODS.calibration[0]} to ${FORECAST_PERIODS.calibration[1]}, and every score comes from ${FORECAST_PERIODS.test[0]} to ${FORECAST_PERIODS.test[1]}, months the model never saw. The target is WBGT in shade.`}
+        </p>
       </Card>
 
       {/* ERA5 context */}
@@ -208,10 +218,10 @@ export default function IntelligencePage() {
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
           {[
-            { l_en: "ERA5 Temp", l_sw: "Joto la ERA5", v: `${era5.era5_temp_c.toFixed(1)}°C` },
-            { l_en: "ERA5 RH", l_sw: "Unyevu wa ERA5", v: `${era5.era5_relative_humidity.toFixed(0)}%` },
-            { l_en: "ERA5 Wind", l_sw: "Upepo wa ERA5", v: `${era5.era5_wind_speed_ms.toFixed(1)} m/s` },
-            { l_en: "ERA5 Solar", l_sw: "Mionzi ya ERA5", v: `${era5.era5_solar_wm2.toFixed(0)} W/m²` },
+            { l_en: "ERA5 Temp", l_sw: "Joto la ERA5", v: era5Ok ? `${era5.era5_temp_c.toFixed(1)}°C` : "-" },
+            { l_en: "ERA5 RH", l_sw: "Unyevu wa ERA5", v: era5Ok ? `${era5.era5_relative_humidity.toFixed(0)}%` : "-" },
+            { l_en: "ERA5 Wind", l_sw: "Upepo wa ERA5", v: era5Ok ? `${era5.era5_wind_speed_ms.toFixed(1)} m/s` : "-" },
+            { l_en: "ERA5 Solar", l_sw: "Mionzi ya ERA5", v: era5Ok ? `${era5.era5_solar_wm2.toFixed(0)} W/m²` : "-" },
           ].map((item, i) => (
             <div key={i} className="rounded-lg border border-afya-border bg-afya-canvas/50 px-3 py-2">
               <div className="text-[10px] text-afya-muted">{lang === "sw" ? item.l_sw : item.l_en}</div>
@@ -226,13 +236,13 @@ export default function IntelligencePage() {
           <div className="flex gap-6">
             <div>
               <div className="text-lg font-bold" style={{ color: era5.local_temp_anomaly_c >= 0 ? "#E27832" : "#247B78" }}>
-                {era5.local_temp_anomaly_c >= 0 ? "+" : ""}{era5.local_temp_anomaly_c.toFixed(1)}°C
+                {era5Ok ? `${era5.local_temp_anomaly_c >= 0 ? "+" : ""}${era5.local_temp_anomaly_c.toFixed(1)}°C` : "-"}
               </div>
               <div className="text-[10px] text-afya-muted">{lang === "sw" ? "Tofauti ya Joto" : "Temp anomaly"}</div>
             </div>
             <div>
               <div className="text-lg font-bold" style={{ color: era5.local_humidity_anomaly >= 0 ? "#247B78" : "#E27832" }}>
-                {era5.local_humidity_anomaly >= 0 ? "+" : ""}{era5.local_humidity_anomaly.toFixed(1)}%
+                {era5Ok ? `${era5.local_humidity_anomaly >= 0 ? "+" : ""}${era5.local_humidity_anomaly.toFixed(1)}%` : "-"}
               </div>
               <div className="text-[10px] text-afya-muted">{lang === "sw" ? "Tofauti ya Unyevu" : "RH anomaly"}</div>
             </div>
@@ -247,7 +257,7 @@ export default function IntelligencePage() {
         </div>
       </Card>
 
-      {/* CHIRPS context */}
+      {/* Rainfall context (ERA5-Land) */}
       <Card>
         <div className="flex items-center gap-2 mb-4">
           <CloudRain className="w-5 h-5 text-afya-rain" strokeWidth={1.8} aria-hidden="true" />
@@ -255,17 +265,17 @@ export default function IntelligencePage() {
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {[
-            { l_en: "Today's rainfall", l_sw: "Mvua ya leo", v: `${chirps.chirps_mm.toFixed(1)} mm` },
-            { l_en: "7-day total", l_sw: "Jumla ya siku 7", v: `${chirps.chirps_7d_mm.toFixed(1)} mm` },
-            { l_en: "30-day total", l_sw: "Jumla ya siku 30", v: `${chirps.chirps_30d_mm.toFixed(1)} mm` },
-            { l_en: "Rainfall percentile", l_sw: "Asilimia ya mvua", v: `${chirps.chirps_percentile.toFixed(0)}th` },
-            { l_en: "Dry spell", l_sw: "Kipindi kavu", v: `${chirps.chirps_dry_spell_days} ${lang === "sw" ? "siku" : "days"}` },
-            { l_en: "Wet spell", l_sw: "Kipindi cha mvua", v: `${chirps.chirps_wet_spell_days} ${lang === "sw" ? "siku" : "days"}` },
+            { l_en: "Today's rainfall", l_sw: "Mvua ya leo", v: rainOk ? `${chirps.chirps_mm.toFixed(1)} mm` : "-" },
+            { l_en: "7-day total", l_sw: "Jumla ya siku 7", v: rainOk ? `${chirps.chirps_7d_mm.toFixed(1)} mm` : "-" },
+            { l_en: "30-day total", l_sw: "Jumla ya siku 30", v: rainOk ? `${chirps.chirps_30d_mm.toFixed(1)} mm` : "-" },
+            { l_en: "Rainfall percentile", l_sw: "Asilimia ya mvua", v: rainOk ? `${chirps.chirps_percentile.toFixed(0)}th` : "-" },
+            { l_en: "Dry spell", l_sw: "Kipindi kavu", v: rainOk ? `${chirps.chirps_dry_spell_days} ${lang === "sw" ? "siku" : "days"}` : "-" },
+            { l_en: "Wet spell", l_sw: "Kipindi cha mvua", v: rainOk ? `${chirps.chirps_wet_spell_days} ${lang === "sw" ? "siku" : "days"}` : "-" },
           ].map((item, i) => (
             <div key={i} className="rounded-lg border border-afya-border bg-afya-canvas/50 px-3 py-2">
               <div className="text-[10px] text-afya-muted">{lang === "sw" ? item.l_sw : item.l_en}</div>
               <div className="text-sm font-bold text-afya-charcoal">{item.v}</div>
-              <div className="text-[9px] text-afya-muted/60 font-semibold uppercase">{t("historical_label")} · CHIRPS</div>
+              <div className="text-[9px] text-afya-muted/60 font-semibold uppercase">{t("historical_label")} · ERA5-Land</div>
             </div>
           ))}
         </div>
@@ -282,10 +292,10 @@ export default function IntelligencePage() {
           <div className="rounded-lg border border-afya-border bg-afya-canvas/50 px-4 py-3">
             <div className="text-xs font-bold text-afya-green mb-1">Sentinel-2</div>
             <div className="text-sm font-bold text-afya-charcoal mb-1">
-              NDVI {sentinel.sentinel2_ndvi_mean !== null ? sentinel.sentinel2_ndvi_mean.toFixed(2) : "—"}
+              NDVI {sentinel.sentinel2_ndvi_mean !== null ? sentinel.sentinel2_ndvi_mean.toFixed(2) : "-"}
             </div>
             <div className="text-[10px] text-afya-muted space-y-0.5">
-              <div>{t("acquired")}: {sentinel.sentinel2_acquired ?? "—"}</div>
+              <div>{t("acquired")}: {sentinel.sentinel2_acquired ?? "-"}</div>
               <div>{t("native_resolution")}: 10 m</div>
               <div className="font-semibold text-afya-muted/70 uppercase">{t("satellite_label")}</div>
             </div>
@@ -294,10 +304,10 @@ export default function IntelligencePage() {
           <div className="rounded-lg border border-afya-border bg-afya-canvas/50 px-4 py-3">
             <div className="text-xs font-bold text-afya-rain mb-1">Sentinel-3</div>
             <div className="text-sm font-bold text-afya-charcoal mb-1">
-              LST {sentinel.sentinel3_lst_c !== null ? `${sentinel.sentinel3_lst_c.toFixed(1)}°C` : "—"}
+              LST {sentinel.sentinel3_lst_c !== null ? `${sentinel.sentinel3_lst_c.toFixed(1)}°C` : "-"}
             </div>
             <div className="text-[10px] text-afya-muted space-y-0.5">
-              <div>{t("acquired")}: {sentinel.sentinel3_acquired ?? "—"}</div>
+              <div>{t("acquired")}: {sentinel.sentinel3_acquired ?? "-"}</div>
               <div>{t("native_resolution")}: ~1 km</div>
               <div className="font-semibold text-afya-muted/70 uppercase">{t("satellite_label")}</div>
             </div>

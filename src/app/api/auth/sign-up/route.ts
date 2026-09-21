@@ -5,7 +5,6 @@ import { users, userPreferences } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { hashPassword, createSession, sessionCookie } from "@/lib/auth/logic";
 import { hasResendConfigured, createVerificationToken, sendVerificationEmail } from "@/lib/auth/verification";
-import { DEMO_EMAIL } from "@/lib/afya/constants";
 import type { Lang } from "@/lib/afya/types";
 
 const SignUpSchema = z.object({
@@ -29,11 +28,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "email_taken" }, { status: 409 });
     }
 
-    // The public demo account, and any account created while no email
-    // provider is configured (local dev), is auto-verified — mirrors this
-    // codebase's convention of degrading gracefully rather than becoming
-    // unusable when an external credential is absent.
-    const autoVerify = email === DEMO_EMAIL || !hasResendConfigured();
+    // Without an email provider (local development) there is no way to send
+    // the link, so the account is verified straight away.
+    const autoVerify = !hasResendConfigured();
 
     const { hash, salt } = hashPassword(password);
     const [newUser] = await db

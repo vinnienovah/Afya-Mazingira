@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryParam } from "@/lib/use-query-param";
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -84,26 +85,24 @@ function MiniChart({ title, children }: { title: string; children: React.ReactEl
 type DashboardTab = "live" | "history" | "replay";
 
 // Consolidated Dashboard: live climate variables, the date-range Climate
-// History explorer, and Historical Replay — previously three separate
+// History explorer, and Historical Replay, previously three separate
 // destinations (a section on the Intelligence page, this page, and
-// /replay) — now one page with tabs, so there's a single place to look at
+// /replay), now one page with tabs, so there's a single place to look at
 // "everything about the climate data" instead of three.
 export default function DashboardPage() {
   const { t } = useLanguage();
   const router = useRouter();
-  const [tab, setTab] = useState<DashboardTab>("live");
+  const requested = useQueryParam("tab");
+  const [chosen, setChosen] = useState<DashboardTab | null>(null);
+  const tab: DashboardTab =
+    chosen ?? (requested === "history" || requested === "replay" ? requested : "live");
 
   useEffect(() => {
     document.title = `${t("nav_climate")} | AFYA MAZINGIRA`;
-    const requested = new URLSearchParams(window.location.search).get("tab");
-    if (requested === "history" || requested === "replay" || requested === "live") {
-      setTab(requested);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [t]);
 
   function selectTab(next: DashboardTab) {
-    setTab(next);
+    setChosen(next);
     router.replace(next === "live" ? "/climate" : `/climate?tab=${next}`, { scroll: false });
   }
 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSituation } from "@/lib/contexts/situation";
 import { useLanguage } from "@/lib/contexts/language";
 import { STATES } from "@/lib/afya/constants";
+import { horizonScores } from "@/lib/afya/forecast-engine";
 import { fmtTime, fmtWindow } from "@/lib/afya/format";
 import { StateChip } from "@/components/ui/StateChip";
 import { RiskChip } from "@/components/ui/RiskChip";
@@ -19,7 +20,7 @@ import {
   ChevronRight, Clock, AlertTriangle, TrendingUp, CheckCircle2, Printer,
 } from "lucide-react";
 
-// ─── Section header — quiet rhythm for the decision-first hierarchy ──────────
+// Section header, quiet rhythm for the decision-first hierarchy
 function ActHeader({
   titleKey, t,
 }: {
@@ -94,7 +95,7 @@ export default function SituationPage() {
       {/* ━━━ SITUATION ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
       <ActHeader titleKey="act_situation" t={t} />
 
-      {/* ── HERO: Current Situation ─────────────────────────────────────── */}
+      {/* HERO: Current Situation */}
       <div
         className="rounded-2xl overflow-hidden"
         style={{ background: `linear-gradient(135deg, #103D2C 0%, #0e2e22 100%)` }}
@@ -102,7 +103,7 @@ export default function SituationPage() {
         aria-label={t("current_state")}
       >
         <div className="p-6 sm:p-8 text-white">
-          {/* Ground + Regional Intelligence tier — JKUAT/Juja is the flagship
+          {/* Ground + Regional Intelligence tier, JKUAT/Juja is the flagship
               ground-intelligence site (real Conduit station), distinct from
               the regional-only intelligence available elsewhere (see /map). */}
           <div className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-afya-gold/40 bg-afya-gold/10 px-2.5 py-1 text-[10px] font-bold tracking-wide text-afya-gold">
@@ -126,7 +127,7 @@ export default function SituationPage() {
             )}
           </div>
 
-          {/* State name — large */}
+          {/* State name, large */}
           <h1 className="text-4xl sm:text-5xl font-bold text-white leading-tight mb-2">
             {stateName}
           </h1>
@@ -153,7 +154,7 @@ export default function SituationPage() {
             <div className="rounded-xl bg-white/8 border border-white/10 p-3">
               <div className="text-[11px] text-white/50 mb-1">{t("expected_peak")}</div>
               <div className="text-xl font-bold text-white">
-                {expected_peak ? fmtTime(expected_peak.time) : "—"}
+                {expected_peak ? fmtTime(expected_peak.time) : "-"}
               </div>
               {expected_peak && (
                 <div className="text-xs text-white/60">{expected_peak.wbgt_c.toFixed(1)}°C WBGT</div>
@@ -163,7 +164,7 @@ export default function SituationPage() {
             <div className="rounded-xl bg-white/8 border border-white/10 p-3">
               <div className="text-[11px] text-white/50 mb-1">{t("horizon_3h")}</div>
               <div className="text-xl font-bold text-white">
-                {f3h ? `${f3h.value.toFixed(1)}°C` : "—"}
+                {f3h ? `${f3h.value.toFixed(1)}°C` : "-"}
               </div>
               {f3h && (
                 <div className="text-xs text-white/60">
@@ -183,11 +184,11 @@ export default function SituationPage() {
                     ~{Math.round(transition.probability * 100)}%
                   </div>
                 </>
-              ) : "—"}
+              ) : "-"}
             </div>
           </div>
 
-          {/* Recommended action — omitted when quality is POOR; the
+          {/* Recommended action, omitted when quality is POOR; the
               standalone "Data quality notice" panel below already covers
               that case, so we don't show a second, less-detailed message. */}
           {quality.status !== "POOR" && (
@@ -281,7 +282,7 @@ export default function SituationPage() {
       {/* ━━━ TRAJECTORY ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
       <ActHeader titleKey="act_trajectory" t={t} />
 
-      {/* ── FORECAST CHART ──────────────────────────────────────────────── */}
+      {/* FORECAST CHART */}
       <Card>
         <div className="flex items-start justify-between mb-4 flex-wrap gap-2">
           <div>
@@ -302,19 +303,22 @@ export default function SituationPage() {
         />
       </Card>
 
-      {/* ── HORIZON CARD STRIP ───────────────────────────────────────────── */}
+      {/* HORIZON CARD STRIP */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { f: f1h, key: "horizon_1h", model: "ExtraTrees" },
-          { f: f3h, key: "horizon_3h", model: "CatBoost" },
-          { f: f6h, key: "horizon_6h", model: "ExtraTrees" },
-          { f: f9h, key: "horizon_9h", model: "CatBoost" },
-        ].map(({ f, key, model }) => f ? (
+        {([
+          { f: f1h, key: "horizon_1h", horizon: "1h" },
+          { f: f3h, key: "horizon_3h", horizon: "3h" },
+          { f: f6h, key: "horizon_6h", horizon: "6h" },
+          { f: f9h, key: "horizon_9h", horizon: "9h" },
+        ] as const).map(({ f, key, horizon }) => f ? (
           <Card key={key}>
             <div className="flex items-start justify-between mb-3">
               <span className="text-sm font-semibold text-afya-charcoal">{t(key)}</span>
-              <span className="text-[10px] text-afya-muted/60 border border-afya-border rounded px-1.5 py-0.5">
-                {model}
+              <span
+                className="text-[10px] text-afya-muted/60 border border-afya-border rounded px-1.5 py-0.5"
+                title={lang === "sw" ? "Kosa la wastani kwenye miezi ya majaribio" : "Mean error on the test months"}
+              >
+                ±{horizonScores(horizon).mae.toFixed(1)}°C
               </span>
             </div>
             <div className="text-3xl font-bold text-afya-charcoal mb-1">
@@ -338,7 +342,7 @@ export default function SituationPage() {
         ) : null)}
       </div>
 
-      {/* ── STATE HISTORY TIMELINE ──────────────────────────────────────── */}
+      {/* STATE HISTORY TIMELINE */}
       <Card>
         <CardTitle>{t("state_timeline")}</CardTitle>
         <StateTimeline segments={state_history_24h} />
@@ -347,7 +351,7 @@ export default function SituationPage() {
       {/* ━━━ MEANING ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
       <ActHeader titleKey="act_meaning" t={t} />
 
-      {/* ── MODEL CONTRIBUTORS ──────────────────────────────────────────── */}
+      {/* MODEL CONTRIBUTORS */}
       {contributors.length > 0 && (
         <Card>
           <CardTitle>{t("contributor_title")}</CardTitle>
@@ -394,7 +398,7 @@ export default function SituationPage() {
         </Card>
       )}
 
-      {/* ── WHY? AI PANEL ───────────────────────────────────────────────── */}
+      {/* WHY? AI PANEL */}
       <div id="ai-section">
         <AiPanel context="situation" />
       </div>
@@ -402,7 +406,7 @@ export default function SituationPage() {
       {/* ━━━ TECHNICAL ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
       <ActHeader titleKey="act_technical" t={t} />
 
-      {/* ── TECHNICAL MEASUREMENTS (collapsible) ────────────────────────── */}
+      {/* TECHNICAL MEASUREMENTS (collapsible) */}
       <Card padding={false}>
         <button
           className="w-full flex items-center justify-between px-5 py-4 text-left"

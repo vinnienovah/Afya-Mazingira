@@ -1,5 +1,5 @@
-// ─── Google OAuth 2.0 (Authorization Code flow) ──────────────────────────────
-// No SDK dependency — plain fetch against Google's documented endpoints,
+// Google OAuth 2.0 (Authorization Code flow)
+// No SDK dependency, plain fetch against Google's documented endpoints,
 // consistent with the other external adapters in this codebase.
 
 import crypto from "crypto";

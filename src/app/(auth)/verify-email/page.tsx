@@ -14,22 +14,25 @@ export default function VerifyEmailPage() {
 
   useEffect(() => {
     const token = new URLSearchParams(window.location.search).get("token");
-    if (!token) {
-      setStatus("failed");
-      return;
-    }
-    (async () => {
+    let active = true;
+    const verify = async (value: string) => {
       try {
         const res = await fetch("/api/auth/verify-email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token }),
+          body: JSON.stringify({ token: value }),
         });
-        setStatus(res.ok ? "success" : "failed");
+        return res.ok;
       } catch {
-        setStatus("failed");
+        return false;
       }
-    })();
+    };
+    (token ? verify(token) : Promise.resolve(false)).then((ok) => {
+      if (active) setStatus(ok ? "success" : "failed");
+    });
+    return () => {
+      active = false;
+    };
   }, []);
 
   return (

@@ -1,7 +1,9 @@
-// ─── Demo / synthetic Conduit observation generator ──────────────────────────
+// Demo / synthetic Conduit observation generator
 // Produces realistic deterministic observations for the JKUAT/Juja environment.
-// These are clearly labeled DEMO data — never presented as live station data.
+// These are clearly labeled DEMO data, never presented as live station data.
 // Uses a fixed seed so the demo is reproducible across server restarts.
+
+import { shadeWbgt, stullWetBulb } from "./constants";
 
 export interface DemoObservation {
   ts: string; // ISO UTC
@@ -23,9 +25,15 @@ export interface DemoObservation {
   heat_idx: number;
   wet_bulb_temp: number;
   wet_bulb_globe_temp: number;
+  // The station firmware's own WBGT column, kept for reference only. It reads
+  // below the wet bulb most of the time, which a real WBGT cannot do.
+  firmware_wbgt?: number | null;
+  // Fields in this slot that were carried forward or defaulted rather than
+  // measured. Absent or empty when every value was observed.
+  imputed?: string[];
 }
 
-// ─── Seeded pseudo-random for reproducibility ─────────────────────────────────
+// Seeded pseudo-random for reproducibility
 function mulberry32(seed: number) {
   return function () {
     let t = (seed += 0x6d2b79f5);
@@ -35,7 +43,7 @@ function mulberry32(seed: number) {
   };
 }
 
-// ─── Gaussian noise (deterministic) ──────────────────────────────────────────
+// Gaussian noise (deterministic)
 function gaussian(rand: () => number): number {
   let u = 0, v = 0;
   while (u === 0) u = rand();
@@ -43,7 +51,7 @@ function gaussian(rand: () => number): number {
   return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
 }
 
-// ─── Atmospheric model ────────────────────────────────────────────────────────
+// Atmospheric model
 // Simulates the JKUAT/Juja Conduit environment in September (warm season).
 // Kenya is in EAT (UTC+3). We simulate in EAT local hours.
 
@@ -56,7 +64,7 @@ function simulateAtTime(eatHours: number, doy: number, rand: () => number): Omit
   const g6 = gaussian(rand);
   const g7 = gaussian(rand);
 
-  // ── Solar radiation model (Kenya equatorial, September) ──────────────────
+  // Solar radiation model (Kenya equatorial, September)
   // Sun rises ~06:00 EAT, sets ~18:30 EAT in September
   const sunrise = 6.0;
   const sunset = 18.5;
@@ -74,7 +82,7 @@ function simulateAtTime(eatHours: number, doy: number, rand: () => number): Omit
   const si1145_vis_base = is_day ? solar_elevation * 900 * cloud_factor : 0;
   const si1145_vis = Math.max(0, si1145_vis_base + g4 * 30 * (is_day ? 1 : 0));
 
-  // ── Temperature (°C) — lags radiation by ~1.5h ───────────────────────────
+  // Temperature (°C), lags radiation by ~1.5h
   const temp_peak_hour = 14.5;
   const temp_width = 5.0;
   const temp_base = 14.2; // overnight minimum around 06:30
@@ -83,11 +91,11 @@ function simulateAtTime(eatHours: number, doy: number, rand: () => number): Omit
   const temp_day_profile = Math.exp(-Math.pow(Math.min(hour_offset, 24 - hour_offset), 2) / (2 * temp_width * temp_width));
   const temp_sht = Math.round((temp_base + temp_amplitude * temp_day_profile + g * 0.35 * (is_day ? 1 : 0.4)) * 10) / 10;
 
-  // ── Secondary sensors (cross-sensor consistency) ──────────────────────────
+  // Secondary sensors (cross-sensor consistency)
   const temp_bmx = Math.round((temp_sht + g5 * 0.15) * 10) / 10;
   const temp_mcp = Math.round((temp_sht + g6 * 0.12) * 10) / 10;
 
-  // ── Relative humidity (%RH) — inverse of temperature ─────────────────────
+  // Relative humidity (%RH), inverse of temperature
   const rh_base = 82.0; // overnight high
   const rh_min = 32.0; // afternoon minimum
   const rh_range = rh_base - rh_min;
@@ -97,42 +105,24 @@ function simulateAtTime(eatHours: number, doy: number, rand: () => number): Omit
   const rh_profile = Math.exp(-Math.pow(Math.min(rh_hour_offset, 24 - rh_hour_offset), 2) / (2 * 5.5 * 5.5));
   const humidity_sht = Math.max(rh_min, Math.min(98, Math.round((rh_min + rh_range * (1 - rh_profile) + g2 * 1.2) * 10) / 10));
 
-  // ── Pressure (hPa, station level) ─────────────────────────────────────────
+  // Pressure (hPa, station level)
   // Nairobi/Juja altitude ~1600m, station pressure ~848 hPa with semidiurnal tides
   const semidiurnal = Math.sin(((eatHours - 10) / 12) * 2 * Math.PI) * 0.8;
   const press_bmx = Math.round((848.5 + semidiurnal + g7 * 0.15) * 10) / 10;
 
-  // ── Wind ──────────────────────────────────────────────────────────────────
+  // Wind
   // Light overnight, picks up with thermal contrast midday
   const wind_day_boost = is_day ? solar_elevation * 0.9 : 0.0;
   const wind_spd = Math.max(0.1, Math.round((0.8 + wind_day_boost + gaussian(rand) * 0.25) * 10) / 10);
   // ESE trade direction dominates
   const wind_dir = Math.round(((110 + g * 25) % 360) / 1) * 1;
-  const wind_gust = Math.round((wind_spd * (1.5 + Math.random() * 0.4)) * 10) / 10;
+  const wind_gust = Math.round((wind_spd * (1.5 + rand() * 0.4)) * 10) / 10;
 
-  // ── Wet bulb temperature ──────────────────────────────────────────────────
-  // Simplified Stull approximation
-  const T = temp_sht;
-  const RH = humidity_sht / 100;
-  const wet_bulb_temp = Math.round(
-    (T * Math.atan(0.151977 * Math.pow(RH + 8.313659, 0.5)) +
-      Math.atan(T + RH) -
-      Math.atan(RH - 1.676331) +
-      0.00391838 * Math.pow(RH, 1.5) * Math.atan(0.023101 * RH) -
-      4.686035) * 10,
-  ) / 10;
+  // Wet bulb and WBGT the same way the station series gets them
+  const wet_bulb_temp = Math.round(stullWetBulb(temp_sht, humidity_sht) * 10) / 10;
+  const wet_bulb_globe_temp = Math.round(shadeWbgt(temp_sht, wet_bulb_temp) * 10) / 10;
 
-  // ── WBGT-like (indoor/outdoor approximation) ──────────────────────────────
-  // WBGT_out ≈ 0.7×Twb + 0.2×Tg + 0.1×Td
-  // Approximate Tg from solar gain; Td = T
-  const solar_gain_w = si1145_ir / 5200; // 0-1
-  const tg_offset = 6.5 * solar_gain_w * (is_day ? 1 : 0); // globe temp elevation
-  const tg = temp_sht + tg_offset;
-  const wet_bulb_globe_temp = Math.round(
-    (0.7 * wet_bulb_temp + 0.2 * tg + 0.1 * temp_sht + gaussian(rand) * 0.15) * 10,
-  ) / 10;
-
-  // ── Heat index ────────────────────────────────────────────────────────────
+  // Heat index
   // Simplified Rothfusz regression (valid T≥27°C, RH≥40%)
   let heat_idx: number;
   if (temp_sht >= 27 && humidity_sht >= 40) {
@@ -149,7 +139,7 @@ function simulateAtTime(eatHours: number, doy: number, rand: () => number): Omit
     heat_idx = Math.round((temp_sht + 0.35) * 10) / 10;
   }
 
-  // ── Rain (very rare in the dry September for this demo) ───────────────────
+  // Rain (very rare in the dry September for this demo)
   // Occasionally a brief light shower event (probability ~2% per timestep, ~every 2 days)
   const rain_event = rand() < 0.018;
   const rg1 = rain_event ? Math.round(rand() * 2.5 * 10) / 10 : 0;
@@ -168,7 +158,7 @@ function simulateAtTime(eatHours: number, doy: number, rand: () => number): Omit
   };
 }
 
-// ─── Generate a series of observations ────────────────────────────────────────
+// Generate a series of observations
 
 /**
  * Generate 15-min grid observations around `anchor` going back `lookbackHours`.
@@ -219,9 +209,10 @@ export function generateReplayDay(
   return generateDemoSeries(isoAnchor, 26, 20260901);
 }
 
-// ─── Context generators (ERA5, CHIRPS, Sentinel) ─────────────────────────────
+// Context generators (ERA5, CHIRPS, Sentinel)
 
 export function generateEra5Context(anchor: string, currentTemp: number, currentHum: number): {
+  available: boolean;
   era5_temp_c: number;
   era5_dewpoint_c: number;
   era5_relative_humidity: number;
@@ -252,6 +243,7 @@ export function generateEra5Context(anchor: string, currentTemp: number, current
   const era5_solar_wm2 = Math.round(solar * 850);
 
   return {
+    available: false,
     era5_temp_c,
     era5_dewpoint_c,
     era5_relative_humidity: era5_rh,
@@ -268,6 +260,7 @@ export function generateEra5Context(anchor: string, currentTemp: number, current
 }
 
 export function generateChirpsContext(anchor: string): {
+  available: boolean;
   chirps_mm: number;
   chirps_7d_mm: number;
   chirps_30d_mm: number;
@@ -280,6 +273,7 @@ export function generateChirpsContext(anchor: string): {
   const d = new Date(anchor);
   const validDate = d.toISOString().slice(0, 10);
   return {
+    available: false,
     chirps_mm: 1.8,
     chirps_7d_mm: 14.7,
     chirps_30d_mm: 48.2,
@@ -298,12 +292,13 @@ export function generateSentinelContext(): {
   sentinel3_acquired: string | null;
   sentinel3_lst_c: number | null;
 } {
+  // Without a real catalogue answer there is nothing to show; no stand-in values.
   return {
-    sentinel2_available: true,
-    sentinel2_acquired: "2026-09-05",
-    sentinel2_ndvi_mean: 0.42,
-    sentinel3_available: true,
-    sentinel3_acquired: "2026-09-06",
-    sentinel3_lst_c: 34.7,
+    sentinel2_available: false,
+    sentinel2_acquired: null,
+    sentinel2_ndvi_mean: null,
+    sentinel3_available: false,
+    sentinel3_acquired: null,
+    sentinel3_lst_c: null,
   };
 }

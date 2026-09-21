@@ -1,4 +1,4 @@
-// ─── Shared Copernicus Data Space Ecosystem (CDSE) helpers ──────────────────
+// Shared Copernicus Data Space Ecosystem (CDSE) helpers
 // Token acquisition + Sentinel Hub Statistics access, shared by the primary
 // JKUAT/Kiambu satellite context (sources-external.ts) and the multi-county
 // regional NDVI sampling (map-data.ts). Kept in its own module so those two
@@ -51,13 +51,13 @@ export type Bbox = [number, number, number, number]; // [minLng, minLat, maxLng,
  * Mean NDVI over a bbox across a UTC date range, via the Sentinel Hub
  * Statistics API. Requested as one daily bucket per day in range (Sentinel
  * Hub requires a dataMask output for multi-bucket aggregation), then the
- * most recent day that looks like a real, mostly-clear scene is picked —
+ * most recent day that looks like a real, mostly-clear scene is picked,
  * a day whose stats are still uniform/near-zero after unmixing is almost
  * always full cloud/shadow, not a real land signal. Unfiltered for anything
- * more rigorous than that — callers needing a guaranteed clear-scene
+ * more rigorous than that, callers needing a guaranteed clear-scene
  * guarantee should pre-select one from the catalog first (see the primary
  * JKUAT/Kiambu path in sources-external.ts). A wider range increases the
- * chance of finding at least one usable day — useful for the small
+ * chance of finding at least one usable day, useful for the small
  * per-county sample boxes used by the regional outlook, where Sentinel-2's
  * ~5 day revisit means a single day often has no coverage at all.
  */
@@ -107,8 +107,8 @@ export async function ndviStatisticsForBbox(
     const stats = days[i].outputs?.default?.bands?.NDVI?.stats;
     if (!stats || stats.mean == null || !Number.isFinite(stats.mean)) continue;
     const coverage = 1 - (stats.noDataCount ?? 0) / Math.max(1, stats.sampleCount ?? 1);
-    if (coverage < 0.5) continue; // mostly no-data — not a usable scene
-    if ((stats.stDev ?? 0) < 0.02) continue; // flat signal — almost certainly cloud/shadow
+    if (coverage < 0.5) continue; // mostly no-data, not a usable scene
+    if ((stats.stDev ?? 0) < 0.02) continue; // flat signal, almost certainly cloud/shadow
     return stats.mean;
   }
   return null;

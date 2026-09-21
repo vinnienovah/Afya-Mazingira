@@ -191,7 +191,7 @@ export default function PlanPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
 
-        {/* ── LEFT: Form ─────────────────────────────────────────────── */}
+        {/* LEFT: Form */}
         <div className="lg:col-span-2 space-y-4">
           <Card>
             <CardTitle>{t("what_planning")}</CardTitle>
@@ -322,7 +322,7 @@ export default function PlanPage() {
           )}
         </div>
 
-        {/* ── RIGHT: Results ─────────────────────────────────────────── */}
+        {/* RIGHT: Results */}
         <div className="lg:col-span-3 space-y-4">
 
           {/* Evaluating skeleton */}
@@ -343,7 +343,7 @@ export default function PlanPage() {
           {/* Result */}
           {!evaluating && result && (
             <>
-              {/* Regional-fallback notice — shown whenever the recommendation
+              {/* Regional-fallback notice, shown whenever the recommendation
                   came from the real regional forecast (Open-Meteo), not the
                   Conduit ground station: either because the station's own
                   9h-ahead forecast can't reach this far (tomorrow), or

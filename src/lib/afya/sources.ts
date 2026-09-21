@@ -1,66 +1,68 @@
-// ─── Data source adapters ────────────────────────────────────────────────────
-// Preference order: real-time Conduit API → recorded Conduit CSV archive →
-// seeded synthetic generator (last resort only). All three paths produce
-// DemoObservation[] so the pipeline is source-agnostic.
-// Live mode activates automatically when CONDUIT_API_KEY + CONDUIT_EMAIL are set.
+// Station observations, in order of preference: the live Conduit feeds, the
+// recorded Conduit archive, and a synthetic series only when neither covers
+// the time asked for. Every path returns the same 15-minute grid, so the
+// pipeline does not care which one it got.
+//
+// There are two live feeds for the same station (Conduit@Empathy1, CHORDS
+// instrument 61): JHUB's Conduit API, which needs a key and has at times run
+// most of a day behind, and the public CHORDS portal the station reports to.
+// Both are asked and the one with the more recent observation is used.
 
 import { generateDemoSeries, type DemoObservation } from "./demo-observations";
 import { getCsvSeries } from "./csv-source";
+import { shadeWbgt, stullWetBulb } from "./constants";
 
 export interface SeriesBundle {
   series: DemoObservation[];
   source: "live" | "csv" | "demo";
+  // Which live feed the series came from, when it is live.
+  feed: "jhub" | "chords" | null;
   anchorIso: string;
-  // true when this series should be judged for freshness against the real
-  // wall clock (live, or the CSV archive's latest available row standing in
-  // for "now"); false for a deliberate historical replay or synthetic demo,
-  // where freshness is judged relative to the anchor itself.
+  // True when freshness should be judged against the real clock (live, or the
+  // archive's latest row standing in for now); false for a replay or the
+  // synthetic series, where it is judged against the anchor itself.
   realtime: boolean;
+  // Repeated timestamps removed at ingest, reported rather than dropped quietly.
+  duplicatesRemoved: number;
 }
 
-// Audited against 465 days of the real dataset: observations land roughly
-// every 15 minutes (mean 96.9/day, median 95/day), though not always on an
-// exact :00/:15/:30/:45 boundary (cleanAndGrid's 15-min bucketing handles
-// that). That's the station's recording interval, not a guarantee about how
-// often the public API's own content changes — so this cache is checked on
-// that same ~15-min cadence, but staleness itself is always judged from the
-// latest observation's own timestamp (see evaluateQuality), never from how
-// recently we last polled.
+// The station records about every 15 minutes, so the live caches are checked
+// on the same cadence. Staleness is always judged from the latest observation's
+// own timestamp (see evaluateQuality), never from when we last polled.
 const LIVE_TTL_MS = 15 * 60 * 1000;
 const LIVE_MAX_STALE_MS = 6 * 3600 * 1000;
+const LIVE_LOOKBACK_MS = 30 * 3600 * 1000;
 
-let liveBundle: (SeriesBundle & { fetchedAt: number }) | null = null;
-let inflight: Promise<void> | null = null;
+type LiveBundle = SeriesBundle & { fetchedAt: number };
+const liveCache: Record<"jhub" | "chords", LiveBundle | null> = { jhub: null, chords: null };
+const inflight: Record<"jhub" | "chords", Promise<void> | null> = { jhub: null, chords: null };
 
 function hasConduitCreds(): boolean {
   return !!(process.env.CONDUIT_API_KEY && process.env.CONDUIT_EMAIL);
 }
 
 /**
- * Get the observation series for the pipeline.
- * - If Conduit credentials exist and the anchor is near "now", prefer live data.
- *   On a cold cache this `await`s the real fetch directly — a fire-and-forget
- *   background refresh doesn't reliably finish on Vercel, where a function
- *   can be frozen the instant its response is sent (same reasoning as the
- *   ERA5/Sentinel adapters in sources-external.ts). Once a live bundle
- *   exists, a stale-but-still-usable one is served immediately with a
- *   background refresh kicked off for next time — that optimization is safe
- *   because we already have real, recent data to fall back on either way.
- * - Otherwise, prefer the recorded Conduit CSV archive (data/*.csv) — real
- *   station data beats synthetic data even when it isn't real-time.
- * - Only synthesize a demo series when neither real source covers the anchor.
+ * The observation series for the pipeline. Near "now" the freshest live feed
+ * wins; otherwise the recorded archive; the synthetic series only when neither
+ * real source covers the anchor.
+ *
+ * On a cold cache the live fetches are awaited: Vercel can freeze a function
+ * as soon as its response is sent, so a fire-and-forget refresh may never
+ * finish. Once a cached bundle exists, a stale one is served while a refresh
+ * runs for the next request.
  */
 export async function getObservationSeries(anchorIso: string, lookbackHours = 30): Promise<SeriesBundle> {
   const anchorMs = new Date(anchorIso).getTime();
   const nearNow = Date.now() - anchorMs < 3 * 3600 * 1000;
 
-  if (hasConduitCreds() && nearNow) {
-    if (!liveBundle) {
-      await refreshLive();
-    } else if (Date.now() - liveBundle.fetchedAt > LIVE_TTL_MS) {
-      void refreshLive();
-    }
-    if (liveBundle && Date.now() - liveBundle.fetchedAt < LIVE_MAX_STALE_MS) return liveBundle;
+  if (nearNow) {
+    const feeds: ("jhub" | "chords")[] = hasConduitCreds() ? ["jhub", "chords"] : ["chords"];
+    await Promise.all(feeds.map((feed) => ensureFresh(feed)));
+    const usable = feeds
+      .map((feed) => liveCache[feed])
+      .filter((b): b is LiveBundle => !!b && Date.now() - b.fetchedAt < LIVE_MAX_STALE_MS)
+      .sort((a, b) => Date.parse(b.anchorIso) - Date.parse(a.anchorIso));
+    if (usable.length) return usable[0];
   }
 
   const csv = getCsvSeries(anchorIso, lookbackHours);
@@ -68,24 +70,72 @@ export async function getObservationSeries(anchorIso: string, lookbackHours = 30
     return {
       series: csv.series,
       source: "csv",
+      feed: null,
       anchorIso: csv.series[csv.series.length - 1].ts,
       realtime: csv.realtime,
+      duplicatesRemoved: 0,
     };
   }
 
   return {
     series: generateDemoSeries(anchorIso, lookbackHours),
     source: "demo",
+    feed: null,
     anchorIso,
     realtime: false,
+    duplicatesRemoved: 0,
   };
 }
 
-// ─── Live Conduit ingestion ──────────────────────────────────────────────────
+async function ensureFresh(feed: "jhub" | "chords"): Promise<void> {
+  const cached = liveCache[feed];
+  if (!cached) {
+    await refresh(feed);
+  } else if (Date.now() - cached.fetchedAt > LIVE_TTL_MS) {
+    void refresh(feed);
+  }
+}
 
-/** Raw POST to the Conduit API for an arbitrary date range — shared by the
- * "current" live refresh below and the Climate History dashboard's ability
- * to fill the gap between the CSV archive's last row and today. */
+async function refresh(feed: "jhub" | "chords"): Promise<void> {
+  if (inflight[feed]) {
+    await inflight[feed]!.catch(() => {});
+    return;
+  }
+  inflight[feed] = (async () => {
+    const now = Date.now();
+    const rows = feed === "jhub"
+      // todate is exclusive of the current day, so ask for tomorrow to include today.
+      ? await fetchConduitRaw(new Date(now - 3 * 86400_000), new Date(now + 86400_000))
+      : await fetchChordsRaw(new Date(now - LIVE_LOOKBACK_MS), new Date(now));
+
+    const { series, duplicates } = cleanAndGridWithStats(rows);
+    if (series.length < 20) throw new Error(`too few valid observations from ${feed}`);
+
+    liveCache[feed] = {
+      series,
+      source: "live",
+      feed,
+      anchorIso: series[series.length - 1].ts,
+      realtime: true,
+      duplicatesRemoved: duplicates,
+      fetchedAt: Date.now(),
+    };
+  })();
+
+  try {
+    await inflight[feed];
+  } catch (err) {
+    console.warn(`[afya] ${feed} live fetch failed:`, (err as Error).message);
+  } finally {
+    inflight[feed] = null;
+  }
+}
+
+// JHUB's Conduit API
+
+/** Raw POST to the Conduit API for a date range. Shared by the live refresh
+ * and the Climate History dashboard, which fills the gap between the archive's
+ * last row and today. */
 async function fetchConduitRaw(from: Date, to: Date): Promise<Record<string, unknown>[]> {
   const url = process.env.CONDUIT_URL ?? "https://conduit.jhubafrica.com/data.php";
   const body = new URLSearchParams({
@@ -110,23 +160,15 @@ async function fetchConduitRaw(from: Date, to: Date): Promise<Record<string, unk
   return json.data;
 }
 
-// The live API itself rejects any single request spanning more than a
-// month ("time range is greater than one month") — confirmed directly
-// against the real endpoint. 28 days keeps every chunk safely under that
-// regardless of which calendar months it crosses.
+// The API refuses any request spanning more than a month, so wide ranges go
+// in 28-day pieces, which stay under that whichever months they cross.
 const CONDUIT_CHUNK_DAYS = 28;
 const CONDUIT_CHUNK_CONCURRENCY = 3;
 
 /**
- * Real Conduit observations for an arbitrary [from, to] range, for the
- * Climate History dashboard — a one-off fetch (not the cached "live now"
- * bundle), chunked transparently since the live API won't serve more than
- * ~a month at a time. This is what keeps that dashboard genuinely live
- * indefinitely: it doesn't matter how far the static CSV archive has been
- * left behind by the time someone opens it — the real gap is always
- * fetched from the API itself, however wide it's grown.
- * Returns [] on any failure (no synthetic fallback here; the caller
- * already has the CSV archive to fall back on for the same range).
+ * Conduit observations for an arbitrary range, for the Climate History
+ * dashboard. Fetched in pieces because of the API's one-month limit. Returns
+ * [] on failure; the caller already has the archive for the same range.
  */
 export async function getConduitRange(fromIso: string, toIso: string): Promise<DemoObservation[]> {
   if (!hasConduitCreds()) return [];
@@ -155,41 +197,68 @@ export async function getConduitRange(fromIso: string, toIso: string): Promise<D
   return cleanAndGrid(allRows);
 }
 
-async function refreshLive(): Promise<void> {
-  if (inflight) {
-    await inflight.catch(() => {});
-    return;
+// The CHORDS portal's public live feed
+
+const CHORDS_URL = process.env.CHORDS_LIVE_URL ?? "https://3d-fewsnet.icdp.ucar.edu/instruments/61/live";
+
+// The live endpoint averages whatever window it is given into about a dozen
+// points, so three-hour windows come back as 15-minute means.
+const CHORDS_WINDOW_MS = 3 * 3600 * 1000;
+
+// CHORDS short names for the columns the Conduit API calls by longer names.
+const CHORDS_FIELDS: Record<string, string> = {
+  rg: "rg1", rg2: "rg2", rgt: "rg1tt", rgt2: "rg2tt",
+  bt1: "temp_bmx", bp1: "press_bmx", mt1: "temp_mcp",
+  st1: "temp_sht", sh1: "humidity_sht",
+  sv1: "si1145_vis", si1: "si1145_ir", su1: "si1145_uv",
+  ws: "wind_spd", wd: "wind_dir", wg: "wind_gust",
+  hi: "heat_idx", wbt: "wet_bulb_temp", wbgt: "wet_bulb_globe_temp",
+};
+
+// Rain arrives as a mean of one-minute tips over each 15-minute point; times
+// 15 it is the rain that fell in that quarter hour.
+const CHORDS_RAIN_FIELDS = new Set(["rg", "rg2"]);
+
+async function fetchChordsWindow(start: number, end: number): Promise<Record<string, unknown>[]> {
+  const res = await fetch(`${CHORDS_URL}?start=${start}&end=${end}`, {
+    headers: { "User-Agent": "AfyaMazingira/1.0" },
+    signal: AbortSignal.timeout(8_000),
+  });
+  if (!res.ok) throw new Error(`CHORDS HTTP ${res.status}`);
+  const json = (await res.json()) as { multivariable_points?: Record<string, [number, number][]> };
+  const points = json.multivariable_points ?? {};
+
+  const byTime = new Map<number, Record<string, unknown>>();
+  for (const [short, series] of Object.entries(points)) {
+    const field = CHORDS_FIELDS[short];
+    if (!field || !Array.isArray(series)) continue;
+    for (const [ms, value] of series) {
+      const row = byTime.get(ms) ?? { ts: new Date(ms).toISOString() };
+      row[field] = CHORDS_RAIN_FIELDS.has(short) ? value * 15 : value;
+      byTime.set(ms, row);
+    }
   }
-  inflight = (async () => {
-    // todate is effectively exclusive of the current day — request tomorrow
-    // so today's observations are included whenever the station uploads them.
-    const to = new Date(Date.now() + 86400_000);
-    const from = new Date(Date.now() - 3 * 86400_000);
-    const data = await fetchConduitRaw(from, to);
-
-    const grid = cleanAndGrid(data);
-    if (grid.length < 20) throw new Error("Insufficient valid Conduit observations");
-
-    liveBundle = {
-      series: grid,
-      source: "live",
-      anchorIso: grid[grid.length - 1].ts,
-      realtime: true,
-      fetchedAt: Date.now(),
-    };
-  })();
-
-  try {
-    await inflight;
-  } catch (err) {
-    // Live fetch failed — stay on demo / previous cache (graceful degradation, spec §40)
-    console.warn("[afya] Conduit live fetch failed, staying on demo:", (err as Error).message);
-  } finally {
-    inflight = null;
-  }
+  return [...byTime.values()];
 }
 
-// ─── Cleaning + 15-min normalization (spec §16–17) ───────────────────────────
+async function fetchChordsRaw(from: Date, to: Date): Promise<Record<string, unknown>[]> {
+  const windows: [number, number][] = [];
+  for (let start = from.getTime(); start < to.getTime(); start += CHORDS_WINDOW_MS) {
+    windows.push([start, Math.min(start + CHORDS_WINDOW_MS, to.getTime())]);
+  }
+  const results = await Promise.allSettled(windows.map(([s, e]) => fetchChordsWindow(s, e)));
+  // Neighbouring windows share their edge point; that is our overlap, not a
+  // repeat from the station, so it is merged here rather than counted later.
+  const byTs = new Map<string, Record<string, unknown>>();
+  for (const r of results) {
+    if (r.status !== "fulfilled") continue;
+    for (const row of r.value) byTs.set(String(row.ts), { ...byTs.get(String(row.ts)), ...row });
+  }
+  if (!byTs.size) throw new Error("CHORDS returned no observations");
+  return [...byTs.values()];
+}
+
+// Cleaning and the 15-minute grid
 
 const NUMERIC_FIELDS = [
   "rg1", "rg2", "rg1tt", "rg2tt", "temp_bmx", "press_bmx", "temp_mcp",
@@ -203,96 +272,149 @@ const CONTINUOUS = [
   "heat_idx", "wet_bulb_temp", "wet_bulb_globe_temp",
 ] as const;
 
+// Gaps up to this many slots (30 minutes) are interpolated. Longer ones carry
+// the last value forward so the engines keep running, and every slot that does
+// is listed in `imputed` so data quality can see it.
+const INTERPOLATE_SLOTS = 2;
+
+// Stand-ins used only before a field has ever been observed in the series.
+// Every slot that uses one is marked imputed.
+const PLACEHOLDER: Record<string, number> = {
+  temp_sht: 20, humidity_sht: 60, press_bmx: 848, wind_spd: 1, wind_dir: 120,
+  wet_bulb_temp: 16,
+};
+
 export function cleanAndGrid(rows: Record<string, unknown>[]): DemoObservation[] {
-  // 1. Parse timestamps, keep last per ts, sort ascending
+  return cleanAndGridWithStats(rows).series;
+}
+
+/** The 15-minute grid, plus how many repeated timestamps were removed. */
+export function cleanAndGridWithStats(rows: Record<string, unknown>[]): {
+  series: DemoObservation[];
+  duplicates: number;
+} {
+  // 1. Parse timestamps; a repeated timestamp keeps its last row and is counted.
   const byTs = new Map<number, Record<string, unknown>>();
+  let duplicates = 0;
   for (const r of rows) {
     const t = Date.parse(String(r.ts ?? ""));
     if (!Number.isFinite(t)) continue;
+    if (byTs.has(t)) duplicates++;
     byTs.set(t, r);
   }
   const sorted = [...byTs.entries()].sort((a, b) => a[0] - b[0]);
-  if (sorted.length < 2) return [];
+  if (sorted.length < 2) return { series: [], duplicates };
 
-  // 2. Numeric coercion + -999.9 sentinel removal; wind_gust_dir never read (spec §15.2)
-  const cleaned: { ts: number; rec: Record<string, number | null> }[] = sorted.map(([t, r]) => {
+  // 2. Numbers only; -999.9 is the station's missing-value code. wind_gust_dir
+  //    is never read: the exports copy the gust speed into it.
+  const cleaned = sorted.map(([t, r]) => {
     const rec: Record<string, number | null> = {};
     for (const f of NUMERIC_FIELDS) {
-      let v: number | null = Number(r[f]);
-      if (!Number.isFinite(v) || v === -999.9) v = null;
+      const raw = r[f];
+      let v: number | null = raw === null || raw === undefined || raw === "" ? null : Number(raw);
+      if (v !== null && (!Number.isFinite(v) || v === -999.9)) v = null;
       rec[f] = v;
     }
     return { ts: t, rec };
   });
 
-  // 3. Bucket onto an exact 15-min grid (mean per bucket)
+  // 3. Mean of each field per 15-minute slot, over the rows that have it.
   const bucket0 = Math.floor(cleaned[0].ts / 900_000);
   const bucketN = Math.floor(cleaned[cleaned.length - 1].ts / 900_000);
   const slots = bucketN - bucket0 + 1;
-  const grid: Record<string, number | null>[] = Array.from({ length: slots }, () => {
+  const sums: Record<string, number | null>[] = Array.from({ length: slots }, () => {
     const rec: Record<string, number | null> = {};
     for (const f of NUMERIC_FIELDS) rec[f] = null;
     return rec;
   });
-  const counts = new Array(slots).fill(0);
+  const counts: Record<string, number>[] = Array.from({ length: slots }, () => ({}));
   for (const { ts, rec } of cleaned) {
     const b = Math.floor(ts / 900_000) - bucket0;
-    counts[b] += 1;
     for (const f of NUMERIC_FIELDS) {
       const v = rec[f];
       if (v === null) continue;
-      grid[b][f] = (grid[b][f] ?? 0) + v; // accumulate; divide by count below
+      sums[b][f] = (sums[b][f] ?? 0) + v;
+      counts[b][f] = (counts[b][f] ?? 0) + 1;
     }
   }
-  for (let b = 0; b < slots; b++) {
-    if (!counts[b]) continue;
-    for (const f of NUMERIC_FIELDS) if (grid[b][f] !== null) grid[b][f] = (grid[b][f] as number) / counts[b];
-  }
+  const grid = sums.map((rec, b) => {
+    const out: Record<string, number | null> = {};
+    for (const f of NUMERIC_FIELDS) out[f] = rec[f] === null ? null : (rec[f] as number) / counts[b][f];
+    return out;
+  });
 
-  // 4. Limited interpolation (limit 2 both directions) for continuous fields ONLY.
-  //    Rain channels (rg1/rg2) are NEVER interpolated (spec §17).
-  for (const f of CONTINUOUS) {
-    interpolateLimited(grid as { [k: string]: number | null }[], f, 2);
-  }
+  // 4. Short gaps in continuous fields are interpolated. Rain never is.
+  const interpolated: Set<string>[] = Array.from({ length: slots }, () => new Set());
+  for (const f of CONTINUOUS) interpolateLimited(grid, f, INTERPOLATE_SLOTS, interpolated);
 
-  // 5. Assemble observations; remaining nulls fall back to nearest known value
+  // 5. Assemble. Anything still missing is carried forward (or a placeholder
+  //    before the first observation) and listed in `imputed`.
   const out: DemoObservation[] = [];
-  let lastKnown: Record<string, number> = {};
+  const lastKnown: Record<string, number> = {};
   for (let b = 0; b < slots; b++) {
     const rec = grid[b];
-    const filled: Record<string, number> = { ...lastKnown };
-    for (const f of NUMERIC_FIELDS) {
+    const imputed: string[] = [...interpolated[b]];
+    const value = (f: string): number => {
       const v = rec[f];
-      if (typeof v === "number" && Number.isFinite(v)) filled[f] = v;
-    }
-    lastKnown = filled;
-    const ts = new Date((bucket0 + b) * 900_000).toISOString();
+      if (typeof v === "number" && Number.isFinite(v)) {
+        lastKnown[f] = v;
+        return v;
+      }
+      imputed.push(f);
+      return lastKnown[f] ?? PLACEHOLDER[f] ?? 0;
+    };
+    // Missing rain is not the same as no rain, so it is marked too.
+    const rain = (f: "rg1" | "rg2"): number => {
+      const v = rec[f];
+      if (typeof v === "number") return v;
+      imputed.push(f);
+      return 0;
+    };
+
+    const temp_sht = value("temp_sht");
+    const humidity_sht = clamp(value("humidity_sht"), 0, 100);
+    const measuredWetBulb = rec.wet_bulb_temp;
+    const wet_bulb_temp = typeof measuredWetBulb === "number"
+      ? value("wet_bulb_temp")
+      : stullWetBulb(temp_sht, humidity_sht);
+    const wind_spd = Math.max(0, value("wind_spd"));
+    const firmware = rec.wet_bulb_globe_temp;
+
     out.push({
-      ts,
-      rg1: rec.rg1 ?? 0,                     // rain present only when observed
-      rg2: rec.rg2 ?? 0,
-      rg1tt: filled.rg1tt ?? rec.rg1 ?? 0,
-      rg2tt: filled.rg2tt ?? rec.rg2 ?? 0,
-      temp_bmx: filled.temp_bmx ?? filled.temp_sht ?? 20,
-      press_bmx: filled.press_bmx ?? 848,
-      temp_mcp: filled.temp_mcp ?? filled.temp_sht ?? 20,
-      temp_sht: filled.temp_sht ?? 20,
-      humidity_sht: clamp(filled.humidity_sht ?? 60, 0, 100),
-      si1145_vis: Math.max(0, filled.si1145_vis ?? 0),
-      si1145_ir: Math.max(0, filled.si1145_ir ?? 0),
-      si1145_uv: 0,                           // low-trust channel (spec §15.3)
-      wind_spd: Math.max(0, filled.wind_spd ?? 1),
-      wind_dir: filled.wind_dir ?? 120,
-      wind_gust: Math.max(filled.wind_spd ?? 1, filled.wind_gust ?? 1.5),
-      heat_idx: filled.heat_idx ?? (filled.temp_sht ?? 20) + 0.4,
-      wet_bulb_temp: filled.wet_bulb_temp ?? 16,
-      wet_bulb_globe_temp: filled.wet_bulb_globe_temp ?? 17,
+      ts: new Date((bucket0 + b) * 900_000).toISOString(),
+      rg1: rain("rg1"),
+      rg2: rain("rg2"),
+      rg1tt: rec.rg1tt ?? lastKnown.rg1tt ?? 0,
+      rg2tt: rec.rg2tt ?? lastKnown.rg2tt ?? 0,
+      temp_bmx: rec.temp_bmx ?? temp_sht,
+      press_bmx: value("press_bmx"),
+      temp_mcp: rec.temp_mcp ?? temp_sht,
+      temp_sht,
+      humidity_sht,
+      si1145_vis: Math.max(0, value("si1145_vis")),
+      si1145_ir: Math.max(0, value("si1145_ir")),
+      si1145_uv: 0, // the UV channel is not trusted
+      wind_spd,
+      wind_dir: value("wind_dir"),
+      wind_gust: Math.max(wind_spd, rec.wind_gust ?? wind_spd),
+      heat_idx: rec.heat_idx ?? temp_sht,
+      wet_bulb_temp,
+      wet_bulb_globe_temp: shadeWbgt(temp_sht, wet_bulb_temp),
+      firmware_wbgt: typeof firmware === "number" ? firmware : null,
+      imputed: [...new Set(imputed)],
     });
+    if (rec.rg1tt !== null && rec.rg1tt !== undefined) lastKnown.rg1tt = rec.rg1tt;
+    if (rec.rg2tt !== null && rec.rg2tt !== undefined) lastKnown.rg2tt = rec.rg2tt;
   }
-  return out;
+  return { series: out, duplicates };
 }
 
-function interpolateLimited(grid: { [k: string]: number | null }[], field: string, limit: number) {
+function interpolateLimited(
+  grid: Record<string, number | null>[],
+  field: string,
+  limit: number,
+  marks: Set<string>[],
+) {
   const n = grid.length;
   let i = 0;
   while (i < n) {
@@ -300,11 +422,12 @@ function interpolateLimited(grid: { [k: string]: number | null }[], field: strin
       let j = i;
       while (j < n && grid[j][field] === null) j++;
       const gap = j - i;
-      const prev = i > 0 ? (grid[i - 1][field] as number | null) : null;
-      const next = j < n ? (grid[j][field] as number | null) : null;
+      const prev = i > 0 ? grid[i - 1][field] : null;
+      const next = j < n ? grid[j][field] : null;
       if (gap <= limit && prev !== null && next !== null) {
         for (let k = 0; k < gap; k++) {
           grid[i + k][field] = prev + ((next - prev) * (k + 1)) / (gap + 1);
+          marks[i + k].add(field);
         }
       }
       i = j;

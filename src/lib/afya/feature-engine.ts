@@ -1,6 +1,6 @@
 import type { DemoObservation } from "./demo-observations";
 
-// ─── Feature vector for the forecast / state engines ─────────────────────────
+// Feature vector for the forecast and state engines.
 export interface FeatureVector {
   temp_sht: number;
   humidity_sht: number;
@@ -32,6 +32,31 @@ export interface FeatureVector {
   doy_sin: number;
   doy_cos: number;
 }
+
+/** Inputs to the WBGT forecast, in the order its coefficients are stored. */
+export const FORECAST_FEATURES: (keyof FeatureVector)[] = [
+  "temp_sht", "humidity_sht", "press_bmx", "wind_spd", "wind_gust",
+  "si1145_vis", "si1145_ir", "wet_bulb_temp", "wet_bulb_globe_temp",
+  "temp_lag_1h", "humidity_lag_1h", "wbgt_lag_1h",
+  "temp_delta_1h", "humidity_delta_1h", "pressure_delta_1h", "radiation_delta_1h",
+  "temp_mean_1h", "temp_std_1h", "wbgt_mean_1h", "wbgt_std_1h",
+  "humidity_mean_1h", "hour_sin", "hour_cos", "doy_sin", "doy_cos",
+];
+
+/** Inputs to the environmental state clustering. */
+export const STATE_FEATURES: (keyof FeatureVector)[] = [
+  "temp_sht", "humidity_sht", "si1145_vis", "si1145_ir",
+  "wind_spd", "wet_bulb_globe_temp", "wet_bulb_temp",
+  "temp_delta_1h", "humidity_delta_1h", "radiation_delta_1h",
+  "temp_mean_1h", "wbgt_mean_1h", "temp_std_1h",
+  "hour_sin", "hour_cos",
+];
+
+/** Station fields the features are built from. A slot where any of them was
+ * filled in rather than measured is left out when the models are fitted. */
+export const FEATURE_SOURCE_FIELDS = [
+  "temp_sht", "humidity_sht", "press_bmx", "wind_spd", "si1145_vis", "si1145_ir", "wet_bulb_temp",
+];
 
 /** Compute a full feature vector from an observation series ending at `atIndex`. */
 export function computeFeatures(

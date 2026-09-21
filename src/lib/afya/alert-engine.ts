@@ -1,7 +1,7 @@
-// ─── Threshold alert evaluation ────────────────────────────────────────────────
+// Threshold alert evaluation
 // Pure decision logic shared by the daily cron (/api/cron/check-alerts, all
 // users) and the manual test-send endpoint (/api/notifications/test, one
-// user) — so "what counts as a trigger" is defined in exactly one place.
+// user), so "what counts as a trigger" is defined in exactly one place.
 
 import type { NotificationRule, ActivityPlan } from "@/db/schema";
 import type { SituationResult, Lang, BestTimeResult } from "./types";
@@ -18,7 +18,7 @@ export interface AlertContent {
 
 /** A rule re-fires at most once per this window, so a still-true condition
  * (e.g. quality staying POOR for days) doesn't re-email every cron run. */
-export const ALERT_COOLDOWN_MS = 20 * 3600 * 1000; // ~20h — just under the daily cron cadence
+export const ALERT_COOLDOWN_MS = 20 * 3600 * 1000; // ~20h, just under the daily cron cadence
 
 export function coolingDown(rule: Pick<NotificationRule, "last_triggered_at">): boolean {
   if (!rule.last_triggered_at) return false;
@@ -103,7 +103,7 @@ export function evaluateRule(rule: NotificationRule, situation: SituationResult)
 /**
  * Checks whether a saved plan's window is still safe against the *current*
  * forecast. Only meaningful for plans whose window is still ahead of us
- * (today/near-term) — a plan for a past date has nothing to warn about.
+ * (today/near-term), a plan for a past date has nothing to warn about.
  * Uses the plan's own stored activity/duration/window with fresh forecast
  * data, so this is a real recomputation, not a guess.
  */
@@ -134,12 +134,12 @@ export function checkPlanImpact(plan: ActivityPlan, situation: SituationResult):
     subject_en: `Your plan "${plan.name}" may need to move`,
     subject_sw: `Mpango wako "${plan.name}" huenda ukahitaji kubadilishwa`,
     lines_en: [
-      `Conditions have changed since you saved "${plan.name}" — the window you saved (${savedWin}) now looks like ${nowRisk.replace("_", " ")} thermal exposure.`,
-      freshWin ? `A better window right now: <strong>${freshWin}</strong>.` : "AFYA MAZINGIRA couldn't find a clearly better window in your available range — check the Plan page for the latest picture.",
+      `Conditions have changed since you saved "${plan.name}", the window you saved (${savedWin}) now looks like ${nowRisk.replace("_", " ")} thermal exposure.`,
+      freshWin ? `A better window right now: <strong>${freshWin}</strong>.` : "AFYA MAZINGIRA couldn't find a clearly better window in your available range, check the Plan page for the latest picture.",
     ],
     lines_sw: [
-      `Hali zimebadilika tangu uhifadhi "${plan.name}" — dirisha ulilohifadhi (${savedWin}) sasa linaonekana na kupatwa na joto ${nowRisk === "HIGH" ? "JUU" : "JUU SANA"}.`,
-      freshWin ? `Dirisha bora zaidi sasa hivi: <strong>${freshWin}</strong>.` : "AFYA MAZINGIRA haikupata dirisha bora zaidi wazi katika muda wako uliopatikana — angalia ukurasa wa Mpango kwa taswira mpya.",
+      `Hali zimebadilika tangu uhifadhi "${plan.name}", dirisha ulilohifadhi (${savedWin}) sasa linaonekana na kupatwa na joto ${nowRisk === "HIGH" ? "JUU" : "JUU SANA"}.`,
+      freshWin ? `Dirisha bora zaidi sasa hivi: <strong>${freshWin}</strong>.` : "AFYA MAZINGIRA haikupata dirisha bora zaidi wazi katika muda wako uliopatikana, angalia ukurasa wa Mpango kwa taswira mpya.",
     ],
   };
 }

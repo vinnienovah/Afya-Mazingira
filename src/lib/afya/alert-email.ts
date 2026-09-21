@@ -1,6 +1,6 @@
-// ─── Threshold/plan alert email delivery (Resend) ─────────────────────────────
+// Threshold/plan alert email delivery (Resend)
 // Shares the same graceful-degradation and visual style as
-// lib/auth/verification.ts — this is the second (and only other) place in
+// lib/auth/verification.ts, this is the second (and only other) place in
 // the app that sends email.
 
 import type { Lang } from "@/lib/afya/types";
