@@ -330,9 +330,10 @@ export async function getRegionalOutlook(stationOverride?: StationOverride): Pro
  * proximity-to-drainage data this project doesn't have, and faking a
  * per-location hazard zone from data that can't actually support one would
  * violate the same honesty principle applied everywhere else in the app.
- * Thresholds: soil moisture ≥0.30 m³/m³ is close to field capacity for the
- * loam assumption used elsewhere (farm-engine.ts), already-saturated ground
- * sheds new rain as runoff rather than absorbing it.
+ * Thresholds: soil moisture near 0.30 m³/m³ is close to field capacity for
+ * medium-textured soils, and already-saturated ground sheds new rain as
+ * runoff rather than absorbing it. County soils vary, so the category is
+ * indicative.
  */
 export function computeFloodRisk(rain24hMm: number, soilMoisture: number): "LOW" | "ELEVATED" | "HIGH" {
   if (rain24hMm >= 30 && soilMoisture >= 0.28) return "HIGH";

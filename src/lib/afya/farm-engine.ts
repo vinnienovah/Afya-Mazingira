@@ -454,7 +454,8 @@ export function evaluateCropStress(
   else reasons.push("farm_reason_no_heat_stress");
 
   if (sensitive && level !== "NONE") reasons.push("farm_reason_flowering_sensitive");
-  if (situation.era5.era5_soil_moisture < 0.15 && level !== "NONE") {
+  // Below the clay wilting point the crop cannot draw water to cool itself.
+  if (situation.era5.era5_soil_moisture < CLAY_WILTING_POINT.low && level !== "NONE") {
     reasons.push("farm_reason_dry_soil_compounds");
   }
 
