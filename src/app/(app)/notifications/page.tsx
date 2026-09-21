@@ -394,20 +394,6 @@ export default function NotificationsPage() {
           })}
         </div>
       )}
-
-      {/* How delivery actually works — set expectations honestly */}
-      <div className="rounded-xl border border-afya-border bg-afya-canvas/60 px-4 py-3 space-y-1.5">
-        <p className="text-xs text-afya-muted">
-          {lang === "sw"
-            ? "Sheria zako zinaangaliwa mara moja kwa siku (karibu 08:00 EAT) dhidi ya hali halisi, na barua pepe hutumwa kwa anwani ya akaunti yako ikiwa sheria itachochewa. Hii si arifa za wakati halisi — mpango wa bure wa Vercel unaruhusu kazi ya kupanga mara moja kwa siku tu."
-            : "Your rules are checked once daily (~08:00 EAT) against real conditions, and an email is sent to your account address if a rule is triggered. This is a daily check, not real-time — Vercel's free (Hobby) plan only allows a scheduled job to run once per day."}
-        </p>
-        <p className="text-xs text-afya-muted">
-          {lang === "sw"
-            ? "Onyo: Kwa utumaji wa push wa uzalishaji, weka mazingira ya VAPID_PUBLIC_KEY na VAPID_PRIVATE_KEY."
-            : "Note: For production push delivery, configure VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY environment variables."}
-        </p>
-      </div>
     </div>
   );
 }
