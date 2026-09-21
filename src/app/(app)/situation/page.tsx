@@ -147,7 +147,7 @@ export default function SituationPage() {
             {/* Exposure */}
             <div className="rounded-xl bg-white/8 border border-white/10 p-3">
               <div className="text-[11px] text-white/50 mb-1">{t("thermal_exposure")}</div>
-              <RiskChip level={risk.thermal} size="sm" />
+              <RiskChip level={risk.thermal} size="sm" onDark />
               <div className="text-xs text-white/60 mt-1.5">{current.wbgt_c.toFixed(1)}°C WBGT</div>
             </div>
             {/* Expected peak */}
@@ -202,8 +202,8 @@ export default function SituationPage() {
                     ? `Kwa shughuli za nje, muda bora zaidi ni ${fmtWindow(best_time.recommended.start, best_time.recommended.end)}.`
                     : `For a 60-minute outdoor activity, the best available window is ${fmtWindow(best_time.recommended.start, best_time.recommended.end)}.`
                   : lang === "sw"
-                  ? "Hali ya data ni nzuri kwa shughuli nyingi za nje."
-                  : "Current conditions are favourable for most outdoor activities."}
+                  ? "Hakuna muda wa mchana uliobaki katika utabiri wa saa 9. Angalia tena baadaye usiku kwa asubuhi ya kesho."
+                  : "No daylight window is left in the 9-hour forecast. Check again later tonight for tomorrow morning."}
               </p>
               {best_time && (
                 <div

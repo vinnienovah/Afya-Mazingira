@@ -133,6 +133,9 @@
    "test_mae": 0.222,
    "persistence_mae": 0.254,
    "coverage80": 0.839,
+   "band_same_pct": 95.3,
+   "band_lower_pct": 2.6,
+   "band_higher_pct": 2.1,
    "n_train": 27684,
    "n_calibration": 5475,
    "n_test": 8982
@@ -172,6 +175,9 @@
    "test_mae": 0.315,
    "persistence_mae": 0.392,
    "coverage80": 0.828,
+   "band_same_pct": 93.8,
+   "band_lower_pct": 3.4,
+   "band_higher_pct": 2.8,
    "n_train": 27680,
    "n_calibration": 5475,
    "n_test": 8980
@@ -211,6 +217,9 @@
    "test_mae": 0.39,
    "persistence_mae": 0.518,
    "coverage80": 0.816,
+   "band_same_pct": 92.4,
+   "band_lower_pct": 4.1,
+   "band_higher_pct": 3.5,
    "n_train": 27679,
    "n_calibration": 5475,
    "n_test": 8978
@@ -250,6 +259,9 @@
    "test_mae": 0.452,
    "persistence_mae": 0.642,
    "coverage80": 0.813,
+   "band_same_pct": 91.8,
+   "band_lower_pct": 4.3,
+   "band_higher_pct": 3.9,
    "n_train": 27678,
    "n_calibration": 5475,
    "n_test": 8976
@@ -289,6 +301,9 @@
    "test_mae": 0.511,
    "persistence_mae": 0.767,
    "coverage80": 0.808,
+   "band_same_pct": 90.7,
+   "band_lower_pct": 4.8,
+   "band_higher_pct": 4.5,
    "n_train": 27677,
    "n_calibration": 5475,
    "n_test": 8974
@@ -328,6 +343,9 @@
    "test_mae": 0.567,
    "persistence_mae": 0.894,
    "coverage80": 0.81,
+   "band_same_pct": 90,
+   "band_lower_pct": 5,
+   "band_higher_pct": 4.9,
    "n_train": 27675,
    "n_calibration": 5475,
    "n_test": 8973
@@ -367,6 +385,9 @@
    "test_mae": 0.616,
    "persistence_mae": 1.02,
    "coverage80": 0.811,
+   "band_same_pct": 89.7,
+   "band_lower_pct": 5.1,
+   "band_higher_pct": 5.2,
    "n_train": 27675,
    "n_calibration": 5475,
    "n_test": 8972
@@ -406,6 +427,9 @@
    "test_mae": 0.662,
    "persistence_mae": 1.147,
    "coverage80": 0.804,
+   "band_same_pct": 88.7,
+   "band_lower_pct": 5.4,
+   "band_higher_pct": 6,
    "n_train": 27674,
    "n_calibration": 5475,
    "n_test": 8971
@@ -445,6 +469,9 @@
    "test_mae": 0.701,
    "persistence_mae": 1.271,
    "coverage80": 0.81,
+   "band_same_pct": 88.3,
+   "band_lower_pct": 5.3,
+   "band_higher_pct": 6.5,
    "n_train": 27674,
    "n_calibration": 5475,
    "n_test": 8970
@@ -484,6 +511,9 @@
    "test_mae": 0.736,
    "persistence_mae": 1.396,
    "coverage80": 0.798,
+   "band_same_pct": 87.4,
+   "band_lower_pct": 5.4,
+   "band_higher_pct": 7.2,
    "n_train": 27675,
    "n_calibration": 5475,
    "n_test": 8970
@@ -523,6 +553,9 @@
    "test_mae": 0.766,
    "persistence_mae": 1.518,
    "coverage80": 0.796,
+   "band_same_pct": 86.7,
+   "band_lower_pct": 5.6,
+   "band_higher_pct": 7.7,
    "n_train": 27675,
    "n_calibration": 5475,
    "n_test": 8970
@@ -562,6 +595,9 @@
    "test_mae": 0.79,
    "persistence_mae": 1.638,
    "coverage80": 0.789,
+   "band_same_pct": 86.2,
+   "band_lower_pct": 5.7,
+   "band_higher_pct": 8.1,
    "n_train": 27675,
    "n_calibration": 5475,
    "n_test": 8970
@@ -601,6 +637,9 @@
    "test_mae": 0.811,
    "persistence_mae": 1.755,
    "coverage80": 0.78,
+   "band_same_pct": 85.8,
+   "band_lower_pct": 6,
+   "band_higher_pct": 8.3,
    "n_train": 27675,
    "n_calibration": 5475,
    "n_test": 8970
@@ -640,6 +679,9 @@
    "test_mae": 0.829,
    "persistence_mae": 1.872,
    "coverage80": 0.772,
+   "band_same_pct": 85.6,
+   "band_lower_pct": 6,
+   "band_higher_pct": 8.4,
    "n_train": 27675,
    "n_calibration": 5475,
    "n_test": 8970
@@ -679,6 +721,9 @@
    "test_mae": 0.843,
    "persistence_mae": 1.984,
    "coverage80": 0.772,
+   "band_same_pct": 85.6,
+   "band_lower_pct": 6.2,
+   "band_higher_pct": 8.2,
    "n_train": 27674,
    "n_calibration": 5475,
    "n_test": 8968
@@ -718,6 +763,9 @@
    "test_mae": 0.856,
    "persistence_mae": 2.092,
    "coverage80": 0.765,
+   "band_same_pct": 85.5,
+   "band_lower_pct": 6.5,
+   "band_higher_pct": 8,
    "n_train": 27674,
    "n_calibration": 5475,
    "n_test": 8966
@@ -757,6 +805,9 @@
    "test_mae": 0.866,
    "persistence_mae": 2.198,
    "coverage80": 0.761,
+   "band_same_pct": 85.3,
+   "band_lower_pct": 6.6,
+   "band_higher_pct": 8.1,
    "n_train": 27674,
    "n_calibration": 5475,
    "n_test": 8964
@@ -796,6 +847,9 @@
    "test_mae": 0.872,
    "persistence_mae": 2.301,
    "coverage80": 0.76,
+   "band_same_pct": 85.1,
+   "band_lower_pct": 6.8,
+   "band_higher_pct": 8.1,
    "n_train": 27674,
    "n_calibration": 5475,
    "n_test": 8962
@@ -835,6 +889,9 @@
    "test_mae": 0.876,
    "persistence_mae": 2.4,
    "coverage80": 0.756,
+   "band_same_pct": 84.9,
+   "band_lower_pct": 7,
+   "band_higher_pct": 8.1,
    "n_train": 27674,
    "n_calibration": 5475,
    "n_test": 8960
@@ -874,6 +931,9 @@
    "test_mae": 0.881,
    "persistence_mae": 2.496,
    "coverage80": 0.756,
+   "band_same_pct": 84.8,
+   "band_lower_pct": 7.2,
+   "band_higher_pct": 8.1,
    "n_train": 27675,
    "n_calibration": 5475,
    "n_test": 8959
@@ -913,6 +973,9 @@
    "test_mae": 0.886,
    "persistence_mae": 2.589,
    "coverage80": 0.758,
+   "band_same_pct": 84.7,
+   "band_lower_pct": 7.2,
+   "band_higher_pct": 8.1,
    "n_train": 27676,
    "n_calibration": 5475,
    "n_test": 8958
@@ -952,6 +1015,9 @@
    "test_mae": 0.889,
    "persistence_mae": 2.678,
    "coverage80": 0.755,
+   "band_same_pct": 84.6,
+   "band_lower_pct": 7.5,
+   "band_higher_pct": 7.9,
    "n_train": 27676,
    "n_calibration": 5475,
    "n_test": 8957
@@ -991,6 +1057,9 @@
    "test_mae": 0.896,
    "persistence_mae": 2.764,
    "coverage80": 0.758,
+   "band_same_pct": 84.9,
+   "band_lower_pct": 7.5,
+   "band_higher_pct": 7.6,
    "n_train": 27677,
    "n_calibration": 5475,
    "n_test": 8956
@@ -1030,6 +1099,9 @@
    "test_mae": 0.903,
    "persistence_mae": 2.847,
    "coverage80": 0.758,
+   "band_same_pct": 84.9,
+   "band_lower_pct": 7.5,
+   "band_higher_pct": 7.5,
    "n_train": 27678,
    "n_calibration": 5475,
    "n_test": 8955
@@ -1069,6 +1141,9 @@
    "test_mae": 0.91,
    "persistence_mae": 2.927,
    "coverage80": 0.762,
+   "band_same_pct": 85.3,
+   "band_lower_pct": 7.6,
+   "band_higher_pct": 7.1,
    "n_train": 27680,
    "n_calibration": 5475,
    "n_test": 8954
@@ -1108,6 +1183,9 @@
    "test_mae": 0.917,
    "persistence_mae": 3.003,
    "coverage80": 0.764,
+   "band_same_pct": 85.5,
+   "band_lower_pct": 7.6,
+   "band_higher_pct": 6.9,
    "n_train": 27680,
    "n_calibration": 5475,
    "n_test": 8953
@@ -1147,6 +1225,9 @@
    "test_mae": 0.926,
    "persistence_mae": 3.078,
    "coverage80": 0.774,
+   "band_same_pct": 85.5,
+   "band_lower_pct": 7.8,
+   "band_higher_pct": 6.7,
    "n_train": 27681,
    "n_calibration": 5475,
    "n_test": 8952
@@ -1186,6 +1267,9 @@
    "test_mae": 0.934,
    "persistence_mae": 3.145,
    "coverage80": 0.772,
+   "band_same_pct": 85.5,
+   "band_lower_pct": 7.8,
+   "band_higher_pct": 6.7,
    "n_train": 27683,
    "n_calibration": 5475,
    "n_test": 8952
@@ -1225,6 +1309,9 @@
    "test_mae": 0.945,
    "persistence_mae": 3.209,
    "coverage80": 0.778,
+   "band_same_pct": 85.5,
+   "band_lower_pct": 7.8,
+   "band_higher_pct": 6.7,
    "n_train": 27682,
    "n_calibration": 5475,
    "n_test": 8952
@@ -1264,6 +1351,9 @@
    "test_mae": 0.953,
    "persistence_mae": 3.27,
    "coverage80": 0.786,
+   "band_same_pct": 85.4,
+   "band_lower_pct": 7.9,
+   "band_higher_pct": 6.7,
    "n_train": 27680,
    "n_calibration": 5475,
    "n_test": 8952
@@ -1303,6 +1393,9 @@
    "test_mae": 0.961,
    "persistence_mae": 3.328,
    "coverage80": 0.791,
+   "band_same_pct": 85.4,
+   "band_lower_pct": 7.9,
+   "band_higher_pct": 6.7,
    "n_train": 27679,
    "n_calibration": 5475,
    "n_test": 8952
@@ -1342,6 +1435,9 @@
    "test_mae": 0.967,
    "persistence_mae": 3.382,
    "coverage80": 0.795,
+   "band_same_pct": 85.4,
+   "band_lower_pct": 7.9,
+   "band_higher_pct": 6.8,
    "n_train": 27680,
    "n_calibration": 5475,
    "n_test": 8952
@@ -1381,6 +1477,9 @@
    "test_mae": 0.973,
    "persistence_mae": 3.432,
    "coverage80": 0.798,
+   "band_same_pct": 85.5,
+   "band_lower_pct": 7.9,
+   "band_higher_pct": 6.6,
    "n_train": 27677,
    "n_calibration": 5475,
    "n_test": 8951
@@ -1420,6 +1519,9 @@
    "test_mae": 0.979,
    "persistence_mae": 3.48,
    "coverage80": 0.797,
+   "band_same_pct": 85.3,
+   "band_lower_pct": 7.9,
+   "band_higher_pct": 6.7,
    "n_train": 27679,
    "n_calibration": 5476,
    "n_test": 8950
@@ -1459,6 +1561,9 @@
    "test_mae": 0.982,
    "persistence_mae": 3.523,
    "coverage80": 0.798,
+   "band_same_pct": 85.2,
+   "band_lower_pct": 8.1,
+   "band_higher_pct": 6.7,
    "n_train": 27678,
    "n_calibration": 5476,
    "n_test": 8949
@@ -1498,6 +1603,9 @@
    "test_mae": 0.985,
    "persistence_mae": 3.565,
    "coverage80": 0.792,
+   "band_same_pct": 85.2,
+   "band_lower_pct": 8.3,
+   "band_higher_pct": 6.5,
    "n_train": 27678,
    "n_calibration": 5476,
    "n_test": 8948

@@ -13,6 +13,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/farm": "nav_farm",
   "/stories": "nav_stories",
   "/flood": "nav_flood",
+  "/health": "nav_health",
   "/map": "nav_map",
   "/climate": "nav_climate",
   "/intelligence": "nav_intelligence",
