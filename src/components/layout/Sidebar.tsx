@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, TrendingUp, CalendarCheck, MapIcon, BrainCircuit,
-  Building2, Bell, User, Info, Globe, Sprout, LineChart, Waves,
+  Building2, Bell, User, Info, Globe, Sprout, LineChart, Waves, Activity,
 } from "lucide-react";
 import { useLanguage } from "@/lib/contexts/language";
 import { useAuth } from "@/lib/contexts/auth";
@@ -20,6 +20,7 @@ const NAV_MAIN = [
   { href: "/map",          icon: MapIcon,         key: "nav_map" },
   { href: "/climate",      icon: LineChart,       key: "nav_climate" },
   { href: "/intelligence", icon: BrainCircuit,    key: "nav_intelligence" },
+  { href: "/health",       icon: Activity,        key: "nav_health" },
   { href: "/operations",   icon: Building2,       key: "nav_operations" },
   { href: "/flood",        icon: Waves,           key: "nav_flood" },
 ];

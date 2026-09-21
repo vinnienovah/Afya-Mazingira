@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, TrendingUp, CalendarCheck, MapIcon, MoreHorizontal } from "lucide-react";
+import { LayoutDashboard, TrendingUp, CalendarCheck, MapIcon, MoreHorizontal, Activity } from "lucide-react";
 import { useLanguage } from "@/lib/contexts/language";
 import { useState } from "react";
 import { BrainCircuit, Building2, Bell, User, Info, X, Sprout, LineChart, Waves } from "lucide-react";
@@ -19,6 +19,7 @@ const OVERFLOW = [
   { href: "/farm",          icon: Sprout,       key: "nav_farm" },
   { href: "/climate",       icon: LineChart,    key: "nav_climate" },
   { href: "/intelligence",  icon: BrainCircuit, key: "nav_intelligence" },
+  { href: "/health",        icon: Activity,     key: "nav_health" },
   { href: "/operations",    icon: Building2,    key: "nav_operations" },
   { href: "/flood",         icon: Waves,        key: "nav_flood" },
   { href: "/notifications", icon: Bell,         key: "nav_notifications" },

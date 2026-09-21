@@ -370,6 +370,13 @@ export function cleanAndGridWithStats(rows: Record<string, unknown>[]): {
       imputed.push(f);
       return 0;
     };
+    // Channels that stand in for each other when one is missing; marked as well.
+    const orElse = (f: string, fallback: number): number => {
+      const v = rec[f];
+      if (typeof v === "number") return v;
+      imputed.push(f);
+      return fallback;
+    };
 
     const temp_sht = value("temp_sht");
     const humidity_sht = clamp(value("humidity_sht"), 0, 100);
@@ -386,9 +393,9 @@ export function cleanAndGridWithStats(rows: Record<string, unknown>[]): {
       rg2: rain("rg2"),
       rg1tt: rec.rg1tt ?? lastKnown.rg1tt ?? 0,
       rg2tt: rec.rg2tt ?? lastKnown.rg2tt ?? 0,
-      temp_bmx: rec.temp_bmx ?? temp_sht,
+      temp_bmx: orElse("temp_bmx", temp_sht),
       press_bmx: value("press_bmx"),
-      temp_mcp: rec.temp_mcp ?? temp_sht,
+      temp_mcp: orElse("temp_mcp", temp_sht),
       temp_sht,
       humidity_sht,
       si1145_vis: Math.max(0, value("si1145_vis")),
@@ -396,8 +403,8 @@ export function cleanAndGridWithStats(rows: Record<string, unknown>[]): {
       si1145_uv: 0, // the UV channel is not trusted
       wind_spd,
       wind_dir: value("wind_dir"),
-      wind_gust: Math.max(wind_spd, rec.wind_gust ?? wind_spd),
-      heat_idx: rec.heat_idx ?? temp_sht,
+      wind_gust: Math.max(wind_spd, orElse("wind_gust", wind_spd)),
+      heat_idx: orElse("heat_idx", temp_sht),
       wet_bulb_temp,
       wet_bulb_globe_temp: shadeWbgt(temp_sht, wet_bulb_temp),
       firmware_wbgt: typeof firmware === "number" ? firmware : null,

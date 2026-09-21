@@ -192,6 +192,8 @@ export default function IntelligencePage() {
                 { label: lang === "sw" ? "Bila mabadiliko" : "No-change baseline", vals: HORIZONS.map((h) => `${horizonScores(h).persistence_mae.toFixed(2)}°C`) },
                 { label: lang === "sw" ? "Upana wa bendi 80%" : "80% band", vals: HORIZONS.map((h) => `±${horizonScores(h).band80.toFixed(2)}°C`) },
                 { label: lang === "sw" ? "Ndani ya bendi" : "Inside the band", vals: HORIZONS.map((h) => `${Math.round(horizonScores(h).coverage80 * 100)}%`) },
+                { label: lang === "sw" ? "Kiwango cha hatari sawa" : "Same risk band as observed", vals: HORIZONS.map((h) => `${horizonScores(h).band_same_pct}%`) },
+                { label: lang === "sw" ? "Kiwango cha chini kuliko halisi" : "Band lower than observed", vals: HORIZONS.map((h) => `${horizonScores(h).band_lower_pct}%`) },
               ].map((row, i) => (
                 <tr key={i}>
                   <th scope="row" className="py-2 pr-4 text-xs font-semibold text-afya-muted text-left">{row.label}</th>
