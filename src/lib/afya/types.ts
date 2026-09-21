@@ -152,6 +152,8 @@ export interface SituationResult {
   forecast_series: ForecastPoint[];
   risk: RiskAssessment;
   best_time: BestTimeResult | null;
+  // Why there is no window: none left in daylight within the forecast.
+  best_time_note?: "no_daylight_window" | null;
   expected_peak: { time: string; wbgt_c: number } | null;
   state_history_24h: StateSegment[];
   contributors: Contributor[];
