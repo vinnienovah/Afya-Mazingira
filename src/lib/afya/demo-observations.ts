@@ -187,7 +187,7 @@ export function generateDemoSeries(
     const eatDate = new Date(eatMs);
     const eatHours = eatDate.getUTCHours() + eatDate.getUTCMinutes() / 60;
     const doy = Math.floor(
-      (ts.getTime() - new Date(ts.getUTCFullYear(), 0, 1).getTime()) / 86400000,
+      (ts.getTime() - Date.UTC(ts.getUTCFullYear(), 0, 1)) / 86400000,
     ) + 1;
 
     const fields = simulateAtTime(eatHours, doy, rand);

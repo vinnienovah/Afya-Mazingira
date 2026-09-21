@@ -78,11 +78,20 @@ The "next state" shown on the page is the one that most often followed in the ar
 | Lead time | Mean error | Assuming no change | 80 % band | Inside the band | Same risk band | Band too low |
 |---|---|---|---|---|---|---|
 | +1 h | 0.45 °C | 0.64 °C | ±0.74 °C | 81 % | 91.8 % | 4.3 % |
-| +3 h | 0.79 °C | 1.64 °C | ±1.21 °C | 79 % | 86.2 % | 5.7 % |
+| +3 h | 0.79 °C | 1.64 °C | ±1.20 °C | 79 % | 86.2 % | 5.7 % |
 | +6 h | 0.90 °C | 2.85 °C | ±1.31 °C | 76 % | 84.9 % | 7.5 % |
-| +9 h | 0.98 °C | 3.56 °C | ±1.54 °C | 79 % | 85.2 % | 8.3 % |
+| +9 h | 0.98 °C | 3.56 °C | ±1.55 °C | 79 % | 85.2 % | 8.3 % |
 
 The last two columns score what people act on: how often the forecast puts the hour in the same risk band as the station then measured, and how often in a lower one, the error that could leave someone unprepared.
+
+**Tested month by month.** Those scores come from one cool season, so `npm run evaluate` also refits the forecast on everything before each month from October 2025 to September 2026 and scores that month alone:
+
+| Season | +1 h | +3 h | +9 h | Assuming no change, +3 h | Same risk band, +3 h | Band too low, +3 h |
+|---|---|---|---|---|---|---|
+| Hot, January to March 2026 | 0.58 °C | 1.01 °C | 1.12 °C | 1.91 °C | 76.9 % | 17.1 % |
+| All other months | 0.49 °C | 0.84 °C | 1.05 °C | 1.61 °C | 81.3 % | 7.8 % |
+
+The forecast beats "no change" in every month at every horizon. In the hot season it is less accurate, and it puts the hour in too low a band about twice as often, running about 0.3 °C low in February and March. That is where the next round of work goes (see Known limitations).
 
 `npm run fit` refits both models from the archive through the same cleaning and feature code the app runs.
 
@@ -247,7 +256,7 @@ MIT. See [LICENSE](LICENSE). Station and reanalysis data remain under their prov
 
 - **WBGT is shade WBGT.** It leaves out direct sun because the station's light sensor is not calibrated to irradiance. In full midday sun WBGT is several degrees higher, so the bands understate risk for work in the open.
 - **The risk bands are our own.** 18, 21 and 24 °C WBGT and the activity adjustments are screening bands chosen by the project, not a published occupational or medical limit.
-- **The forecast is tested on the cool season.** The test months are June to September 2026. The fit includes the January to March hot season, but hot-season skill is not scored separately.
+- **The forecast under-warns more in the hot season.** Tested month by month, it put the hour in too low a risk band 17.1 % of the time from January to March 2026, against 7.8 % in other months. Treat hot-season forecasts near a band boundary as the higher band.
 - **Rain probability is a rule of thumb** (falling pressure and high humidity raise it), not fitted: the station's rain gauges are too sparse to fit it on.
 - **Rainfall context is ERA5-Land,** not CHIRPS.
 - **When ERA5-Land or the satellite catalogue cannot be reached** (and in historical replay, which does not fetch past context), their panels show "-" instead of numbers and data quality carries a `regional_context_unavailable` flag. No stand-in values are shown as data.
