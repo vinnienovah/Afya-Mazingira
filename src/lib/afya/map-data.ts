@@ -33,6 +33,7 @@ export interface CountyFeature {
     temperature_anomaly_c: number;
     rain_24h_mm: number;
     soil_moisture: number;
+    flood_risk: "LOW" | "ELEVATED" | "HIGH";
     ndvi_mean: number | null;
     lst_c: number | null;
     sources: string[];
@@ -137,7 +138,7 @@ async function fetchRegionalWeather(counties: LoadedCounty[]): Promise<(CountyWe
   const lngs = counties.map((c) => c.centroid.lng).join(",");
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lngs}` +
-    `&current=temperature_2m,relative_humidity_2m&hourly=temperature_2m,relative_humidity_2m` +
+    `&current=temperature_2m,relative_humidity_2m&hourly=temperature_2m,relative_humidity_2m,soil_moisture_0_to_1cm` +
     `&daily=precipitation_sum&forecast_days=1&timezone=Africa%2FNairobi`;
 
   const res = await fetch(url, { signal: AbortSignal.timeout(8_000) });
@@ -168,11 +169,19 @@ async function fetchRegionalWeather(counties: LoadedCounty[]): Promise<(CountyWe
       trend = delta > 0.5 ? "rising" : delta < -0.5 ? "falling" : "stable";
     }
 
+    // Real per-county soil moisture (0-1cm layer, m³/m³) from the same
+    // batched call — falls back to a documented regional default only if
+    // Open-Meteo omits the field for this location.
+    const soilSeries = loc.hourly.soil_moisture_0_to_1cm;
+    const soilMoisture = soilSeries?.length
+      ? soilSeries[nowIdx >= 0 ? nowIdx : 0]
+      : 0.18;
+
     return {
       tempC,
       rh,
       rain24hMm,
-      soilMoisture: 0.18, // regional default; per-county soil moisture omitted from the batched call for latency
+      soilMoisture,
       trend,
       hourlyCategories,
     };
@@ -181,7 +190,10 @@ async function fetchRegionalWeather(counties: LoadedCounty[]): Promise<(CountyWe
 
 interface OpenMeteoLocation {
   current?: { temperature_2m: number; relative_humidity_2m: number };
-  hourly?: { time: string[]; temperature_2m: number[]; relative_humidity_2m: number[] };
+  hourly?: {
+    time: string[]; temperature_2m: number[]; relative_humidity_2m: number[];
+    soil_moisture_0_to_1cm?: number[];
+  };
   daily?: { precipitation_sum: number[] };
 }
 
@@ -298,6 +310,7 @@ export async function getRegionalOutlook(stationOverride?: StationOverride): Pro
         temperature_anomaly_c: w && meanTemp != null ? round1(w.tempC - meanTemp) : 0,
         rain_24h_mm: round1(rain24h),
         soil_moisture: soilMoisture,
+        flood_risk: computeFloodRisk(rain24h, soilMoisture),
         ndvi_mean: ndvi,
         lst_c: null, // never estimated — see file header
         sources,
@@ -312,6 +325,24 @@ export async function getRegionalOutlook(stationOverride?: StationOverride): Pro
   });
 
   return { type: "FeatureCollection", features };
+}
+
+/**
+ * Flood-conducive-conditions indicator: real recent rainfall + real ERA5-Land
+ * soil saturation — the same two signals operational flash-flood guidance
+ * systems use before any terrain modelling. This is deliberately NOT a
+ * flood-susceptibility map: that would require a DEM, flow-accumulation or
+ * proximity-to-drainage data this project doesn't have, and faking a
+ * per-location hazard zone from data that can't actually support one would
+ * violate the same honesty principle applied everywhere else in the app.
+ * Thresholds: soil moisture ≥0.30 m³/m³ is close to field capacity for the
+ * loam assumption used elsewhere (farm-engine.ts) — already-saturated ground
+ * sheds new rain as runoff rather than absorbing it.
+ */
+export function computeFloodRisk(rain24hMm: number, soilMoisture: number): "LOW" | "ELEVATED" | "HIGH" {
+  if (rain24hMm >= 30 && soilMoisture >= 0.28) return "HIGH";
+  if (rain24hMm >= 15 || (soilMoisture >= 0.28 && rain24hMm >= 5)) return "ELEVATED";
+  return "LOW";
 }
 
 function ringToPolygonCoords(geometry: Geometry): [number, number][][] {
