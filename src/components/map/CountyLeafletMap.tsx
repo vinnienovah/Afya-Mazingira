@@ -149,10 +149,13 @@ export default function CountyLeafletMap({
       >
         <ResizeHandler />
 
-        {/* Clean, desaturated basemap so environmental colour carries meaning */}
+        {/* OpenStreetMap tiles, greyed in CSS so the risk colours carry the meaning.
+            CARTO's light tiles now need an API key and render a watermark without one. */}
         <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          className="afya-basemap"
+          maxZoom={19}
         />
 
         {boundaries && (

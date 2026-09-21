@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useForecast } from "@/lib/contexts/situation";
 import { useLanguage } from "@/lib/contexts/language";
+import { horizonScores } from "@/lib/afya/forecast-engine";
 import { STATES } from "@/lib/afya/constants";
 import { fmtTime } from "@/lib/afya/format";
 import ForecastChart from "@/components/charts/ForecastChart";
@@ -77,7 +78,7 @@ export default function ForecastPage() {
         <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
           <div>
             <CardTitle className="mb-0">
-              {lang === "sw" ? "Chati ya Utabiri" : "WBGT-like Exposure Forecast"}
+              {lang === "sw" ? "Chati ya Utabiri" : "WBGT Forecast (shade)"}
             </CardTitle>
             <CardMeta>
               {expected_peak
@@ -103,18 +104,20 @@ export default function ForecastPage() {
 
       {/* Horizon cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { h: f1h, key: "horizon_1h", mae: "0.57" },
-          { h: f3h, key: "horizon_3h", mae: "0.93" },
-          { h: f6h, key: "horizon_6h", mae: "1.23" },
-          { h: f9h, key: "horizon_9h", mae: "1.58" },
-        ].map(({ h, key, mae }) => h ? (
+        {([
+          { h: f1h, key: "horizon_1h", horizon: "1h" },
+          { h: f3h, key: "horizon_3h", horizon: "3h" },
+          { h: f6h, key: "horizon_6h", horizon: "6h" },
+          { h: f9h, key: "horizon_9h", horizon: "9h" },
+        ] as const).map(({ h, key, horizon }) => h ? (
           <Card key={key}>
             <div className="flex items-start justify-between mb-2">
               <span className="font-semibold text-afya-charcoal text-sm">{t(key)}</span>
               <div className="text-right">
                 <span className="text-[10px] text-afya-muted border border-afya-border rounded px-1.5 py-0.5">{h.model}</span>
-                <div className="text-[9px] text-afya-muted/60 mt-0.5">MAE {mae}°C</div>
+                <div className="text-[9px] text-afya-muted/60 mt-0.5" title={lang === "sw" ? "Kwenye miezi ya majaribio" : "On the test months"}>
+                  MAE {horizonScores(horizon).mae.toFixed(2)}°C
+                </div>
               </div>
             </div>
             <div className="text-3xl font-bold text-afya-charcoal">{h.value.toFixed(1)}°C</div>
@@ -162,7 +165,7 @@ export default function ForecastPage() {
 
       {/* Uncertainty by horizon, real data (upper - lower per horizon),
           not fabricated. Replaces a previous "secondary charts" section that
-          derived fake temperature/humidity/IR/wind values from the WBGT
+          derived temperature, humidity, IR and wind values from the WBGT
           forecast number via arbitrary formulas, that was never real data,
           so it's been removed rather than kept for the sake of having more
           charts on the page. */}
@@ -208,7 +211,7 @@ export default function ForecastPage() {
       </Card>
 
       {/* Explore further, points to the dedicated Climate History dashboard
-          rather than duplicating fake variable charts here. */}
+          rather than duplicating variable charts here. */}
       <Link
         href="/climate"
         className="flex items-center justify-between rounded-2xl border border-afya-border bg-white px-5 py-4 hover:border-afya-green/50 transition-colors group"
@@ -256,7 +259,7 @@ export default function ForecastPage() {
       )}
 
       {/* Provenance note, reflects the real data source behind this forecast,
-          not a hardcoded "demo data" claim regardless of what's actually live. */}
+          not a fixed claim regardless of what is actually live. */}
       <p className="text-[11px] text-afya-muted/60 text-center">
         {lang === "sw"
           ? `Utabiri unatolewa kutoka mfumo wa kisayansi wa AFYA MAZINGIRA. ${

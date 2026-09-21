@@ -13,6 +13,7 @@ import {
 import { computeThermalRisk, computeRainProbability, computeUncertainty } from "./risk-engine";
 import { findBestWindowFromNow } from "./best-time-engine";
 import { evaluateQuality } from "./data-quality";
+import { groupStatus } from "./sentinel";
 import { JKUAT_COORDS } from "./constants";
 
 const DAYLIGHT_HOURS = [6, 19] as const;
@@ -55,6 +56,13 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
   if (bundle.duplicatesRemoved > 0) {
     quality.flags.push(`duplicate_timestamps_removed:${bundle.duplicatesRemoved}`);
   }
+  // Station health: the Sentinel rules over the last 24 hours. A sensor group
+  // that fails them lowers data quality, so a faulty sensor cannot feed the
+  // forecast quietly. Rain is left out: the heat pipeline does not use it, and
+  // the CHORDS feed does not carry it.
+  const failing = groupStatus(series.slice(-96)).filter((g) => g.status === "bad" && g.group !== "rain");
+  for (const g of failing) quality.flags.push(`station_health_bad:${g.group}`);
+  if (failing.length && quality.status === "GOOD") quality.status = "DEGRADED";
   // If the +9h forecast horizon has fully elapsed, the situation is too stale
   // to act on → suppress strong recommendations (never present
   // stale data as actionable).

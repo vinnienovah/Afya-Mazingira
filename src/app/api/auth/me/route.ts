@@ -3,7 +3,8 @@ import { getSessionFromCookies } from "@/lib/auth/logic";
 
 export async function GET() {
   const user = await getSessionFromCookies();
-  if (!user) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  // Signed out is a normal answer here, not an error.
+  if (!user) return NextResponse.json(null);
   return NextResponse.json({
     id: user.id,
     name: user.name,

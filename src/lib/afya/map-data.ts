@@ -358,61 +358,8 @@ export interface SatelliteAcquisition {
   provenance: string;
 }
 
+// Without a real catalogue answer there are no acquisitions to list; no
+// stand-in dates are shown.
 export function getSatelliteAcquisitions(): SatelliteAcquisition[] {
-  return [
-    {
-      id: "s2-20260812",
-      sensor: "Sentinel-2",
-      acquired: "2026-08-12",
-      layer: "ndvi",
-      label: "Sentinel-2 NDVI",
-      resolution: "10 m",
-      provenance: "SATELLITE_DERIVED",
-    },
-    {
-      id: "s2-20260822",
-      sensor: "Sentinel-2",
-      acquired: "2026-08-22",
-      layer: "ndvi",
-      label: "Sentinel-2 NDVI",
-      resolution: "10 m",
-      provenance: "SATELLITE_DERIVED",
-    },
-    {
-      id: "s2-20260903",
-      sensor: "Sentinel-2",
-      acquired: "2026-09-03",
-      layer: "ndvi",
-      label: "Sentinel-2 NDVI",
-      resolution: "10 m",
-      provenance: "SATELLITE_DERIVED",
-    },
-    {
-      id: "s2-20260905",
-      sensor: "Sentinel-2",
-      acquired: "2026-09-05",
-      layer: "ndvi",
-      label: "Sentinel-2 NDVI",
-      resolution: "10 m",
-      provenance: "SATELLITE_DERIVED",
-    },
-    {
-      id: "s3-20260904",
-      sensor: "Sentinel-3",
-      acquired: "2026-09-04",
-      layer: "lst",
-      label: "Sentinel-3 LST",
-      resolution: "~1 km",
-      provenance: "SATELLITE_DERIVED",
-    },
-    {
-      id: "s3-20260906",
-      sensor: "Sentinel-3",
-      acquired: "2026-09-06",
-      layer: "lst",
-      label: "Sentinel-3 LST",
-      resolution: "~1 km",
-      provenance: "SATELLITE_DERIVED",
-    },
-  ];
+  return [];
 }

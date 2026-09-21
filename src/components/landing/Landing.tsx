@@ -134,9 +134,9 @@ const FEATURES = [
 ];
 
 const PROVENANCE = [
-  { icon: Radio, label: "GROUND MEASUREMENT", source: "Conduit", meta: "~15 min · JKUAT/Juja station", d_en: "Local temperature, humidity, pressure, wind, radiation, rain and a WBGT-like signal.", d_sw: "Joto, unyevu, shinikizo, upepo, mionzi, mvua na ishara ya WBGT ya kimaeneo.", color: "#006B3C" },
+  { icon: Radio, label: "GROUND MEASUREMENT", source: "Conduit", meta: "~15 min · JKUAT/Juja station", d_en: "Local temperature, humidity, pressure, wind, light and rain. WBGT is computed from its wet bulb and air temperature.", d_sw: "Joto, unyevu, shinikizo, upepo, mwanga na mvua. WBGT hukokotolewa kutoka balbu nyevu na joto la hewa.", color: "#006B3C" },
   { icon: Wind, label: "REGIONAL MODEL", source: "ERA5-Land", meta: "~9 km · hourly", d_en: "The wider atmospheric background behind local-versus-regional anomalies.", d_sw: "Mandhari ya anga ya kikanda kwa tofauti za kimaeneo na kikanda.", color: "#3786B5" },
-  { icon: Satellite, label: "SATELLITE-DERIVED", source: "Sentinel-2 / Sentinel-3", meta: "10 m vegetation · ~1 km surface temperature", d_en: "Landscape and thermal context, always shown with real acquisition dates.", d_sw: "Muktadha wa mandhari na joto, wenye tarehe halisi za uchukuzi.", color: "#247B78" },
+  { icon: Satellite, label: "SATELLITE-DERIVED", source: "Sentinel-2", meta: "10 m vegetation", d_en: "Vegetation (NDVI) by county, always shown with real acquisition dates.", d_sw: "Uoto (NDVI) kwa kaunti, pamoja na tarehe halisi za uchukuzi.", color: "#247B78" },
   { icon: CloudRain, label: "HISTORICAL CLIMATE", source: "ERA5-Land", meta: "daily · ~9 km", d_en: "Rainfall memory: 7-day and 30-day totals against climatology.", d_sw: "Kumbukumbu ya mvua: jumla ya siku 7 na 30 dhidi ya tabia ya hali ya hewa.", color: "#68756F" },
 ];
 

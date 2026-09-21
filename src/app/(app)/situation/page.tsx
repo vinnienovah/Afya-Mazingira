@@ -287,7 +287,7 @@ export default function SituationPage() {
         <div className="flex items-start justify-between mb-4 flex-wrap gap-2">
           <div>
             <CardTitle className="mb-0">{t("next_6h")}</CardTitle>
-            <CardMeta>WBGT-like · {t("measured")} + {t("predicted")} + {t("uncertainty")}</CardMeta>
+            <CardMeta>WBGT (shade) · {t("measured")} + {t("predicted")} + {t("uncertainty")}</CardMeta>
           </div>
           {expected_peak && (
             <div className="flex items-center gap-1.5 text-xs text-afya-muted">

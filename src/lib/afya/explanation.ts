@@ -211,7 +211,7 @@ export function deterministicExplanationEn(facts: ExplanationFacts): string {
   return [
     `The JKUAT area is currently in a ${facts.state_name_en} environmental state.`,
     stateDesc,
-    `Current WBGT-like exposure is ${facts.current_wbgt.toFixed(1)}°C.`,
+    `Current WBGT in shade is ${facts.current_wbgt.toFixed(1)}°C.`,
     `The +3 hour forecast is ${facts.forecast_3h.toFixed(1)}°C ` +
       `(interval: ${facts.forecast_3h_lower.toFixed(1)}–${facts.forecast_3h_upper.toFixed(1)}°C, ${facts.uncertainty.toLowerCase()} uncertainty), ` +
       `reaching ${facts.forecast_9h.toFixed(1)}°C by +9 hours.`,

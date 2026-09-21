@@ -366,7 +366,7 @@ export function evaluateCropStress(
   crop: CropProfile,
   stage: GrowthStage,
 ): CropStressSignal {
-  // Approximate peak air temperature from the WBGT-like peak and current offset
+  // Approximate peak air temperature from the WBGT peak and current offset
   const peakWbgt = situation.expected_peak?.wbgt_c ?? situation.current.wbgt_c;
   const offset = situation.current.temperature_c - situation.current.wbgt_c;
   const peakTemp = Math.round((peakWbgt + offset) * 10) / 10;

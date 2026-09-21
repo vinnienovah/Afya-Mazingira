@@ -26,6 +26,11 @@ export async function POST(req: NextRequest) {
     // Farmers plan field work across the working day, so evaluate a
     // longer activity window than the default situation call.
     const situation = await runPipeline({ activityKey: "field_work", durationMinutes: 120 });
+    // Irrigation depends on real rainfall and soil moisture; without them
+    // there is no advice to give, rather than advice built on placeholders.
+    if (situation.era5.available === false || situation.chirps.available === false) {
+      return NextResponse.json({ error: "context_unavailable" }, { status: 503 });
+    }
     const advisory = buildFarmAdvisory(situation, crop, stage);
 
     return NextResponse.json({
@@ -39,6 +44,7 @@ export async function POST(req: NextRequest) {
         era5: situation.era5,
         chirps: situation.chirps,
         demo_mode: situation.demo_mode,
+        best_time_note: situation.best_time_note ?? null,
         data_source: situation.data_source,
       },
     });

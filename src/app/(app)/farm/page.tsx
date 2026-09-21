@@ -46,6 +46,7 @@ interface FarmResponse {
     chirps: { chirps_7d_mm: number; chirps_30d_mm: number; chirps_percentile: number; chirps_dry_spell_days: number };
     era5: { era5_soil_moisture: number };
     demo_mode: boolean;
+    best_time_note?: "no_daylight_window" | null;
   };
 }
 
@@ -55,7 +56,7 @@ export default function FarmPage() {
   const [stage, setStage] = useState<GrowthStage>("vegetative");
   // One result, tagged with the crop and stage it answers, so a slow reply
   // for an earlier choice never shows under a later one.
-  const [result, setResult] = useState<{ key: string; data: FarmResponse | null } | null>(null);
+  const [result, setResult] = useState<{ key: string; data: FarmResponse | null; unavailable: boolean } | null>(null);
   const key = `${crop}|${stage}`;
 
   useEffect(() => {
@@ -66,10 +67,13 @@ export default function FarmPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ crop, stage }),
     })
-      .then((res) => (res.ok ? (res.json() as Promise<FarmResponse>) : null))
-      .catch(() => null)
-      .then((data) => {
-        if (active) setResult({ key: answering, data });
+      .then(async (res) => ({
+        data: res.ok ? ((await res.json()) as FarmResponse) : null,
+        unavailable: res.status === 503,
+      }))
+      .catch(() => ({ data: null, unavailable: false }))
+      .then(({ data, unavailable }) => {
+        if (active) setResult({ key: answering, data, unavailable });
       });
     return () => {
       active = false;
@@ -78,7 +82,13 @@ export default function FarmPage() {
 
   const loading = result?.key !== key;
   const data = loading ? null : result.data;
-  const error = !loading && !data ? t("error_generic") : null;
+  const error = loading || data
+    ? null
+    : result.unavailable
+      ? lang === "sw"
+        ? "Ushauri wa shamba unahitaji mvua na unyevu wa udongo kutoka ERA5-Land, ambavyo havikupatikana sasa hivi. Jaribu tena baadaye."
+        : "Farm advice needs ERA5-Land rainfall and soil moisture, which could not be fetched just now. Try again shortly."
+      : t("error_generic");
 
   useEffect(() => {
     document.title = `${t("farm_title")} | AFYA MAZINGIRA`;
@@ -327,7 +337,13 @@ export default function FarmPage() {
                   </ul>
                 </>
               ) : (
-                <p className="text-sm text-afya-muted">{t("quality_suppressed")}</p>
+                <p className="text-sm text-afya-muted">
+                  {data?.situation.best_time_note === "no_daylight_window"
+                    ? lang === "sw"
+                      ? "Hakuna muda wa mchana uliobaki katika utabiri wa saa 9."
+                      : "No daylight window is left in the 9-hour forecast."
+                    : t("quality_suppressed")}
+                </p>
               )}
             </Card>
           </div>

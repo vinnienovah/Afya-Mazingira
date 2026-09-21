@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useLanguage } from "@/lib/contexts/language";
 import { useSituation } from "@/lib/contexts/situation";
+import Link from "next/link";
 import { QualityDot } from "@/components/ui/QualityDot";
 import { MapPin, Search } from "lucide-react";
 
@@ -50,7 +51,9 @@ export default function TopBar() {
 
       {/* Data quality indicator */}
       {situation && (
-        <QualityDot status={situation.quality.status} freshnessMinutes={situation.quality.freshness_minutes} />
+        <Link href="/health" title={t("nav_health")} className="rounded-full hover:opacity-80 transition-opacity">
+          <QualityDot status={situation.quality.status} freshnessMinutes={situation.quality.freshness_minutes} />
+        </Link>
       )}
 
       {/* Data source badge: live / recorded archive / demo */}

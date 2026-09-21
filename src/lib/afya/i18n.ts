@@ -117,11 +117,11 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
 
     // Forecast page
     forecast_title: "Environmental Forecast",
-    forecast_subtitle: "WBGT-like exposure · +1h / +3h / +6h / +9h horizons",
+    forecast_subtitle: "WBGT in shade · +1h / +3h / +6h / +9h horizons",
     measured: "Measured",
     predicted: "Predicted",
     uncertainty: "Uncertainty",
-    chart_aria: "Environmental exposure forecast chart showing measured and predicted WBGT-like values with uncertainty interval",
+    chart_aria: "Environmental exposure forecast chart showing measured and predicted WBGT values with uncertainty interval",
     peak_marker: "Predicted peak",
     now: "Now",
     horizon_1h: "+1 hour",
@@ -494,7 +494,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     farm_required: "Needed",
     farm_dry_spell: "Dry spell",
     farm_method: "How this is calculated",
-    farm_method_body: "Reference evapotranspiration uses the Hargreaves–Samani equation from station temperature. Crop water demand applies FAO-56 single crop coefficients for the selected crop and growth stage. The balance compares that demand with CHIRPS measured rainfall and ERA5-Land soil moisture. Spray and field-work windows come from the same deterministic engine used across AFYA MAZINGIRA.",
+    farm_method_body: "Reference evapotranspiration uses the Hargreaves–Samani equation from station temperature. Crop water demand applies FAO-56 single crop coefficients for the selected crop and growth stage. The balance compares that demand with ERA5-Land rainfall and soil moisture. Spray and field-work windows come from the same deterministic engine used across AFYA MAZINGIRA.",
     farm_disclaimer: "This is agronomic decision support. It does not predict yield, diagnose plant disease or pests, and does not replace extension-officer judgement or local knowledge of your soil.",
     // Farm reasons
     farm_reason_rain_expected: "Rain is expected soon, irrigating now would waste water",
@@ -1009,7 +1009,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     farm_required: "Inahitajika",
     farm_dry_spell: "Kipindi kavu",
     farm_method: "Jinsi hii inavyohesabiwa",
-    farm_method_body: "Uvukizi wa marejeleo hutumia mlinganyo wa Hargreaves–Samani kutoka joto la kituo. Mahitaji ya maji ya zao hutumia vigezo vya FAO-56 kwa zao na hatua uliyochagua. Mizani hulinganisha mahitaji hayo na mvua iliyopimwa ya CHIRPS na unyevu wa udongo wa ERA5-Land. Madirisha ya kunyunyizia na kazi za shambani hutoka kwenye injini ile ile inayotumika AFYA MAZINGIRA kote.",
+    farm_method_body: "Uvukizi wa marejeleo hutumia mlinganyo wa Hargreaves–Samani kutoka joto la kituo. Mahitaji ya maji ya zao hutumia vigezo vya FAO-56 kwa zao na hatua uliyochagua. Mizani hulinganisha mahitaji hayo na mvua na unyevu wa udongo wa ERA5-Land. Madirisha ya kunyunyizia na kazi za shambani hutoka kwenye injini ile ile inayotumika AFYA MAZINGIRA kote.",
     farm_disclaimer: "Huu ni msaada wa maamuzi ya kilimo. Hautabiri mavuno, hautambui magonjwa au wadudu wa mimea, na haubadilishi ushauri wa afisa ugani au ujuzi wako wa udongo wako.",
     // Farm reasons
     farm_reason_rain_expected: "Mvua inatarajiwa hivi karibuni, kumwagilia sasa kutapoteza maji",
