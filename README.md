@@ -166,7 +166,7 @@ On a single split (fitted to May 2026, tested on June to September 2026, which t
 - Reference evapotranspiration (ET₀) is Hargreaves (FAO-56 eq. 52) from the highest and lowest air temperature the station measured over the last 24 hours, and the sun's energy for JKUAT's latitude and the date (eq. 21). Over the 465 days of the archive it runs 0.43 mm/day above Open-Meteo's FAO-56 Penman-Monteith ET₀ (mean absolute difference 0.51, RMSE 0.65), which is what Hargreaves does at a site whose measured daily range is wider than the reanalysis grid's; the page shows both figures side by side.
 - The irrigation advice is the FAO-56 chapter 8 root-zone balance, carried day by day over the last 60 days: depletion rises with crop water use (ET₀ times the crop coefficient for the stage) and falls with effective rain (80 % of each day's rain above 2 mm), held between an empty zone and a full one. Rain comes from gauge 1 when it reported on at least 6 of the last 7 days, otherwise from Open-Meteo's regional model, and the page says which.
 - Water is advised when the zone has dried to the readily available water it holds (FAO-56's p, corrected for the day's demand). The depth refills the zone, floored to 5 mm; a single pass is held to the readily available water, because more than that runs off clay or drains past the roots, and the page says how much the zone still wants. Below that point the page gives the day the watering falls due instead of a depth. A hold for rain needs a forecast that covers most of the refill, not any rain at all.
-- The balance counts rain only, so water already applied has to be subtracted; the page says so and shows the depletion in millimetres to subtract from. Where the record is too thin to carry a balance, it gives the week's requirement instead of an instruction.
+- The balance also counts irrigation the farmer records on the page: a pass is entered as a date and a depth, and comes off the depletion that day. A recorded pass counts in full where rain counts at its effective share, because water put on the root zone loses only the surplus past field capacity. The record is held on the device that made it, so it works signed out and nothing about a field is stored on the server. Where the record is too thin to carry a balance, the page gives the week's requirement instead of an instruction.
 - Crops that dry down before harvest are not watered at maturity, and heat stress uses each crop's own cardinal temperatures.
 - Regional soil moisture (ERA5-Land, 7 to 28 cm) is shown as context only, ranked against its own past year. The page marks the whole advisory as indicative.
 - What it comes to: over 1 June to 8 September 2026, the dry season, the advice for maize in its vegetative stage is 320 mm in five waterings against 338 mm of crop demand, at an interval of 18.8 days where FAO-56's own figures give 19.7. Beans at maturity are left to dry down.
@@ -274,7 +274,7 @@ Open the app and start at **Situation**. Choose an activity to see its risk and 
 | Command | What it does |
 |---|---|
 | `npm run dev` | Development server on http://localhost:3000 |
-| `npm test` | 286 tests, no network |
+| `npm test` | 335 tests, no network |
 | `npm run typecheck` / `npm run lint` | Type check and lint |
 | `npm run fit` | Refit the forecast, the states and the rain chance from the archive |
 | `npm run evaluate` | Test the four forecasts month by month |
@@ -363,7 +363,7 @@ MIT. See [LICENSE](LICENSE). Station and reanalysis data remain under their prov
 - **The risk bands are our own.** 18, 21 and 24 °C WBGT and the activity adjustments are screening bands chosen by the project, not a published occupational or medical limit. In Juja's climate the top band is rare in shade (0.05 % of the archive).
 - **The forecast under-warns a little more in the hot season.** Tested month by month, it put the hour in too low a band at +3 hours 8.5 % of the time from January to March 2026, against 7.4 % in other months.
 - **Heat alerts use the 08:00 forecast of the day's peak,** which runs on average 0.85 °C below the peak the station then measures, so some days that turn out HIGH get no alert.
-- **Farm advice is indicative.** It assumes a clay soil typical of JKUAT, not a measurement in the field, and uses the regional model's rain when the gauge is short of data. The root-zone balance counts rain only: water you have applied has to be subtracted from the depletion the page shows.
+- **Farm advice is indicative.** It assumes a clay soil typical of JKUAT, not a measurement in the field, and uses the regional model's rain when the gauge is short of data. The root-zone balance counts rain and whatever irrigation you record on the page; water you applied without recording is not in the depletion it shows.
 - **The flood page shows conditions,** rainfall and soil saturation, not a flood forecast.
 - **The Conduit API can lag by most of a day;** the CHORDS feed covers for it. CHORDS sends rain only while it rains, so its rain gauges are not judged on a dry day.
 - **Browser push needs VAPID keys** on the server; without them alerts go by email only.
