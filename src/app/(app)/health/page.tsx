@@ -36,7 +36,9 @@ interface Archive {
   rain: { gauge1_mm: number };
   rule_slots: Record<string, number>;
   gust_direction_copy: { days: number; of: number; share_pct: number | null };
-  battery: Status;
+  battery: {
+    status: Status; mean_score_if_counted: number; best_score_if_counted: number; days_below_80_if_counted: number;
+  };
   audits: Audits;
   gaps: { over_one_hour: number; longest: { from: string; to: string; hours: number } | null };
   days: { date: string; score: number; bad: string[]; suspect: string[]; missing_minutes: number }[];
@@ -85,7 +87,8 @@ const GROUP_NAMES: Record<string, [string, string]> = {
   pressure: ["Pressure", "Shinikizo"],
   wind: ["Wind", "Upepo"],
   light: ["Light sensor", "Kipima mwanga"],
-  rain: ["Rain gauges", "Vipimo vya mvua"],
+  rain_gauge_1: both("health_group_rain_gauge_1"),
+  rain_gauge_2: both("health_group_rain_gauge_2"),
   gust_direction: both("health_group_gust_direction"),
   battery: both("health_group_battery"),
 };
@@ -110,13 +113,15 @@ const STATUS_NAME: Record<Status, [string, string]> = {
 // What each rule checks, on 15-minute data. The thresholds live in sentinel.ts.
 const RULES: [string, string, string][] = [
   ["R01", "Any thermometer below -5 or above 45 °C", "Kipima joto chochote chini ya -5 au juu ya 45 °C"],
-  ["R02", "Humidity at or below 0 %", "Unyevu wa 0 % au chini"],
+  ["R02", ...both("health_rule_r02")],
   ["R03", "Pressure outside 800 to 900 hPa (station at 1,523 m)", "Shinikizo nje ya 800 hadi 900 hPa (kituo kiko mita 1,523)"],
   ["R04", "Wind above 60 m/s or gust above 75 m/s", "Upepo juu ya 60 m/s au upepo mkali juu ya 75 m/s"],
+  ["R05", ...both("health_rule_r05")],
   ["R06", "Light reading below the sensor's dark floor of 240 counts", "Mwanga chini ya kiwango cha giza cha kipima, 240"],
-  ["R07", "Temperature jumps more than 5 °C in 15 minutes", "Joto linaruka zaidi ya 5 °C kwa dakika 15"],
+  ["R07", ...both("health_rule_r07")],
   ["R08", ...both("health_rule_r08")],
   ["R09", "The three thermometers differ by more than 2 °C", "Vipima joto vitatu vinatofautiana zaidi ya 2 °C"],
+  ["R10", ...both("health_rule_r10")],
   ["R11", ...both("health_rule_r11")],
   ["R12", ...both("health_rule_r12")],
   ["R13", ...both("health_rule_r13")],
@@ -124,6 +129,8 @@ const RULES: [string, string, string][] = [
 ];
 
 const pct = (v: number | null) => (v === null ? "-" : `${v.toFixed(1)} %`);
+// A gap's own times, to the minute, as the readings recorded them.
+const utc = (iso: string | undefined) => (iso ? iso.slice(0, 16).replace("T", " ") : "-");
 const signed = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(2)} °C`;
 
 export default function StationHealthPage() {
@@ -160,7 +167,7 @@ export default function StationHealthPage() {
   const unlisted = live && !conduit
     ? Object.keys(GROUP_NAMES).filter((g) => !live.groups.some((x) => x.group === g))
     : [];
-  const rainNotJudged = !!live?.groups.some((g) => g.group === "rain" && g.status === "not_judged");
+  const rainNotJudged = !!live?.groups.some((g) => g.group.startsWith("rain_gauge") && g.status === "not_judged");
   const batteryMissing = !!live?.groups.some((g) => g.group === "battery" && g.status === "not_reported");
 
   return (
@@ -234,6 +241,12 @@ export default function StationHealthPage() {
               </div>
             ))}
           </div>
+          {live.missing_minutes > 0 && (
+            <p className="mt-3 text-xs text-afya-muted flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5 text-afya-gold" strokeWidth={2} aria-hidden="true" />
+              {fill(t("health_live_missing"), { minutes: live.missing_minutes })}
+            </p>
+          )}
           {rainNotJudged && <p className="mt-3 text-xs text-afya-muted">{t("health_chords_rain_note")}</p>}
           {batteryMissing && <p className="mt-3 text-xs text-afya-muted">{t("health_battery_note")}</p>}
           {unlisted.length > 0 && (
@@ -294,8 +307,26 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
   };
 
   const gustShare = archive.gust_direction_copy.share_pct ?? 0;
-  const longest = archive.gaps.longest?.hours ?? 0;
-  const scoreFloor = Math.min(80, Math.floor(Math.min(...archive.days.map((d) => d.score)) / 10) * 10);
+  const longest = archive.gaps.longest;
+  // The archive export has no battery column, so the score cannot judge it.
+  const notScored = archive.battery.status === "not_reported";
+  const battery = {
+    mean: archive.battery.mean_score_if_counted,
+    best: archive.battery.best_score_if_counted,
+    below: archive.battery.days_below_80_if_counted,
+    days: archive.summary.days,
+  };
+  // Where the battery is out of the score, the second tile is what the same
+  // days come to with it counted, so the mean never stands on its own.
+  const scoreTiles: [string, string][] = notScored
+    ? [
+        [text.health_tile_mean_score, String(archive.summary.mean_score)],
+        [text.health_tile_mean_with_battery, String(battery.mean)],
+      ]
+    : [
+        [sw ? "Alama ya wastani" : "Mean score", String(archive.summary.mean_score)],
+        [sw ? "Siku chini ya 80" : "Days below 80", String(archive.summary.days_below_80)],
+      ];
   const findings: [string, string][] = [
     [
       `The firmware WBGT is more than 1.5 °C below the wet bulb in ${pct(a03.far_below_pct)} of the record (${pct(a03.far_below_night_pct)} at night, ${pct(a03.far_below_day_pct)} by day). A WBGT below the wet bulb is not physically possible in shade, so the formula in the firmware should be checked.`,
@@ -307,11 +338,13 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
       `The gust-direction column repeats the gust speed on ${archive.gust_direction_copy.days} of ${archive.gust_direction_copy.of} days (${gustShare} % of readings), so gust direction cannot be used. The export should be fixed.`,
       `Safu ya mwelekeo wa upepo mkali inarudia kasi yake siku ${archive.gust_direction_copy.days} kati ya ${archive.gust_direction_copy.of} (${gustShare} % ya usomaji), hivyo haiwezi kutumika. Uhamishaji wa data urekebishwe.`,
     ],
-    ...(archive.battery === "not_reported" ? [both("health_finding_battery")] : []),
+    ...(notScored ? [both("health_finding_battery", battery)] : []),
     both("health_finding_gaps", {
       days: archive.summary.days_with_missing_time,
       minutes: archive.summary.missing_minutes,
-      hours: longest.toFixed(1),
+      hours: (longest?.hours ?? 0).toFixed(1),
+      from: utc(longest?.from),
+      to: utc(longest?.to),
     }),
     [
       `The firmware wet bulb matches Stull (2011) to ${a01.mae_c?.toFixed(3) ?? "-"} °C on average, so it is sound and the app uses it.`,
@@ -332,8 +365,7 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-2 mb-4">
           {[
             [sw ? "Siku" : "Days", String(archive.summary.days)],
-            [sw ? "Alama ya wastani" : "Mean score", String(archive.summary.mean_score)],
-            [sw ? "Siku chini ya 80" : "Days below 80", String(archive.summary.days_below_80)],
+            ...scoreTiles,
             [sw ? "Mapengo zaidi ya saa 1" : "Gaps over an hour", String(archive.gaps.over_one_hour)],
             [text.health_tile_rain, `${Math.round(archive.rain.gauge1_mm).toLocaleString("en")} mm`],
             [text.health_tile_gauge2_silent, String(archive.summary.gauge2_silent_days)],
@@ -348,13 +380,17 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={archive.days} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
               <XAxis dataKey="date" tick={{ fontSize: 10 }} interval={60} tickFormatter={(d: string) => d.slice(0, 7)} />
-              <YAxis domain={[scoreFloor, 100]} tick={{ fontSize: 10 }} />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} />
               <Tooltip formatter={(v) => [v, sw ? "Alama" : "Score"]} />
               <Bar dataKey="score" fill="#006B3C" />
             </BarChart>
           </ResponsiveContainer>
         </div>
+        {notScored && (
+          <p className="mt-3 text-xs text-afya-muted">{fill(text.health_battery_not_scored, battery)}</p>
+        )}
         <p className="mt-3 text-xs text-afya-muted">{text.health_score_rule}</p>
+        <p className="mt-2 text-xs text-afya-muted">{text.health_suspect_tier}</p>
       </Card>
 
       <Card>
@@ -426,6 +462,7 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
             ? "Namba ya mwisho: vipindi vya dakika 15 vilivyoguswa katika kumbukumbu, au siku kwa R11 hadi R13."
             : "Last column: 15-minute slots each rule touched across the record, or days for R11 to R13."}
         </p>
+        <p className="text-xs text-afya-muted mt-2">{text.health_rain_day_note}</p>
       </Card>
     </>
   );
