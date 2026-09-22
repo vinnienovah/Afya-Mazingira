@@ -5,7 +5,7 @@ import type {
 import type { DemoObservation } from "./demo-observations";
 import { getObservationSeries } from "./sources";
 import { getEra5ContextLive, getSentinelContextLive, getRainfallContext, getRegionalForecastSeries } from "./sources-external";
-import { computeFeatures } from "./feature-engine";
+import { computeFeatures, rainInputs } from "./feature-engine";
 import { classifyState, buildStateHistory, stateSince, getNextTransition } from "./state-engine";
 import {
   predictHorizon, buildForecastSeries, findExpectedPeak, horizonScores, forecastContributions,
@@ -127,12 +127,8 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
   const f3h = forecast[1];
   const expected_peak = findExpectedPeak(forecast_series);
 
-  // Step 6: Rain probability
-  const rainProbability = computeRainProbability(
-    currentObs.rg1 > 0 || currentObs.rg2 > 0,
-    fv.pressure_delta_1h,
-    fv.humidity_sht,
-  );
+  // Step 6: Rain probability for the next three hours
+  const rainProbability = Math.round(computeRainProbability(rainInputs(series, latestIdx), currentObs.ts) * 100) / 100;
 
   // Step 7: Context (live adapters with graceful fallback)
   // Skip the real fetch entirely for a historical replay anchor, a

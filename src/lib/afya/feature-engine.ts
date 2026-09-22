@@ -135,3 +135,46 @@ export function computeFeatures(
 export function buildFeatureSeries(series: DemoObservation[]): (FeatureVector | null)[] {
   return series.map((_, i) => computeFeatures(series, i));
 }
+
+/** Inputs the rain model can use, in a fixed order. */
+export const RAIN_FEATURES = [
+  "humidity", "humidity_change_1h", "pressure_change_1h", "pressure_change_3h",
+  "temp_change_1h", "temp_change_3h", "hour_sin", "hour_cos", "doy_sin", "doy_cos",
+  "rain_1h", "rain_3h",
+] as const;
+
+export type RainInputs = Record<(typeof RAIN_FEATURES)[number], number>;
+
+/**
+ * Rain-model inputs at `atIndex` of a 15-minute grid, or null without three
+ * hours of history. Rain in each slot is `rg1` in mm; recent rain enters as
+ * log(1 + mm) so a downpour does not swamp the other inputs.
+ */
+export function rainInputs(series: DemoObservation[], atIndex: number): RainInputs | null {
+  if (atIndex < 12) return null;
+  const cur = series[atIndex];
+  const back = (steps: number) => series[atIndex - steps];
+  const rainOver = (steps: number) => {
+    let mm = 0;
+    for (let k = 0; k < steps; k++) mm += back(k).rg1 || 0;
+    return Math.log1p(mm);
+  };
+  const ts = new Date(cur.ts);
+  const eat = new Date(ts.getTime() + 3 * 3600 * 1000);
+  const hour = eat.getUTCHours() + eat.getUTCMinutes() / 60;
+  const doy = Math.floor((ts.getTime() - Date.UTC(ts.getUTCFullYear(), 0, 1)) / 86400000) + 1;
+  return {
+    humidity: cur.humidity_sht,
+    humidity_change_1h: cur.humidity_sht - back(4).humidity_sht,
+    pressure_change_1h: cur.press_bmx - back(4).press_bmx,
+    pressure_change_3h: cur.press_bmx - back(12).press_bmx,
+    temp_change_1h: cur.temp_sht - back(4).temp_sht,
+    temp_change_3h: cur.temp_sht - back(12).temp_sht,
+    hour_sin: Math.sin((2 * Math.PI * hour) / 24),
+    hour_cos: Math.cos((2 * Math.PI * hour) / 24),
+    doy_sin: Math.sin((2 * Math.PI * doy) / 365.25),
+    doy_cos: Math.cos((2 * Math.PI * doy) / 365.25),
+    rain_1h: rainOver(4),
+    rain_3h: rainOver(12),
+  };
+}

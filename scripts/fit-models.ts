@@ -35,6 +35,7 @@ import {
   type Archive,
   type ModelKind,
 } from "./forecast-models";
+import { fitRain } from "./rain";
 
 const TEST_FROM = "2026-06-01";
 const BAND_FROM = "2025-08";
@@ -339,10 +340,12 @@ function main() {
 
   const forecast = fitForecast(a, chosen);
   const states = fitStates(a);
+  const rain = fitRain(a, evaluation.months);
 
   fs.mkdirSync(OUT_DIR, { recursive: true });
   fs.writeFileSync(path.join(OUT_DIR, "wbgt-forecast.json"), JSON.stringify(forecast, null, 1) + "\n");
   fs.writeFileSync(path.join(OUT_DIR, "states.json"), JSON.stringify(states, null, 1) + "\n");
+  fs.writeFileSync(path.join(OUT_DIR, "rain-model.json"), JSON.stringify(rain, null, 1) + "\n");
 
   console.log(`forecast: ${forecast.name}`);
   for (const s of forecast.steps.filter((s) => [4, 12, 24, 36].includes(s.step))) {
@@ -355,6 +358,9 @@ function main() {
   console.log("states", JSON.stringify(states.summary));
   console.log("changes per day", JSON.stringify(states.changes_per_day), "transitions", JSON.stringify(states.transitions));
   console.log("next state", JSON.stringify(states.next_state_test));
+  const { calibration, by_month: _months, ...rainScores } = rain.evaluation;
+  console.log(`rain: ${rain.kind}`, JSON.stringify(rainScores));
+  console.log("rain calibration", JSON.stringify(calibration));
 }
 
 main();
