@@ -41,7 +41,8 @@ function liveChecks(
     age_minutes: latest ? Math.round((Date.now() - Date.parse(latest.ts)) / 60000) : null,
     slots: recent.length,
     missing_minutes: Math.round(recent.reduce((s, o) => s + (o.gap_minutes ?? 0), 0)),
-    groups: groupStatus(recent, hits, { feed, exportGroups: true }).filter((g) => listed(g.group)),
+    groups: groupStatus(recent, hits, { feed, exportGroups: true, batteryListed: channels.includes("battery_v") })
+      .filter((g) => listed(g.group)),
     audits: audits(recent),
     firmware_below_wet_bulb_now:
       latest && typeof latest.firmware_wbgt === "number" ? latest.firmware_wbgt < latest.wet_bulb_temp : null,
@@ -58,7 +59,7 @@ export async function GET(req: NextRequest) {
   if (!station || station.id === CONDUIT_INSTRUMENT_ID) {
     const bundle = await getObservationSeries(new Date().toISOString(), 30);
     return NextResponse.json(
-      { archive, live: liveChecks(bundle.series, bundle.source, bundle.feed) },
+      { archive, live: liveChecks(bundle.series, bundle.source, bundle.feed, bundle.channels) },
       { headers: CACHE_HEADERS },
     );
   }

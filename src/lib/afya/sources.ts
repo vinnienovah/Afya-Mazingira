@@ -26,6 +26,8 @@ export interface SeriesBundle {
   realtime: boolean;
   // Repeated timestamps removed at ingest, reported rather than dropped quietly.
   duplicatesRemoved: number;
+  // Channels the live feed lists, when it says (CHORDS does).
+  channels?: string[];
 }
 
 // The station records about every 15 minutes, so the live caches are checked
@@ -128,10 +130,11 @@ async function refresh(feed: "jhub" | "chords"): Promise<void> {
   }
   inflight[feed] = (async () => {
     const now = Date.now();
-    const { series, duplicates } = feed === "jhub"
+    const chords = feed === "chords" ? await fetchChordsRows(now - LIVE_LOOKBACK_MS, now) : null;
+    const { series, duplicates } = chords
+      ? cleanAndGridWithStats(chords.rows, "sums")
       // todate is exclusive of the current day, so ask for tomorrow to include today.
-      ? cleanAndGridWithStats(await fetchConduitRaw(new Date(now - 3 * 86400_000), new Date(now + 86400_000)))
-      : cleanAndGridWithStats((await fetchChordsRows(now - LIVE_LOOKBACK_MS, now)).rows, "sums");
+      : cleanAndGridWithStats(await fetchConduitRaw(new Date(now - 3 * 86400_000), new Date(now + 86400_000)));
     if (series.length < 20) throw new Error(`too few valid observations from ${feed}`);
 
     liveCache[feed] = {
@@ -141,6 +144,7 @@ async function refresh(feed: "jhub" | "chords"): Promise<void> {
       anchorIso: series[series.length - 1].ts,
       realtime: true,
       duplicatesRemoved: duplicates,
+      channels: chords?.channels,
       fetchedAt: Date.now(),
     };
   })();

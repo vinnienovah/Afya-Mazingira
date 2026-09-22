@@ -41,9 +41,9 @@ export const CHANNEL_GROUPS = {
 } as const;
 
 // Channels the engines never read, reported beside the sensor groups: the
-// gust-direction column (R13) and the battery. A battery that reports
-// nothing is telemetry missing from the export, not a sensor fault, so it
-// never costs points.
+// gust-direction column (R13) and the battery. As in the Sentinel spec, a
+// battery channel the feed lists but leaves empty is bad (R12); an export
+// with no battery channel at all cannot be judged and is not reported.
 export const EXPORT_GROUPS = {
   gust_direction: ["wind_gust_dir"],
   battery: ["battery_v"],
@@ -265,7 +265,7 @@ function groupOf(channel: string): Group | ExportGroup | null {
 export function dailyHealth(
   series: DemoObservation[],
   hits = checkReadings(series),
-  { feed = null }: { feed?: Feed } = {},
+  { feed = null, batteryListed = false }: { feed?: Feed; batteryListed?: boolean } = {},
 ): DayHealth[] {
   const L = SENTINEL_LIMITS;
   const hitsBySlot = new Map<number, RuleHit[]>();
@@ -304,6 +304,10 @@ export function dailyHealth(
       } else if (flagged("bad", "gust_direction") > L.flagged_share) {
         bad.add("gust_direction");
       }
+    }
+    if (batteryListed && idx.every((i) => typeof series[i].battery_v !== "number")) {
+      bad.add("battery");
+      rules.add("R12");
     }
 
     // R11 is judged on the rain day that starts at 09:00 on this date.
@@ -346,7 +350,7 @@ export interface GroupReport {
 export function groupStatus(
   series: DemoObservation[],
   hits = checkReadings(series),
-  { feed = null, exportGroups = false }: { feed?: Feed; exportGroups?: boolean } = {},
+  { feed = null, exportGroups = false, batteryListed = false }: { feed?: Feed; exportGroups?: boolean; batteryListed?: boolean } = {},
 ): GroupReport[] {
   const L = SENTINEL_LIMITS;
   const all = series.map((_, i) => i);
@@ -398,8 +402,8 @@ export function groupStatus(
     const battery = series.filter((o) => typeof o.battery_v === "number").length;
     out.push({
       group: "battery",
-      status: battery ? "good" : "not_reported",
-      rules: [],
+      status: battery ? "good" : batteryListed ? "bad" : "not_reported",
+      rules: battery || !batteryListed ? [] : ["R12"],
       empty_channels: battery ? [] : ["battery_v"],
       measured_share: series.length ? Math.round((battery / series.length) * 1000) / 1000 : 0,
     });

@@ -146,12 +146,16 @@ test("a gust-direction column that copies the gust speed is bad, live and in the
   assert.equal(dailyHealth(real)[0].score, 100);
 });
 
-test("battery telemetry that never arrives is reported as such, not as a fault", () => {
+test("an empty battery channel is bad where the feed lists it, and not reported where the export has none", () => {
   const series = day();
-  const battery = (s: DemoObservation[]) => groupStatus(s, checkReadings(s), { exportGroups: true }).find((g) => g.group === "battery")!;
+  const battery = (s: DemoObservation[], batteryListed = false) =>
+    groupStatus(s, checkReadings(s), { exportGroups: true, batteryListed }).find((g) => g.group === "battery")!;
   assert.equal(battery(series).status, "not_reported");
   assert.equal(dailyHealth(series)[0].score, 100);
-  assert.equal(battery(day(() => ({ battery_v: 12.6 }))).status, "good");
+  assert.equal(battery(series, true).status, "bad");
+  assert.deepEqual(battery(series, true).rules, ["R12"]);
+  assert.equal(dailyHealth(series, checkReadings(series), { batteryListed: true })[0].score, 90);
+  assert.equal(battery(day(() => ({ battery_v: 12.6 })), true).status, "good");
 });
 
 test("an impossible reading is flagged but never judged as a value", () => {
