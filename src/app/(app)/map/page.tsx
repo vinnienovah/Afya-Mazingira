@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useLanguage } from "@/lib/contexts/language";
 import { useSituation } from "@/lib/contexts/situation";
 import { RISK_META } from "@/lib/afya/constants";
+import { fill, fmtAsOf } from "@/lib/afya/format";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StateChip } from "@/components/ui/StateChip";
@@ -45,6 +46,7 @@ export default function MapPage() {
   const { t, lang } = useLanguage();
   const { situation } = useSituation();
   const { data, isLoading } = useSWR("/api/map", fetcher);
+  const weatherAsOf: number | null = data?.weather_as_of ?? null;
   const { data: boundaries } = useSWR<FeatureCollection<Geometry, { name: string; code?: number }>>(
     "/geo/counties.geojson", fetcher,
   );
@@ -244,7 +246,10 @@ export default function MapPage() {
                 />
                 Conduit · {t("measured_label")} · JKUAT
               </span>
-              <span className="text-[10px] text-afya-muted">{t("map_counties_source")} · {t("regional_model_label")}</span>
+              <span className="text-[10px] text-afya-muted">
+                {t("map_counties_source")} · {t("regional_model_label")}
+                {weatherAsOf ? ` · ${fill(t("read_at"), { time: fmtAsOf(new Date(weatherAsOf).toISOString(), lang) })}` : ""}
+              </span>
               <span className="text-[10px] text-afya-muted/70 ml-auto">{t("map_boundaries_note")}</span>
             </div>
           </Card>

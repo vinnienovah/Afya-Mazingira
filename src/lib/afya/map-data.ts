@@ -244,19 +244,31 @@ export function parseCountyWeather(loc: OpenMeteoLocation | undefined, nowMs: nu
   };
 }
 
+// One request covers all 11 counties, so a refusal empties the whole map. The
+// last answer stands in for up to an hour, and the page says when it was read.
+const WEATHER_TTL_MS = 60 * 60_000;
+let lastWeather: { at: number; data: (CountyWeather | null)[] } | null = null;
+
+/** When the county weather on display was read, or null when it is this request's. */
+export function regionalWeatherAsOf(nowMs: number = Date.now()): number | null {
+  return lastWeather && nowMs - lastWeather.at > 60_000 ? lastWeather.at : null;
+}
+
 async function fetchRegionalWeather(counties: LoadedCounty[], nowMs: number): Promise<(CountyWeather | null)[]> {
   const lats = counties.map((c) => c.centroid.lat).join(",");
   const lngs = counties.map((c) => c.centroid.lng).join(",");
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lngs}` +
     `&current=temperature_2m,relative_humidity_2m&hourly=temperature_2m,relative_humidity_2m,soil_moisture_0_to_1cm` +
-    `&daily=precipitation_sum&forecast_days=2&timezone=Africa%2FNairobi`;
+    `&daily=precipitation_sum&forecast_days=1&timezone=Africa%2FNairobi`;
 
-  const res = await fetch(url, { signal: AbortSignal.timeout(8_000) });
+  const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
   if (!res.ok) throw new Error(`Open-Meteo regional HTTP ${res.status}`);
   const json = (await res.json()) as OpenMeteoLocation[] | OpenMeteoLocation;
   const list = Array.isArray(json) ? json : [json]; // single-county requests aren't array-wrapped
-  return counties.map((_, i) => parseCountyWeather(list[i], nowMs));
+  const parsed = counties.map((_, i) => parseCountyWeather(list[i], nowMs));
+  if (parsed.some((w) => w !== null)) lastWeather = { at: nowMs, data: parsed };
+  return parsed;
 }
 
 // The station series is 15-minute slots; a forecast step is 15 minutes too.
@@ -409,8 +421,12 @@ export async function getRegionalOutlook(
 
   const [weather, ndviByCounty] = await Promise.all([
     fetchRegionalWeather(counties, nowMs).catch((err) => {
-      console.warn("[afya] Regional weather fetch failed, counties marked unavailable:", (err as Error).message);
-      return counties.map((): CountyWeather | null => null);
+      const held = lastWeather && nowMs - lastWeather.at < WEATHER_TTL_MS ? lastWeather.data : null;
+      console.warn(
+        `[afya] Regional weather fetch failed, ${held ? "showing the last read" : "counties marked unavailable"}:`,
+        (err as Error).message,
+      );
+      return held ?? counties.map((): CountyWeather | null => null);
     }),
     getRegionalNdvi(counties),
   ]);
