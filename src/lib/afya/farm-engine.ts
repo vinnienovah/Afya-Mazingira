@@ -60,8 +60,9 @@ export interface CropProfile {
 // sooner and in smaller doses than the entry would suggest. planting_rain_mm
 // is the project's own throughout.
 //
-// Cardinal temperatures are the upper end of each species' optimum range in
-// FAO EcoCrop, with a moderate and a severe step above it. Where a crop has a
+// Cardinal temperatures are set from each species' optimum range in FAO
+// EcoCrop: the mild step sits at or just above the top of that range, and the
+// two above it mark failing pollen and visible damage. Where a crop has a
 // heat-sensitive reproductive stage the thresholds drop by
 // HEAT_SENSITIVE_STAGE_SHIFT_C: pollen viability and fruit set fail a few
 // degrees below the temperature that harms vegetative growth. Kale, napier and
@@ -422,7 +423,7 @@ const CLAY_AVAILABLE_WATER_MID = (CLAY_AVAILABLE_WATER.low + CLAY_AVAILABLE_WATE
 
 // The balance starts from a root zone taken as full BALANCE_DAYS ago. Sixty
 // days is longer than any of these crops needs to empty its zone at Juja's
-// demand (TAW/ETc is about 50 days for coffee and under 30 for the rest), so
+// demand (TAW/ETc is about 50 days for coffee, 30 or fewer for the rest), so
 // by the time the run reaches today the starting assumption has washed out.
 export const BALANCE_DAYS = 60;
 // A shorter run is mostly its own starting assumption, and understates how dry
@@ -644,7 +645,8 @@ export function computeIrrigationAdvice(wb: WaterBalance, crop: CropProfile, sta
   }
 
   // Due. The balance holds Dr at or below TAW, so refilling it can never ask
-  // for more than the root zone holds.
+  // for more than the root zone holds. The 48-hour total is treated as one
+  // wetting, which is the generous reading of a forecast split over two days.
   const forecast = wb.forecast_rain_48h_mm;
   const covered = forecast != null ? effectiveRainMm(forecast) : 0;
   const depth = floorToFiveMm(wb.depletion_mm - covered);
