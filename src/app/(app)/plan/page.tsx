@@ -1,20 +1,26 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useSyncExternalStore } from "react";
 import { useLanguage } from "@/lib/contexts/language";
 import { useAuth } from "@/lib/contexts/auth";
-import { ACTIVITY_PROFILES } from "@/lib/afya/constants";
-import { fmtWindow } from "@/lib/afya/format";
+import { ACTIVITY_PROFILES, RISK_META } from "@/lib/afya/constants";
+import { fmtDate, fmtTime, fmtWindow } from "@/lib/afya/format";
+import { tf } from "@/lib/afya/i18n";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { RiskChip } from "@/components/ui/RiskChip";
 import {
   CheckCircle2, Save, Trash2, Edit3, Copy, RefreshCw,
-  ChevronRight, AlertTriangle, Clock, Zap,
+  ChevronRight, AlertTriangle, Clock, Zap, Info, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { BestTimeResult } from "@/lib/afya/types";
+import type { BestTimeResult, QualityStatus } from "@/lib/afya/types";
+import type { SavedResult } from "@/lib/afya/activity-plan";
 
 const DURATIONS = [30, 60, 90, 120, 180];
+// From this hour little daylight is left, so the form starts on tomorrow.
+const LATE_HOUR = 17;
+const EAT_OFFSET_MS = 3 * 3600 * 1000;
 
 interface SavedPlan {
   id: number;
@@ -24,35 +30,66 @@ interface SavedPlan {
   duration_minutes: number;
   available_start: string;
   available_end: string;
-  last_result?: BestTimeResult | null;
+  last_result?: SavedResult | null;
   updated_at: string;
+}
+
+// The request a shown result answers, so a save always stores the range it was found for.
+interface PlanRequest {
+  activity: string;
+  duration: number;
+  start: string;
+  end: string;
+}
+
+interface ApiError {
+  error?: string;
+  message?: string;
+  details?: Record<string, string>;
 }
 
 // Helper: build an available-time ISO string in EAT, optionally for a future day
 function todayAt(hourEAT: number, minuteEAT = 0, dayOffset = 0): string {
   const now = new Date();
-  const eat = new Date(now.getTime() + 3 * 3600 * 1000);
+  const eat = new Date(now.getTime() + EAT_OFFSET_MS);
   eat.setUTCDate(eat.getUTCDate() + dayOffset);
   eat.setUTCHours(hourEAT, minuteEAT, 0, 0);
-  return new Date(eat.getTime() - 3 * 3600 * 1000).toISOString();
+  return new Date(eat.getTime() - EAT_OFFSET_MS).toISOString();
+}
+
+const eatHour = (iso: string) => new Date(Date.parse(iso) + EAT_OFFSET_MS).getUTCHours();
+const eatDay = (ms: number) => Math.floor((ms + EAT_OFFSET_MS) / 86400_000);
+
+function subscribeMinute(onChange: () => void) {
+  const id = setInterval(onChange, 60_000);
+  return () => clearInterval(id);
+}
+
+/** The hour on the EAT clock, or null before the page runs in the browser. */
+function useEatHour(): number | null {
+  return useSyncExternalStore(subscribeMinute, () => eatHour(new Date().toISOString()), () => null);
 }
 
 export default function PlanPage() {
   const { t, lang } = useLanguage();
   const { user } = useAuth();
+  const nowHour = useEatHour();
 
-  // Form state
+  // Form state. Day and start hour follow the clock until they are chosen.
   const [activity, setActivity] = useState("outdoor_work");
   const [duration, setDuration] = useState(90);
-  const [startHour, setStartHour] = useState(8);
+  const [chosenStart, setChosenStart] = useState<number | null>(null);
   const [endHour, setEndHour] = useState(18);
-  const [dayOffset, setDayOffset] = useState(0); // 0 = today, 1 = tomorrow
+  const [chosenDay, setChosenDay] = useState<number | null>(null); // 0 = today, 1 = tomorrow
   const [planName, setPlanName] = useState("");
 
+  const dayOffset = chosenDay ?? (nowHour !== null && nowHour >= LATE_HOUR ? 1 : 0);
+  const startHour = chosenStart ?? (dayOffset === 0 && nowHour !== null ? Math.min(Math.max(8, nowHour), LATE_HOUR) : 8);
+
   // Result state
-  const [result, setResult] = useState<BestTimeResult | null>(null);
-  const [quality, setQuality] = useState<string | null>(null);
-  const [source, setSource] = useState<"ground" | "regional" | null>(null);
+  const [result, setResult] = useState<SavedResult | null>(null);
+  const [resultFor, setResultFor] = useState<PlanRequest | null>(null);
+  const [stationQuality, setStationQuality] = useState<QualityStatus | null>(null);
   const [evaluating, setEvaluating] = useState(false);
   const [evalError, setEvalError] = useState<string | null>(null);
 
@@ -60,10 +97,14 @@ export default function PlanPage() {
   const [plans, setPlans] = useState<SavedPlan[]>([]);
   const [plansLoading, setPlansLoading] = useState(false);
   const [savingPlan, setSavingPlan] = useState(false);
-  const [saveOk, setSaveOk] = useState(false);
+  const [saveOk, setSaveOk] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [editingPlan, setEditingPlan] = useState<SavedPlan | null>(null);
+  const [rerunning, setRerunning] = useState<number | null>(null);
 
-  const profileMeta = ACTIVITY_PROFILES.find((p) => p.key === activity) ?? ACTIVITY_PROFILES[0];
+  const profileOf = (key: string) => ACTIVITY_PROFILES.find((p) => p.key === key) ?? ACTIVITY_PROFILES[0];
+  const labelOf = (key: string) => (lang === "sw" ? profileOf(key).label_sw : profileOf(key).label_en);
+  const bandLabel = (level: keyof typeof RISK_META) => (lang === "sw" ? RISK_META[level].sw : RISK_META[level].en);
 
   useEffect(() => {
     document.title = `${t("nav_plan")} | AFYA MAZINGIRA`;
@@ -81,32 +122,56 @@ export default function PlanPage() {
     }
   }
 
+  // A shown result belongs to the form it was found for; changing the form clears it.
+  function changed<T>(set: (value: T) => void) {
+    return (value: T) => {
+      set(value);
+      setResult(null);
+      setResultFor(null);
+      setEvalError(null);
+    };
+  }
+
+  function errorText(data: ApiError): string {
+    if (data.error === "quality_poor") return t("quality_poor_message");
+    const key = `plan_error_${data.error}`;
+    if (data.error && t(key) !== key) {
+      const times = Object.fromEntries(Object.entries(data.details ?? {}).map(([k, v]) => [k, fmtTime(v)]));
+      return tf(lang, key, times);
+    }
+    return data.message ?? t("error_generic");
+  }
+
   async function evaluate() {
     setEvaluating(true);
     setResult(null);
-    setSource(null);
+    setResultFor(null);
     setEvalError(null);
-    const windowStart = todayAt(startHour, 0, dayOffset);
-    const windowEnd = todayAt(endHour, 0, dayOffset);
+    const request: PlanRequest = {
+      activity,
+      duration,
+      start: todayAt(startHour, 0, dayOffset),
+      end: todayAt(endHour, 0, dayOffset),
+    };
     try {
       const res = await fetch("/api/recommendations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          activity,
-          duration_minutes: duration,
-          window_start: windowStart,
-          window_end: windowEnd,
+          activity: request.activity,
+          duration_minutes: request.duration,
+          window_start: request.start,
+          window_end: request.end,
         }),
         credentials: "include",
       });
       const data = await res.json();
       if (!res.ok) {
-        setEvalError(data.message ?? t("error_generic"));
+        setEvalError(errorText(data));
       } else {
         setResult(data.result);
-        setQuality(data.situation?.quality ?? null);
-        setSource(data.source ?? "ground");
+        setResultFor(request);
+        setStationQuality(data.situation?.quality?.status ?? null);
       }
     } catch {
       setEvalError(t("error_generic"));
@@ -116,26 +181,34 @@ export default function PlanPage() {
   }
 
   async function savePlan() {
-    if (!user || !result) return;
+    if (!user || !result || !resultFor) return;
     setSavingPlan(true);
+    setSaveError(null);
     try {
-      await fetch("/api/plans", {
-        method: "POST",
+      const res = await fetch(editingPlan ? `/api/plans/${editingPlan.id}` : "/api/plans", {
+        method: editingPlan ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: planName || (lang === "sw" ? profileMeta.label_sw : profileMeta.label_en) + ` · ${duration}${t("minutes")}`,
-          activity_type: activity,
-          activity_label: lang === "sw" ? profileMeta.label_sw : profileMeta.label_en,
-          duration_minutes: duration,
-          available_start: todayAt(startHour, 0, dayOffset),
-          available_end: todayAt(endHour, 0, dayOffset),
+          name: planName.trim() || `${labelOf(resultFor.activity)} · ${resultFor.duration} ${t("minutes")}`,
+          activity_type: resultFor.activity,
+          activity_label: labelOf(resultFor.activity),
+          duration_minutes: resultFor.duration,
+          available_start: resultFor.start,
+          available_end: resultFor.end,
           last_result: result,
         }),
         credentials: "include",
       });
-      setSaveOk(true);
-      setTimeout(() => setSaveOk(false), 3000);
+      if (!res.ok) {
+        setSaveError(t("plan_save_failed"));
+        return;
+      }
+      setSaveOk(editingPlan ? t("plan_updated") : t("plan_saved"));
+      setTimeout(() => setSaveOk(null), 3000);
+      setEditingPlan(null);
       loadPlans();
+    } catch {
+      setSaveError(t("plan_save_failed"));
     } finally {
       setSavingPlan(false);
     }
@@ -143,6 +216,7 @@ export default function PlanPage() {
 
   async function deletePlan(id: number) {
     await fetch(`/api/plans/${id}`, { method: "DELETE", credentials: "include" });
+    if (editingPlan?.id === id) setEditingPlan(null);
     loadPlans();
   }
 
@@ -151,34 +225,59 @@ export default function PlanPage() {
     loadPlans();
   }
 
-  async function rerunPlan(plan: SavedPlan) {
-    const res = await fetch(`/api/plans/${plan.id}/rerun`, { method: "POST", credentials: "include" });
-    const data = await res.json();
-    if (res.ok && data.result) {
-      setResult(data.result);
-    }
-    loadPlans();
-  }
-
-  async function loadPlanIntoEditor(plan: SavedPlan) {
-    setEditingPlan(plan);
-    setActivity(plan.activity_type);
+  // Puts a saved plan's activity, length and hours into the form.
+  function showPlanInForm(plan: SavedPlan, shown: SavedResult | null) {
+    if (ACTIVITY_PROFILES.some((p) => p.key === plan.activity_type)) setActivity(plan.activity_type);
     setDuration(plan.duration_minutes);
-    const s = new Date(plan.available_start);
-    const e = new Date(plan.available_end);
-    setStartHour(new Date(s.getTime() + 3 * 3600 * 1000).getUTCHours());
-    setEndHour(new Date(e.getTime() + 3 * 3600 * 1000).getUTCHours());
+    setChosenStart(eatHour(plan.available_start));
+    setEndHour(eatHour(plan.available_end));
+    setChosenDay(Math.min(1, Math.max(0, eatDay(Date.parse(plan.available_start)) - eatDay(Date.now()))));
     setPlanName(plan.name);
-    if (plan.last_result) setResult(plan.last_result as BestTimeResult);
+    setResult(shown);
+    setResultFor(shown ? {
+      activity: plan.activity_type,
+      duration: plan.duration_minutes,
+      start: plan.available_start,
+      end: plan.available_end,
+    } : null);
+    setStationQuality(null);
+    setEvalError(null);
+    setSaveError(null);
   }
 
-  const reasonColors: Record<string, string> = {
-    reason_lower_exposure: "text-afya-green",
-    reason_radiation_declining: "text-afya-teal",
-    reason_low_rain: "text-afya-rain",
-    reason_uncertainty_ok: "text-afya-green",
-    reason_quality_good: "text-afya-green",
-    reason_avoids_peak: "text-afya-gold",
+  async function rerunPlan(plan: SavedPlan) {
+    setRerunning(plan.id);
+    setEvalError(null);
+    try {
+      const res = await fetch(`/api/plans/${plan.id}/rerun`, { method: "POST", credentials: "include" });
+      const data = await res.json();
+      if (res.ok && data.result) {
+        setEditingPlan(null);
+        showPlanInForm(plan, data.result);
+        setStationQuality(data.situation?.quality?.status ?? null);
+      } else {
+        setEvalError(`${plan.name}: ${errorText(data)}`);
+      }
+    } catch {
+      setEvalError(t("error_generic"));
+    } finally {
+      setRerunning(null);
+      loadPlans();
+    }
+  }
+
+  function loadPlanIntoEditor(plan: SavedPlan) {
+    setEditingPlan(plan);
+    showPlanInForm(plan, plan.last_result?.recommended ? plan.last_result : null);
+  }
+
+  const coverageText = (r: SavedResult) => {
+    if (!r.coverage) return null;
+    const end = r.coverage.forecast_to;
+    if (r.source === "regional") {
+      return tf(lang, "plan_coverage_regional", { points: r.coverage.points, end: `${fmtDate(end)} ${fmtTime(end)}` });
+    }
+    return tf(lang, "plan_coverage_station", { points: r.coverage.points, step: r.coverage.step_minutes, end: fmtTime(end) });
   };
 
   return (
@@ -193,13 +292,27 @@ export default function PlanPage() {
 
         {/* LEFT: Form */}
         <div className="lg:col-span-2 space-y-4">
+          {editingPlan && (
+            <div className="rounded-xl border border-afya-green/40 bg-afya-green/5 px-4 py-3 flex items-start gap-3" role="status">
+              <Edit3 className="w-4 h-4 text-afya-green shrink-0 mt-0.5" strokeWidth={1.8} aria-hidden="true" />
+              <p className="flex-1 text-sm text-afya-charcoal">{tf(lang, "plan_editing", { name: editingPlan.name })}</p>
+              <button
+                onClick={() => setEditingPlan(null)}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-afya-muted hover:text-afya-charcoal"
+              >
+                <X className="w-3.5 h-3.5" strokeWidth={2} aria-hidden="true" />
+                {t("cancel_edit")}
+              </button>
+            </div>
+          )}
+
           <Card>
             <CardTitle>{t("what_planning")}</CardTitle>
             <div className="grid grid-cols-2 gap-2">
               {ACTIVITY_PROFILES.map((p) => (
                 <button
                   key={p.key}
-                  onClick={() => setActivity(p.key)}
+                  onClick={() => changed(setActivity)(p.key)}
                   aria-pressed={activity === p.key}
                   className={cn(
                     "rounded-xl border px-3 py-2.5 text-sm font-medium text-left transition-all",
@@ -220,7 +333,7 @@ export default function PlanPage() {
               {DURATIONS.map((d) => (
                 <button
                   key={d}
-                  onClick={() => setDuration(d)}
+                  onClick={() => changed(setDuration)(d)}
                   aria-pressed={duration === d}
                   className={cn(
                     "rounded-xl border px-4 py-2 text-sm font-semibold transition-all",
@@ -241,7 +354,7 @@ export default function PlanPage() {
               {[0, 1].map((offset) => (
                 <button
                   key={offset}
-                  onClick={() => setDayOffset(offset)}
+                  onClick={() => changed(setChosenDay)(offset)}
                   aria-pressed={dayOffset === offset}
                   className={cn(
                     "flex-1 rounded-xl border px-3 py-2 text-sm font-semibold transition-all",
@@ -262,12 +375,14 @@ export default function PlanPage() {
                 <label className="text-xs text-afya-muted block mb-1.5">{t("start_time")}</label>
                 <select
                   value={startHour}
-                  onChange={(e) => setStartHour(Number(e.target.value))}
+                  onChange={(e) => changed(setChosenStart)(Number(e.target.value))}
                   className="w-full rounded-lg border border-afya-border bg-white px-3 py-2 text-sm text-afya-charcoal focus:outline-none focus:ring-2 focus:ring-afya-green"
                   aria-label={t("start_time")}
                 >
                   {Array.from({ length: 18 }, (_, i) => i + 5).map((h) => (
-                    <option key={h} value={h}>{`${String(h).padStart(2, "0")}:00`}</option>
+                    <option key={h} value={h} disabled={dayOffset === 0 && nowHour !== null && h < nowHour}>
+                      {`${String(h).padStart(2, "0")}:00`}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -275,25 +390,23 @@ export default function PlanPage() {
                 <label className="text-xs text-afya-muted block mb-1.5">{t("end_time")}</label>
                 <select
                   value={endHour}
-                  onChange={(e) => setEndHour(Number(e.target.value))}
+                  onChange={(e) => changed(setEndHour)(Number(e.target.value))}
                   className="w-full rounded-lg border border-afya-border bg-white px-3 py-2 text-sm text-afya-charcoal focus:outline-none focus:ring-2 focus:ring-afya-green"
                   aria-label={t("end_time")}
                 >
                   {Array.from({ length: 18 }, (_, i) => i + 6).map((h) => (
-                    <option key={h} value={h}>{`${String(Math.min(h, 23)).padStart(2, "0")}:00`}</option>
+                    <option key={h} value={h} disabled={h <= startHour}>{`${String(h).padStart(2, "0")}:00`}</option>
                   ))}
                 </select>
               </div>
             </div>
             {user && (
               <div className="mt-3">
-                <label className="text-xs text-afya-muted block mb-1.5">
-                  {lang === "sw" ? "Jina la mpango (hiari)" : "Plan name (optional)"}
-                </label>
+                <label className="text-xs text-afya-muted block mb-1.5">{t("plan_name_label")}</label>
                 <input
                   value={planName}
                   onChange={(e) => setPlanName(e.target.value)}
-                  placeholder={lang === "sw" ? "Mfano: kazi yangu ya nje" : "e.g. my outdoor work"}
+                  placeholder={t("plan_name_placeholder")}
                   className="w-full rounded-lg border border-afya-border bg-white px-3 py-2 text-sm text-afya-charcoal focus:outline-none focus:ring-2 focus:ring-afya-green placeholder:text-afya-muted/50"
                 />
               </div>
@@ -343,17 +456,20 @@ export default function PlanPage() {
           {/* Result */}
           {!evaluating && result && (
             <>
-              {/* Regional-fallback notice, shown whenever the recommendation
-                  came from the real regional forecast (Open-Meteo), not the
-                  Conduit ground station: either because the station's own
-                  9h-ahead forecast can't reach this far (tomorrow), or
-                  because the station has gone quiet for longer than its own
-                  forecast horizon. Still a real forecast, just a coarser,
-                  wider-uncertainty one. */}
-              {source === "regional" && (
+              {/* Regional-model notice: the station's own forecast could not
+                  answer this window, so a coarser forecast with no station
+                  quality check did. */}
+              {result.source === "regional" && (
                 <div className="rounded-xl border border-afya-gold/40 bg-afya-gold/8 px-4 py-3 flex gap-2" role="status">
                   <AlertTriangle className="w-4 h-4 text-afya-gold shrink-0 mt-0.5" strokeWidth={1.8} aria-hidden="true" />
                   <p className="text-sm text-afya-charcoal">{t("plan_regional_notice")}</p>
+                </div>
+              )}
+
+              {result.searched_from && (
+                <div className="rounded-xl border border-afya-border bg-afya-canvas px-4 py-3 flex gap-2" role="status">
+                  <Info className="w-4 h-4 text-afya-muted shrink-0 mt-0.5" strokeWidth={1.8} aria-hidden="true" />
+                  <p className="text-sm text-afya-charcoal">{tf(lang, "plan_searched_from", { time: fmtTime(result.searched_from) })}</p>
                 </div>
               )}
 
@@ -372,24 +488,38 @@ export default function PlanPage() {
                   >
                     {fmtWindow(result.recommended.start, result.recommended.end)}
                   </div>
-                  <div className="text-white/60 text-sm mb-5">
-                    {lang === "sw" ? profileMeta.label_sw : profileMeta.label_en} · {duration} {t("minutes")}
+                  <div className="text-white/60 text-sm mb-4">
+                    {labelOf(result.activity)} · {result.duration_minutes} {t("minutes")} · {fmtDate(result.recommended.start)}
                   </div>
 
+                  {result.recommended.risk && result.recommended.peak_wbgt_c !== undefined && (
+                    <div className="flex flex-wrap items-center gap-2 mb-5">
+                      <RiskChip level={result.recommended.risk} size="sm" onDark />
+                      <span className="text-sm text-white/85">
+                        {tf(lang, "plan_window_peak", {
+                          wbgt: result.recommended.peak_wbgt_c.toFixed(1),
+                          band: bandLabel(result.recommended.risk),
+                        })}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Why */}
-                  <div className="space-y-1.5 mb-5">
-                    {result.recommended.reasons.map((r) => (
-                      <div key={r} className="flex items-center gap-2 text-sm text-white/85">
-                        <CheckCircle2
-                          className="w-4 h-4 shrink-0"
-                          strokeWidth={2}
-                          aria-hidden="true"
-                          style={{ color: "#F2B705" }}
-                        />
-                        {t(r)}
-                      </div>
-                    ))}
-                  </div>
+                  {result.recommended.reasons.length > 0 && (
+                    <div className="space-y-1.5 mb-5">
+                      {result.recommended.reasons.map((r) => (
+                        <div key={r} className="flex items-center gap-2 text-sm text-white/85">
+                          <CheckCircle2
+                            className="w-4 h-4 shrink-0"
+                            strokeWidth={2}
+                            aria-hidden="true"
+                            style={{ color: "#F2B705" }}
+                          />
+                          {t(r)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {result.alternative && (
                     <div className="rounded-xl bg-white/10 border border-white/15 px-4 py-3">
@@ -405,19 +535,26 @@ export default function PlanPage() {
                 <div className="h-1" style={{ background: "#F2B705" }} aria-hidden="true" />
               </div>
 
+              {coverageText(result) && (
+                <p className="text-xs text-afya-muted flex items-start gap-1.5">
+                  <Clock className="w-3.5 h-3.5 shrink-0 mt-px" strokeWidth={1.8} aria-hidden="true" />
+                  {coverageText(result)}
+                </p>
+              )}
+
               {/* Actions */}
               {user && (
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <button
                     onClick={savePlan}
-                    disabled={savingPlan}
+                    disabled={savingPlan || !resultFor}
                     className="inline-flex items-center gap-2 rounded-xl bg-afya-deep px-4 py-2.5 text-sm font-semibold text-white hover:bg-afya-deep/90 disabled:opacity-50 transition-colors"
                   >
                     {saveOk
                       ? <CheckCircle2 className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
                       : <Save className="w-4 h-4" strokeWidth={1.8} aria-hidden="true" />
                     }
-                    {saveOk ? t("plan_saved") : t("save_plan")}
+                    {saveOk ?? (editingPlan ? t("update_plan") : t("save_plan"))}
                   </button>
                   <a
                     href="#ai-section-plan"
@@ -425,6 +562,7 @@ export default function PlanPage() {
                   >
                     {t("why_this_time")}
                   </a>
+                  {saveError && <span className="text-sm text-afya-red" role="alert">{saveError}</span>}
                 </div>
               )}
               {!user && (
@@ -437,8 +575,8 @@ export default function PlanPage() {
                 </div>
               )}
 
-              {/* Quality note */}
-              {quality === "DEGRADED" && (
+              {/* Quality note: station forecasts only */}
+              {result.source === "station" && stationQuality === "DEGRADED" && (
                 <div className="rounded-xl border border-afya-gold/40 bg-afya-gold/8 px-4 py-3 flex gap-2" role="alert">
                   <AlertTriangle className="w-4 h-4 text-afya-gold shrink-0 mt-0.5" strokeWidth={1.8} aria-hidden="true" />
                   <p className="text-sm text-afya-charcoal">{t("quality_degraded_message")}</p>
@@ -455,11 +593,7 @@ export default function PlanPage() {
                   <Zap className="w-7 h-7 text-afya-green" strokeWidth={1.5} />
                 </div>
                 <p className="font-semibold text-afya-charcoal">{t("best_window_result")}</p>
-                <p className="text-sm text-afya-muted max-w-xs mx-auto">
-                  {lang === "sw"
-                    ? "Chagua shughuli, muda, na kipindi chako kinachopatikana. AFYA MAZINGIRA italinganisha madirisha yote."
-                    : "Select your activity, duration, and available window. AFYA MAZINGIRA will rank every candidate window."}
-                </p>
+                <p className="text-sm text-afya-muted max-w-xs mx-auto">{t("plan_empty")}</p>
               </div>
             </Card>
           )}
@@ -488,20 +622,27 @@ export default function PlanPage() {
               </Card>
             ) : (
               <div className="space-y-3">
-                {plans.map((plan) => (
-                  <Card key={plan.id} className="!p-4">
+                {plans.map((plan) => {
+                  const saved = plan.last_result?.recommended ? plan.last_result : null;
+                  return (
+                  <Card key={plan.id} className={cn("!p-4", editingPlan?.id === plan.id && "ring-2 ring-afya-green/40")}>
                     <div className="flex items-start gap-3 flex-wrap">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-semibold text-afya-charcoal text-sm truncate">{plan.name}</span>
                           <span className="text-xs text-afya-muted">{plan.duration_minutes} {t("minutes")}</span>
                         </div>
-                        {plan.last_result && (plan.last_result as BestTimeResult).recommended && (
-                          <div className="text-xs text-afya-green font-semibold mt-0.5">
-                            <Clock className="w-3 h-3 inline-block mr-1" aria-hidden="true" />
-                            {fmtWindow(
-                              (plan.last_result as BestTimeResult).recommended.start,
-                              (plan.last_result as BestTimeResult).recommended.end,
+                        {saved && (
+                          <div className="flex items-center gap-2 flex-wrap mt-1">
+                            <span className="text-xs text-afya-green font-semibold">
+                              <Clock className="w-3 h-3 inline-block mr-1" aria-hidden="true" />
+                              {fmtDate(saved.recommended.start)} · {fmtWindow(saved.recommended.start, saved.recommended.end)}
+                            </span>
+                            {saved.recommended.risk && <RiskChip level={saved.recommended.risk} size="sm" />}
+                            {saved.source === "regional" && (
+                              <span className="text-[10px] font-semibold uppercase tracking-wide text-afya-gold">
+                                {t("plan_source_regional")}
+                              </span>
                             )}
                           </div>
                         )}
@@ -509,17 +650,19 @@ export default function PlanPage() {
                       <div className="flex gap-1.5 shrink-0">
                         <button
                           onClick={() => rerunPlan(plan)}
+                          disabled={rerunning === plan.id}
                           title={t("rerun_forecast")}
-                          className="p-2 rounded-lg text-afya-muted hover:bg-afya-canvas hover:text-afya-charcoal transition-colors"
+                          className="p-2 rounded-lg text-afya-muted hover:bg-afya-canvas hover:text-afya-charcoal transition-colors disabled:opacity-50"
                           aria-label={t("rerun_forecast")}
                         >
-                          <RefreshCw className="w-4 h-4" strokeWidth={1.8} />
+                          <RefreshCw className={cn("w-4 h-4", rerunning === plan.id && "animate-spin")} strokeWidth={1.8} />
                         </button>
                         <button
                           onClick={() => loadPlanIntoEditor(plan)}
                           title={t("edit")}
                           className="p-2 rounded-lg text-afya-muted hover:bg-afya-canvas hover:text-afya-charcoal transition-colors"
                           aria-label={t("edit")}
+                          aria-pressed={editingPlan?.id === plan.id}
                         >
                           <Edit3 className="w-4 h-4" strokeWidth={1.8} />
                         </button>
@@ -542,7 +685,8 @@ export default function PlanPage() {
                       </div>
                     </div>
                   </Card>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -557,6 +701,7 @@ export default function PlanPage() {
     </div>
   );
 }
+
 
 // Inline Why section for plan results
 function PlanWhySection({ result, lang, t }: {
