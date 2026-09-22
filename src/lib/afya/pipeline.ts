@@ -16,8 +16,6 @@ import { evaluateQuality } from "./data-quality";
 import { groupStatus } from "./sentinel";
 import { JKUAT_COORDS } from "./constants";
 
-const DAYLIGHT_HOURS = [6, 19] as const;
-
 // AFYA MAZINGIRA Intelligence Pipeline
 // CONDUIT → QC → FEATURES → STATE → FORECAST → RISK → BEST-TIME → EXPLANATION
 // Fully deterministic and source-agnostic: live Conduit observations when
@@ -153,18 +151,15 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
   // Step 9: Best-Time (start clamped to the effective now so a stale
   // forecast never recommends an already-elapsed window)
   // People plan outdoor work and exercise in daylight, so the headline window
-  // comes from the forecast's daylight hours only, 06:00 to 19:00 local.
-  const daylight = forecast_series.filter((p) => {
-    const hour = (new Date(p.time).getUTCHours() + 3) % 24;
-    return hour >= DAYLIGHT_HOURS[0] && hour < DAYLIGHT_HOURS[1];
-  });
+  // lies between sunrise and sunset at the station (the engine's default).
   const best_time: BestTimeResult | null = findBestWindowFromNow(
-    daylight,
+    forecast_series,
     activityKey,
     durationMinutes,
     10, // 10-hour look-ahead window
     quality,
     effectiveNow,
+    { rainProbability: risk.rain_probability },
   );
 
   // Step 10: Contributors (deterministic feature importance proxy)
