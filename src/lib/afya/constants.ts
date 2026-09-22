@@ -115,6 +115,39 @@ export function stullWetBulb(tempC: number, rhPct: number): number {
 }
 
 /**
+ * Heat index from air temperature and relative humidity (%), by the US
+ * National Weather Service algorithm: Steadman's simple form, and the
+ * Rothfusz (1990) regression with its two humidity corrections once the
+ * average of the simple form and the air temperature reaches 80 degF.
+ * https://www.wpc.ncep.noaa.gov/html/heatindex_equation.shtml
+ */
+export function nwsHeatIndex(tempC: number, rhPct: number): number {
+  const t = (tempC * 9) / 5 + 32;
+  const simple = 0.5 * (t + 61.0 + (t - 68.0) * 1.2 + rhPct * 0.094);
+  let regression =
+    -42.379 +
+    2.04901523 * t +
+    10.14333127 * rhPct -
+    0.22475541 * t * rhPct -
+    6.83783e-3 * t * t -
+    5.481717e-2 * rhPct * rhPct +
+    1.22874e-3 * t * t * rhPct +
+    8.5282e-4 * t * rhPct * rhPct -
+    1.99e-6 * t * t * rhPct * rhPct;
+  // The regression overstates the index in very dry air and understates it in
+  // very humid air near 80 degF; both corrections apply only where the NWS
+  // says they do.
+  if (rhPct < 13 && t >= 80 && t <= 112) {
+    regression -= ((13 - rhPct) / 4) * Math.sqrt((17 - Math.abs(t - 95)) / 17);
+  }
+  if (rhPct > 85 && t >= 80 && t <= 87) {
+    regression += ((rhPct - 85) / 10) * ((87 - t) / 5);
+  }
+  const heatIndexF = (simple + t) / 2 >= 80 ? regression : simple;
+  return ((heatIndexF - 32) * 5) / 9;
+}
+
+/**
  * WBGT without solar load, ISO 7243: 0.7 x natural wet bulb + 0.3 x globe.
  * In shade the psychrometric wet bulb and the air temperature stand in for
  * the two. Direct sun adds to this, and the station's light sensor is not

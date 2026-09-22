@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { getCsvCoverage, getCsvRange, getCsvRows } from "../src/lib/afya/csv-source";
 import { parseUtc } from "../src/lib/afya/sources";
+import { audits } from "../src/lib/afya/sentinel";
 
 // The committed archive: one sampled minute about every 15 minutes, with each
 // rain gauge's running daily total (rg1tt) and its total for the day before (rg1tp).
@@ -65,6 +66,19 @@ test("from 1 July 2025 the UV index is read out of gauge 2's column, which has n
   // Every later record lacks gauge 2's running total rather than reading 0.
   const later = rows.filter((r) => parseUtc(r.ts) >= Date.parse("2025-07-07T00:00:00Z"));
   assert.ok(later.every((r) => r.rg2tt === null));
+});
+
+test("A02: the firmware heat index over the archive, against the NWS formula", () => {
+  const a02 = audits(series).A02_heat_index_vs_nws;
+  assert.equal(a02.slots, 44214);
+  assert.equal(a02.mae_c, 0.101);
+  assert.equal(a02.max_c, 1.058);
+  // The archive is cool: one slot in twelve reaches the heat the NWS formula
+  // is written for, and there the firmware agrees three times as closely.
+  assert.equal(a02.hot_from_c, 27);
+  assert.equal(a02.hot_slots, 3684);
+  assert.equal(a02.mae_hot_c, 0.034);
+  assert.ok(!("verdict" in a02), "A02 is reported, not judged");
 });
 
 test("gauge 2's rain before July 2025 comes from its running total", () => {

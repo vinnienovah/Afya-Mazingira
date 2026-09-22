@@ -1,5 +1,5 @@
 import type { DemoObservation } from "./demo-observations";
-import { stullWetBulb } from "./constants";
+import { nwsHeatIndex, stullWetBulb } from "./constants";
 import { EAT_OFFSET_MS, nairobiDate } from "./nairobi-day";
 
 // Station health: quality rules applied to every measured reading, a daily
@@ -31,6 +31,7 @@ export const SENTINEL_LIMITS = {
   suspect_group_penalty: 2,
   missing_minutes_per_point: 14.4, // 1 % of a day
   stull_max_mae_c: 0.1, // A01
+  heat_index_hot_c: 27, // A02: the heat the NWS index is built for
 } as const;
 
 // The specification's channel groups, less the ones this feed does not carry
@@ -474,6 +475,19 @@ export function audits(series: DemoObservation[]) {
   const stullDiff = wb.map((o) => Math.abs(o.wet_bulb_temp - stullWetBulb(o.temp_sht, o.humidity_sht)));
   const stullMae = stullDiff.length ? stullDiff.reduce((a, b) => a + b, 0) / stullDiff.length : null;
 
+  // A02. The NWS index is built for hot conditions and falls back to
+  // Steadman's simple form below them, so the agreement is reported twice:
+  // over every slot, and over the slots the index is meant for.
+  const heat = series
+    .filter((o) => measured(o, "temp_sht") && measured(o, "humidity_sht") && measured(o, "heat_idx"))
+    .map((o) => {
+      const nws = nwsHeatIndex(o.temp_sht, o.humidity_sht);
+      return { nws, diff: Math.abs(o.heat_idx - nws) };
+    });
+  const hot = heat.filter((h) => h.nws >= L.heat_index_hot_c);
+  const mae = (rows: { diff: number }[]) =>
+    rows.length ? Math.round((rows.reduce((s, h) => s + h.diff, 0) / rows.length) * 1000) / 1000 : null;
+
   const fw = wb.filter((o) => typeof o.firmware_wbgt === "number");
   const below = fw.filter((o) => (o.firmware_wbgt as number) < o.wet_bulb_temp);
   const farBelow = fw.filter((o) => (o.firmware_wbgt as number) < o.wet_bulb_temp - L.wbgt_below_wet_bulb_margin_c);
@@ -502,6 +516,14 @@ export function audits(series: DemoObservation[]) {
       max_c: stullDiff.length ? Math.round(Math.max(...stullDiff) * 1000) / 1000 : null,
       slots: stullDiff.length,
       verdict: stullMae !== null && stullMae <= L.stull_max_mae_c ? "matches Stull" : "does not match Stull",
+    },
+    A02_heat_index_vs_nws: {
+      mae_c: mae(heat),
+      max_c: heat.length ? Math.round(Math.max(...heat.map((h) => h.diff)) * 1000) / 1000 : null,
+      slots: heat.length,
+      mae_hot_c: mae(hot),
+      hot_slots: hot.length,
+      hot_from_c: L.heat_index_hot_c,
     },
     A03_firmware_wbgt_vs_wet_bulb: {
       below_pct: share(below, fw),

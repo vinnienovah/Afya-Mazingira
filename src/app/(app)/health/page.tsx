@@ -18,6 +18,10 @@ type Status = GroupStatus;
 interface Thermometers { pair: string; mean_abs_c: number; mean_signed_c: number; max_abs_c: number; slots: number }
 interface Audits {
   A01_wet_bulb_vs_stull: { mae_c: number | null; max_c: number | null; slots: number; verdict: string };
+  A02_heat_index_vs_nws: {
+    mae_c: number | null; max_c: number | null; slots: number;
+    mae_hot_c: number | null; hot_slots: number; hot_from_c: number;
+  };
   A03_firmware_wbgt_vs_wet_bulb: {
     below_pct: number | null; far_below_pct: number | null;
     far_below_night_pct: number | null; far_below_day_pct: number | null; slots: number; verdict: string;
@@ -296,6 +300,7 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
   const text = STRINGS[sw ? "sw" : "en"];
   const a03 = archive.audits.A03_firmware_wbgt_vs_wet_bulb;
   const a01 = archive.audits.A01_wet_bulb_vs_stull;
+  const a02 = archive.audits.A02_heat_index_vs_nws;
   const shtBmx = archive.audits.A05_thermometers.find((p) => p.pair === "temp_sht - temp_bmx");
 
   const dayUnit = sw ? "siku" : "days";
@@ -350,6 +355,10 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
       `The firmware wet bulb matches Stull (2011) to ${a01.mae_c?.toFixed(3) ?? "-"} °C on average, so it is sound and the app uses it.`,
       `Balbu nyevu ya programu dhibiti inalingana na Stull (2011) kwa wastani wa ${a01.mae_c?.toFixed(3) ?? "-"} °C, hivyo ni sahihi na programu inaitumia.`,
     ],
+    [
+      `The firmware heat index follows the NWS (Rothfusz) formula to ${a02.mae_hot_c?.toFixed(3) ?? "-"} °C on average from ${a02.hot_from_c} °C up, the heat that formula is built for, and to ${a02.mae_c?.toFixed(3) ?? "-"} °C over the whole record. Reported for information; nothing here needs changing.`,
+      `Kipimo cha joto cha programu dhibiti kinafuata fomula ya NWS (Rothfusz) kwa wastani wa ${a02.mae_hot_c?.toFixed(3) ?? "-"} °C kuanzia ${a02.hot_from_c} °C kwenda juu, joto ambalo fomula hiyo imeundwa kwa ajili yake, na kwa ${a02.mae_c?.toFixed(3) ?? "-"} °C katika kumbukumbu yote. Ni taarifa tu; hakuna la kurekebisha hapa.`,
+    ],
     ...(shtBmx
       ? ([[
           `The SHT thermometer reads ${signed(shtBmx.mean_signed_c)} against the BMX on average: a steady offset worth noting when comparing the two.`,
@@ -403,6 +412,20 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
                 <td className="py-2 pr-4 text-afya-muted">{sw ? "Balbu nyevu dhidi ya Stull (2011)" : "Wet bulb against Stull (2011)"}</td>
                 <td className="py-2 pr-4">{sw ? "tofauti ya wastani" : "mean difference"} {a01.mae_c?.toFixed(3)} °C</td>
                 <td className="py-2"><Verdict ok={a01.verdict === "matches Stull"} text={a01.verdict} /></td>
+              </tr>
+              <tr>
+                <th scope="row" className="py-2 pr-4 text-left font-semibold text-afya-charcoal">A02</th>
+                <td className="py-2 pr-4 text-afya-muted">
+                  {sw ? "Kipimo cha joto dhidi ya NWS (Rothfusz)" : "Heat index against the NWS (Rothfusz)"}
+                </td>
+                <td className="py-2 pr-4">
+                  {sw ? "tofauti ya wastani" : "mean difference"} {a02.mae_c?.toFixed(3) ?? "-"} °C
+                  {"; "}
+                  {sw
+                    ? `kuanzia ${a02.hot_from_c} °C ${a02.mae_hot_c?.toFixed(3) ?? "-"} °C`
+                    : `from ${a02.hot_from_c} °C up, ${a02.mae_hot_c?.toFixed(3) ?? "-"} °C`}
+                </td>
+                <td className="py-2 text-xs text-afya-muted">{sw ? "taarifa tu" : "report only"}</td>
               </tr>
               <tr>
                 <th scope="row" className="py-2 pr-4 text-left font-semibold text-afya-charcoal">A03</th>

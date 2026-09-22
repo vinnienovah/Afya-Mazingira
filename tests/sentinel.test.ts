@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { audits, checkReadings, dailyHealth, gaps, groupStatus, rainDayTotals } from "../src/lib/afya/sentinel";
 import { cleanAndGrid } from "../src/lib/afya/sources";
-import { stullWetBulb } from "../src/lib/afya/constants";
+import { nwsHeatIndex, stullWetBulb } from "../src/lib/afya/constants";
 import type { DemoObservation } from "../src/lib/afya/demo-observations";
 
 // 21:00 UTC is midnight in Nairobi.
@@ -195,6 +195,48 @@ test("the audits recognise a Stull wet bulb and a firmware WBGT below it", () =>
   assert.equal(a.A03_firmware_wbgt_vs_wet_bulb.below_pct, 100);
   assert.equal(a.A03_firmware_wbgt_vs_wet_bulb.verdict, "non-standard");
   assert.ok(checkReadings(series).some((h) => h.rule === "R16"));
+});
+
+test("the NWS heat index keeps its two branches and both humidity adjustments", () => {
+  const near = (got: number, want: number, what: string) =>
+    assert.ok(Math.abs(got - want) < 1e-6, `${what}: ${got}`);
+  near(nwsHeatIndex(20, 60), 19.622222, "Steadman's simple form, below 80 degF");
+  near(nwsHeatIndex(35, 40), 37.216351, "the Rothfusz regression");
+  // The adjustments are worth more than a degree in dry air and three
+  // quarters of one in saturated air, so dropping either would show here.
+  near(nwsHeatIndex(35, 5), 31.209325, "the regression less the dry adjustment");
+  near(nwsHeatIndex(28, 100), 36.378836, "the regression plus the humid adjustment");
+  // The switch at 80 degF is a step between two formulas, not a blend.
+  assert.ok(nwsHeatIndex(26.53, 60) - nwsHeatIndex(26.52, 60) > 0.7);
+});
+
+test("A02 reports the firmware heat index against the NWS one, and again in the heat it is built for", () => {
+  const exact = day((o) => ({ heat_idx: nwsHeatIndex(o.temp_sht, o.humidity_sht) }));
+  const cool = audits(exact).A02_heat_index_vs_nws;
+  assert.equal(cool.mae_c, 0);
+  assert.equal(cool.slots, 96);
+  // A day that never reaches 27 °C has nothing to say about a formula built
+  // for the heat, which is not the same as agreeing with it.
+  assert.equal(cool.hot_slots, 0);
+  assert.equal(cool.mae_hot_c, null);
+
+  const warm = flatDay((o) => {
+    const temp_sht = o.temp_sht + 12;
+    return {
+      temp_sht,
+      temp_bmx: temp_sht - 0.3,
+      temp_mcp: temp_sht - 0.2,
+      heat_idx: nwsHeatIndex(temp_sht, o.humidity_sht) + 0.5,
+    };
+  });
+  const hot = audits(warm).A02_heat_index_vs_nws;
+  assert.equal(hot.hot_slots, 96);
+  assert.equal(hot.mae_c, 0.5);
+  assert.equal(hot.mae_hot_c, 0.5);
+  assert.equal(hot.max_c, 0.5);
+  // Report only: no verdict, and the day still scores 100.
+  assert.ok(!("verdict" in hot));
+  assert.equal(dailyHealth(warm)[0].score, 100);
 });
 
 // Thresholds. Each rule is held at its limit and then pushed a hundredth past
