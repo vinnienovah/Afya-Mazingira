@@ -34,6 +34,7 @@ const L: Record<Lang, Record<string, string>> = {
     problem_sub: "A person does not need temperature, humidity and wind. They need to know whether conditions are becoming more demanding, and what to change.",
     problem_card_a_title: "A conventional dashboard",
     problem_card_a_note: "The user still has to work out what these numbers mean.",
+    problem_card_a_tag: "Illustrative values",
     problem_card_b_title: "AFYA MAZINGIRA",
     problem_card_b_note: "Situation → meaning → action → explanation.",
     problem_card_b_tag: "Example output",
@@ -79,6 +80,7 @@ const L: Record<Lang, Record<string, string>> = {
     problem_sub: "Mtu hahitaji joto, unyevu na upepo pekee. Anahitaji kujua kama hali inazidi kuwa ngumu, na nini abadilishe.",
     problem_card_a_title: "Dashibodi ya kawaida",
     problem_card_a_note: "Mtumiaji bado lazima afikiri nini maana ya namba hizi.",
+    problem_card_a_tag: "Thamani za mfano",
     problem_card_b_title: "AFYA MAZINGIRA",
     problem_card_b_note: "Hali → maana → hatua → maelezo.",
     problem_card_b_tag: "Mfano wa matokeo",
@@ -129,15 +131,39 @@ const FEATURES = [
   { icon: TrendingUp, href: "/forecast", en: "Forecast", sw: "Utabiri", d_en: "Measured history, dashed forecast and calibrated uncertainty bands.", d_sw: "Historia iliyopimwa, utabiri na utata uliorekebishwa." },
   { icon: CalendarCheck, href: "/plan", en: "Plan My Activity", sw: "Panga Shughuli", d_en: "Deterministic best-time windows for your activity and duration.", d_sw: "Madirisha bora ya kisayansi kwa shughuli na muda wako." },
   { icon: MapIcon, href: "/map", en: "Risk Map", sw: "Ramani ya Hatari", d_en: "Regional environmental outlook with full provenance for every layer.", d_sw: "Muonekano wa mazingira wa kikanda wenye vyanzo kamili." },
-  { icon: History, href: "/replay", en: "Historical Replay", sw: "Marudio", d_en: "Replay any day with the future hidden, then reveal what actually happened.", d_sw: "Rudia siku yoyote na wakati ujao umejifichwa, kisha funua yaliyotokea." },
+  { icon: History, href: "/climate?tab=replay", en: "Historical Replay", sw: "Marudio", d_en: "Replay any day with the future hidden, then reveal what actually happened.", d_sw: "Rudia siku yoyote na wakati ujao umejifichwa, kisha funua yaliyotokea." },
   { icon: Building2, href: "/operations", en: "Operations", sw: "Uendeshaji", d_en: "A lightweight environmental command center for institutional teams.", d_sw: "Kitovu cha amri cha mazingira kwa timu za taasisi." },
 ];
 
 const PROVENANCE = [
-  { icon: Radio, label: "GROUND MEASUREMENT", source: "Conduit", meta: "~15 min · JKUAT/Juja station", d_en: "Local temperature, humidity, pressure, wind, light and rain. WBGT is computed from its wet bulb and air temperature.", d_sw: "Joto, unyevu, shinikizo, upepo, mwanga na mvua. WBGT hukokotolewa kutoka balbu nyevu na joto la hewa.", color: "#006B3C" },
-  { icon: Wind, label: "REGIONAL MODEL", source: "ERA5-Land", meta: "~9 km · hourly", d_en: "The wider atmospheric background behind local-versus-regional anomalies.", d_sw: "Mandhari ya anga ya kikanda kwa tofauti za kimaeneo na kikanda.", color: "#3786B5" },
-  { icon: Satellite, label: "SATELLITE-DERIVED", source: "Sentinel-2", meta: "10 m vegetation", d_en: "Vegetation (NDVI) by county, always shown with real acquisition dates.", d_sw: "Uoto (NDVI) kwa kaunti, pamoja na tarehe halisi za uchukuzi.", color: "#247B78" },
-  { icon: CloudRain, label: "HISTORICAL CLIMATE", source: "ERA5-Land", meta: "daily · ~9 km", d_en: "Rainfall memory: 7-day and 30-day totals against climatology.", d_sw: "Kumbukumbu ya mvua: jumla ya siku 7 na 30 dhidi ya tabia ya hali ya hewa.", color: "#68756F" },
+  {
+    icon: Radio, label_en: "GROUND MEASUREMENT", label_sw: "KIPIMO CHA ARDHINI", source: "Conduit",
+    meta_en: "~15 min · JKUAT/Juja station", meta_sw: "~dk 15 · kituo cha JKUAT/Juja",
+    d_en: "Local temperature, humidity, pressure, wind, light and rain. WBGT is computed from its wet bulb and air temperature.",
+    d_sw: "Joto, unyevu, shinikizo, upepo, mwanga na mvua. WBGT hukokotolewa kutoka balbu nyevu na joto la hewa.",
+    color: "#006B3C",
+  },
+  {
+    icon: Wind, label_en: "REGIONAL MODEL", label_sw: "MFUMO WA KIKANDA", source: "ERA5",
+    meta_en: "~28 km · hourly · about 5 days behind", meta_sw: "~km 28 · kila saa · huchelewa takriban siku 5",
+    d_en: "The regional background for the local-versus-regional comparison, and the 7-day and 30-day rainfall totals.",
+    d_sw: "Mandhari ya kikanda kwa kulinganisha kituo na eneo pana, na jumla ya mvua ya siku 7 na 30.",
+    color: "#3786B5",
+  },
+  {
+    icon: CloudRain, label_en: "REGIONAL FORECAST", label_sw: "UTABIRI WA KIKANDA", source: "Open-Meteo",
+    meta_en: "hourly · Risk Map counties", meta_sw: "kila saa · kaunti za Ramani ya Hatari",
+    d_en: "Temperature, humidity and rain for each county on the Risk Map, and the outlook used to plan tomorrow.",
+    d_sw: "Joto, unyevu na mvua kwa kila kaunti kwenye Ramani ya Hatari, na utabiri unaotumika kupanga kesho.",
+    color: "#68756F",
+  },
+  {
+    icon: Satellite, label_en: "SATELLITE-DERIVED", label_sw: "KUTOKA SAYETI", source: "Sentinel-2",
+    meta_en: "10 m vegetation", meta_sw: "mimea · m 10",
+    d_en: "Vegetation (NDVI) near each county centre, when the Copernicus service answers. Blank when it does not.",
+    d_sw: "Uoto (NDVI) karibu na katikati ya kila kaunti, huduma ya Copernicus inapojibu. Tupu isipojibu.",
+    color: "#247B78",
+  },
 ];
 
 const NON_GOALS = [
@@ -226,7 +252,7 @@ function LiveStatus({ copy }: { copy: Record<string, string> }) {
       ? { dot: "bg-afya-green", text: "text-afya-green", label: lang === "sw" ? "MOJA KWA MOJA · CONDUIT" : "LIVE · CONDUIT" }
       : data.data_source === "CONDUIT_ARCHIVE"
         ? { dot: "bg-[#247B78]", text: "text-[#247B78]", label: lang === "sw" ? "KUMBUKUMBU YA KITUO" : "STATION ARCHIVE" }
-        : { dot: "bg-afya-gold", text: "text-afya-gold", label: "DEMO MODE" };
+        : { dot: "bg-afya-gold", text: "text-afya-gold", label: lang === "sw" ? "HALI YA MFANO" : "DEMO MODE" };
 
   return (
     <div className="inline-flex flex-wrap items-center gap-x-4 gap-y-2 rounded-full border border-white/15 bg-white/5 px-4 py-2.5 backdrop-blur-sm" role="status" aria-label={copy.live_label}>
@@ -368,13 +394,16 @@ export default function Landing() {
         <div className="mx-auto max-w-6xl px-4 pb-16 pt-10 sm:px-6 sm:pb-24">
         <div className="grid gap-5 lg:grid-cols-2">
           {/* Conventional dashboard */}
-          <div className="rounded-2xl border border-afya-border bg-white/60 p-6 sm:p-7">
+          <div className="relative rounded-2xl border border-afya-border bg-white/60 p-6 sm:p-7">
+            <span className="absolute -top-2.5 right-5 rounded-full border border-afya-border bg-afya-canvas px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-afya-muted">
+              {c.problem_card_a_tag}
+            </span>
             <h3 className="text-sm font-semibold text-afya-muted">{c.problem_card_a_title}</h3>
             <div className="mt-5 space-y-3 opacity-70">
-              {[
-                ["Temperature", "29°C"], ["Humidity", "48%"], ["Wind", "1.5 m/s"],
-                ["Pressure", "850 hPa"], ["Rain", "0 mm"],
-              ].map(([k, v]) => (
+              {(lang === "sw"
+                ? [["Joto", "29°C"], ["Unyevu", "48%"], ["Upepo", "1.5 m/s"], ["Shinikizo", "850 hPa"], ["Mvua", "0 mm"]]
+                : [["Temperature", "29°C"], ["Humidity", "48%"], ["Wind", "1.5 m/s"], ["Pressure", "850 hPa"], ["Rain", "0 mm"]]
+              ).map(([k, v]) => (
                 <div key={k} className="flex items-center justify-between border-b border-afya-border/60 pb-2.5 text-sm">
                   <span className="text-afya-muted">{k}</span>
                   <span className="font-semibold tabular-nums text-afya-charcoal">{v}</span>
@@ -392,7 +421,7 @@ export default function Landing() {
             <h3 className="text-sm font-semibold text-afya-green">{c.problem_card_b_title}</h3>
             <div className="mt-5 space-y-4">
               <div>
-                <div className="text-2xl font-bold text-afya-charcoal sm:text-3xl">Rapid Warming</div>
+                <div className="text-2xl font-bold text-afya-charcoal sm:text-3xl">{lang === "sw" ? STATES[1].name_sw : STATES[1].name}</div>
                 <p className="mt-1 text-sm text-afya-muted">
                   {lang === "sw"
                     ? "Inaendelea kuelekea hali ya joto na mionzi mikali."
@@ -566,10 +595,10 @@ export default function Landing() {
                 </span>
                 <div className="min-w-0">
                   <p className="text-[10px] font-bold uppercase tracking-[0.15em]" style={{ color: p.color }}>
-                    {p.label}
+                    {lang === "sw" ? p.label_sw : p.label_en}
                   </p>
                   <h3 className="mt-1 text-base font-bold text-afya-charcoal">{p.source}</h3>
-                  <p className="mt-0.5 text-xs font-medium text-afya-muted">{p.meta}</p>
+                  <p className="mt-0.5 text-xs font-medium text-afya-muted">{lang === "sw" ? p.meta_sw : p.meta_en}</p>
                   <p className="mt-2 text-sm leading-relaxed text-afya-muted">
                     {lang === "sw" ? p.d_sw : p.d_en}
                   </p>

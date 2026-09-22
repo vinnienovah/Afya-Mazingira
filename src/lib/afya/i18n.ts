@@ -391,6 +391,8 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     chirps_prov: "Rainfall climatology · UCSB CHC",
     sentinel_prov: "Land surface observation · ESA Copernicus",
     jkuat_prov: "Proof-of-concept environment · JKUAT / Juja, Kenya",
+    about_examples_note: "Illustrative users and what they could do with the app. Not real case studies.",
+    illustrative: "ILLUSTRATIVE",
 
     // Errors
     error_generic: "Something went wrong. Please try again.",
@@ -634,7 +636,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     quality_poor: "MBAYA",
     updated_ago: "Imesasishwa",
     min_ago: "dakika zilizopita",
-    demo_mode: "HALI YA ONYO",
+    demo_mode: "HALI YA MFANO",
     demo_notice: "Inaonyesha data ya mfano, si uchunguzi wa moja kwa moja",
     conduit_archive_badge: "KUMBUKUMBU YA KITUO",
     conduit_live_badge: "MOJA KWA MOJA · CONDUIT",
@@ -985,6 +987,8 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     chirps_prov: "Uchunguzi wa mvua wa kihistoria · UCSB CHC",
     sentinel_prov: "Uchunguzi wa uso wa ardhi · ESA Copernicus",
     jkuat_prov: "Mazingira ya uthibitisho wa dhana · JKUAT / Juja, Kenya",
+    about_examples_note: "Watumiaji wa mfano na wanachoweza kufanya na programu. Si visa halisi.",
+    illustrative: "MFANO TU",
 
     error_generic: "Hitilafu imetokea. Tafadhali jaribu tena.",
     error_conduit: "Uchunguzi wa sasa wa Conduit hauwezi kusasishwa. Uchunguzi wa mwisho uliokaguliwa unaonyeshwa. AFYA MAZINGIRA imepunguza kwa muda uhakika wa mapendekezo.",
