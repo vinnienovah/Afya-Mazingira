@@ -1,0 +1,41 @@
+{
+  "formula": "GHI = (IR counts - dark floor) * (a + b * (1 - mu)), mu = hourly mean cos(solar zenith)",
+  "dark_floor_counts": 253.0,
+  "a": 0.135251,
+  "b": 0.098669,
+  "reference": "ERA5 hourly shortwave radiation, Open-Meteo archive API (models=era5), grid -1.0, 37.0",
+  "first_day": "2026-08-28",
+  "last_day": "2026-09-12",
+  "n_days": 10,
+  "n_hours": 110,
+  "held_out": {
+    "daylight": {
+      "n_hours": 110,
+      "rmse_wm2": 154.9,
+      "mae_wm2": 115.5,
+      "bias_wm2": -40.8,
+      "r2": 0.674
+    },
+    "high_sun": {
+      "n_hours": 73,
+      "rmse_wm2": 175.9,
+      "mae_wm2": 137.6,
+      "bias_wm2": -49.4,
+      "r2": 0.299
+    },
+    "clear_reference_sky": {
+      "n_hours": 14,
+      "rmse_wm2": 79.3,
+      "mae_wm2": 62.8,
+      "bias_wm2": -39.4,
+      "r2": 0.914
+    }
+  },
+  "provenance": {
+    "copied_from": "conduit-app/config/solar_calibration.json",
+    "fitted_by": "conduit-app/src/joto_guard/solar_calibration.py, least squares on hourly means of the organiser one-minute exports",
+    "sensor": "SI1145 infrared channel, Conduit@Empathy1, -1.099736 37.014528",
+    "held_out_method": "each of the 10 days left out of the fit in turn and predicted",
+    "not_refitted_here": "values are copied unchanged; refitting belongs to the Python project that owns the reference join"
+  }
+}
