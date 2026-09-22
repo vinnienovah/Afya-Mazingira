@@ -134,7 +134,9 @@ test("a replayed archive day is revealed against the archive's own readings", as
   // Every frame starts from its own hour's data, not one frame repeated.
   assert.equal(new Set(frames.map((f) => f.observed_at)).size, 13);
   const record = getCsvRange("2026-09-01T00:00:00Z", "2026-09-02T00:00:00Z");
-  const measured = new Map(record.filter((o) => !o.imputed?.length).map((o) => [o.ts, o.wet_bulb_globe_temp]));
+  const wbgtMeasured = (o: (typeof record)[number]) =>
+    !["temp_sht", "humidity_sht", "wet_bulb_temp"].some((f) => o.imputed?.includes(f));
+  const measured = new Map(record.filter(wbgtMeasured).map((o) => [o.ts, o.wet_bulb_globe_temp]));
   let compared = 0;
   for (const c of frames.flatMap((f) => f.checks)) {
     if (c.recorded === null) continue;

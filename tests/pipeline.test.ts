@@ -77,11 +77,12 @@ test("the situation gives the heat band now beside the band forecast for +3 h", 
 });
 
 test("the current reading lists the fields that were filled in rather than measured", async () => {
-  // The station sent the missing-value code for the gust in this reading.
+  // The station sent the missing-value code for the gust in this reading, and
+  // since July 2025 the records carry no running total for gauge 2.
   const gustMissing = await situationAt("2025-10-14T03:48:04Z");
-  assert.deepEqual(gustMissing.current.imputed, ["wind_gust"]);
+  assert.deepEqual(gustMissing.current.imputed, ["rg2", "wind_gust"]);
   const complete = await situationAt("2026-07-15T06:00:00Z");
-  assert.deepEqual(complete.current.imputed, []);
+  assert.deepEqual(complete.current.imputed, ["rg2"]);
 });
 
 test("a replayed window never starts before the replay's own clock", async () => {

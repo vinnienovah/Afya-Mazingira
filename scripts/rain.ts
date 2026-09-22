@@ -2,22 +2,14 @@
 // fitted by logistic regression on the committed archive and tested month by
 // month the same way as the WBGT forecast.
 //
-// Rain comes from the gauge's own counters, not the sampled one-minute rg1
-// values, which miss most of it. rg1tt is the running total for the gauge
-// day, which starts at 06:00 UTC, and rg1tp is the previous day's final total.
-// The rain between two readings is the rise in rg1tt; across the reset it is
-// what the old day added after the earlier reading (rg1tp minus that reading's
-// rg1tt) plus the new day's rg1tt so far.
+// Rain comes from the cleaned grid, whose rg1 is the rise in gauge 1's own
+// daily counter over each slot (see cleanAndGrid), not the sampled one-minute
+// values, which miss most of it.
 
-import fs from "fs";
-import path from "path";
 import { isMeasured, rainInputs, RAIN_FEATURES } from "../src/lib/afya/feature-engine";
 import { round, solve } from "./ridge";
 import type { Archive } from "./forecast-models";
 
-const SLOT_MS = 15 * 60 * 1000;
-const DAY_MS = 86_400_000;
-const GAUGE_DAY_START_MS = 6 * 3600 * 1000;
 // The gauge tips every 0.2 mm, so this means at least one tip.
 const WET_MM = 0.1;
 const AHEAD_SLOTS = 12;
@@ -35,65 +27,9 @@ export const RAIN_CANDIDATES: Record<string, readonly RainFeature[]> = {
   weather_and_season: RAIN_FEATURES,
 };
 
-interface GaugeReading {
-  ms: number;
-  total: number;
-  prior: number;
-}
-
-function csvPath(): string {
-  return process.env.CONDUIT_CSV_PATH
-    ? path.resolve(process.env.CONDUIT_CSV_PATH)
-    : path.join(process.cwd(), "data", "conduit_master_2025_2026.csv");
-}
-
-function reading(v: string | undefined): number {
-  if (v === undefined || v.trim() === "") return NaN;
-  const x = Number(v);
-  return x === -999.9 ? NaN : x;
-}
-
-/** Gauge 1's counters from every archive row, in time order. */
-export function readGauge(): GaugeReading[] {
-  const lines = fs.readFileSync(csvPath(), "utf8").split("\n");
-  const header = lines[0].split(",").map((h) => h.trim());
-  const [ts, total, prior] = ["ts", "rg1tt", "rg1tp"].map((c) => header.indexOf(c));
-  const rows: GaugeReading[] = [];
-  for (const line of lines.slice(1)) {
-    if (!line.trim()) continue;
-    const cols = line.split(",");
-    const ms = Date.parse(cols[ts]);
-    if (Number.isFinite(ms)) rows.push({ ms, total: reading(cols[total]), prior: reading(cols[prior]) });
-  }
-  return rows.sort((x, y) => x.ms - y.ms);
-}
-
-const gaugeDay = (ms: number) => Math.floor((ms - GAUGE_DAY_START_MS) / DAY_MS);
-
-/** Rain (mm) between two readings of the counters, or null when it cannot be known. */
-export function rainBetween(earlier: GaugeReading, later: GaugeReading): number | null {
-  if (!Number.isFinite(earlier.total) || !Number.isFinite(later.total)) return null;
-  const days = gaugeDay(later.ms) - gaugeDay(earlier.ms);
-  if (days === 0) return Math.max(0, later.total - earlier.total);
-  if (days === 1 && Number.isFinite(later.prior)) return Math.max(0, later.prior - earlier.total) + later.total;
-  return null;
-}
-
-/**
- * Rain in each 15-minute slot of the grid: what fell since the previous
- * reading, put in the slot of the reading that recorded it. NaN where the
- * counters cannot say.
- */
-export function rainBySlot(a: Archive, gauge: GaugeReading[]): number[] {
-  const slot0 = Math.floor(a.ms[0] / SLOT_MS);
-  const rain = new Array<number>(a.series.length).fill(0);
-  for (let k = 1; k < gauge.length; k++) {
-    const i = Math.floor(gauge[k].ms / SLOT_MS) - slot0;
-    if (i < 0 || i >= rain.length) continue;
-    const mm = rainBetween(gauge[k - 1], gauge[k]);
-    rain[i] = mm === null ? NaN : rain[i] + mm;
-  }
-  return rain;
+/** Rain in each slot of the grid, NaN where gauge 1 has no reading. */
+export function slotRain(a: Archive): number[] {
+  return a.series.map((o) => (o.imputed?.includes("rg1") ? NaN : o.rg1));
 }
 
 export interface RainSamples {
@@ -213,7 +149,7 @@ const monthOf = (a: Archive, i: number) => a.month[i];
  * beats each month's own frequency.
  */
 export function fitRain(a: Archive, months: string[]) {
-  const rain = rainBySlot(a, readGauge());
+  const rain = slotRain(a);
   const s = rainSamples(a, rain);
   const all = s.idx.map((_, r) => r);
   const baseRate = s.y.reduce((x, y) => x + y, 0) / s.y.length;

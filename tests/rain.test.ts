@@ -8,34 +8,18 @@ import {
   fitLogistic,
   predictLogistic,
   RAIN_CANDIDATES,
-  rainBetween,
-  rainBySlot,
   rainSamples,
-  readGauge,
+  slotRain,
 } from "../scripts/rain";
 
 const at = (iso: string) => Date.parse(iso);
 
-test("rain between two readings is the rise in the day's counter, across the 06:00 UTC reset too", () => {
-  assert.equal(rainBetween({ ms: at("2025-11-02T14:00:00Z"), total: 1.0, prior: 0 }, { ms: at("2025-11-02T14:15:00Z"), total: 1.6, prior: 0 })!.toFixed(1), "0.6");
-  // 0.4 mm more fell before the reset (the day ended on 18.6), then 0.4 mm after it.
-  const across = rainBetween(
-    { ms: at("2025-06-20T05:54:00Z"), total: 18.2, prior: 0 },
-    { ms: at("2025-06-20T06:09:00Z"), total: 0.4, prior: 18.6 },
-  );
-  assert.equal(across!.toFixed(1), "0.8");
-  assert.equal(rainBetween({ ms: at("2025-06-20T05:54:00Z"), total: 3, prior: 0 }, { ms: at("2025-06-22T07:00:00Z"), total: 0, prior: 1 }), null);
-});
-
 const a = loadArchive();
-const gauge = readGauge();
-const rain = rainBySlot(a, gauge);
+const rain = slotRain(a);
 
-test("the counters give about 1,200 mm over the archive, some 16 times what the sampled minutes add up to", () => {
-  const counters = rain.filter((v) => !Number.isNaN(v)).reduce((x, y) => x + y, 0);
-  const sampled = a.series.reduce((x, o) => x + o.rg1, 0);
-  assert.ok(counters > 1150 && counters < 1250, `${counters}`);
-  assert.ok(counters / sampled > 12, `${counters} vs ${sampled}`);
+test("the model learns from gauge 1's counter rain, about 1,200 mm over the archive", () => {
+  const total = rain.filter((v) => !Number.isNaN(v)).reduce((x, y) => x + y, 0);
+  assert.ok(total > 1150 && total < 1250, `${total}`);
 });
 
 const samples = rainSamples(a, rain);
