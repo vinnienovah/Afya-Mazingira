@@ -4,6 +4,7 @@
 
 import { getObservationSeries } from "./sources";
 import { getStationDailyRain, getStationHistory } from "./station-history";
+import { STATION_HISTORY_WAIT_MS, within } from "./wait";
 import {
   getRegionalDaily,
   getRegionalSoilMoisture,
@@ -84,8 +85,8 @@ export function assembleFarmInputs(nowMs: number, sources: FarmSources): FarmInp
 
 export async function loadFarmInputs(nowIso: string = new Date().toISOString()): Promise<FarmInputs | null> {
   const [history, stationRain, regional, soil] = await Promise.all([
-    getStationHistory(HISTORY_DAYS, nowIso).catch(() => null),
-    getStationDailyRain(RAIN_DAYS, nowIso).catch(() => null),
+    within(getStationHistory(HISTORY_DAYS, nowIso).catch(() => null), STATION_HISTORY_WAIT_MS),
+    within(getStationDailyRain(RAIN_DAYS, nowIso).catch(() => null), STATION_HISTORY_WAIT_MS),
     getRegionalDaily(),
     getRegionalSoilMoisture(),
   ]);
@@ -94,5 +95,5 @@ export async function loadFarmInputs(nowIso: string = new Date().toISOString()):
     const live = await getObservationSeries(nowIso, 30).catch(() => null);
     station = live && live.source !== "demo" ? live.series : null;
   }
-  return assembleFarmInputs(Date.parse(nowIso), { station, stationRain, regional, soil });
+  return assembleFarmInputs(Date.parse(nowIso), { station, stationRain: stationRain ?? null, regional, soil });
 }

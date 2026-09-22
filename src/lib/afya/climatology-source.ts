@@ -1,5 +1,6 @@
 import { getCsvCoverage, getCsvRange } from "./csv-source";
 import { getStationHistory } from "./station-history";
+import { STATION_HISTORY_WAIT_MS, within } from "./wait";
 import { CLIMATOLOGY_DAYS, computeClimatology, isComplete, type Climatology, type ClimatologySource } from "./climatology";
 
 // Where the forecast's usual WBGT by time of day comes from. A forecast made
@@ -12,8 +13,17 @@ import { CLIMATOLOGY_DAYS, computeClimatology, isComplete, type Climatology, typ
 const DAY_MS = 86_400_000;
 const CALENDAR_HALF_WIDTH_DAYS = 15;
 const CACHE_LIMIT = 48;
+// A live forecast that fell back because the station's history was not ready
+// in time tries again after this long.
+const PROVISIONAL_TTL_MS = 5 * 60_000;
 
-const cache = new Map<number, Promise<Climatology | null>>();
+interface Entry {
+  at: number;
+  provisional: boolean;
+  value: Promise<Climatology | null>;
+}
+
+const cache = new Map<number, Entry>();
 
 /**
  * The usual WBGT by time of day for a forecast made at `originIso`, or null
@@ -23,16 +33,20 @@ const cache = new Map<number, Promise<Climatology | null>>();
 export function getClimatology(originIso: string): Promise<Climatology | null> {
   const originMs = Date.parse(originIso);
   const hour = Math.floor(originMs / 3600_000);
-  let entry = cache.get(hour);
-  if (!entry) {
-    entry = load(originMs).catch((err) => {
-      console.warn("[afya] climatology unavailable:", (err as Error).message);
-      return null;
-    });
-    cache.set(hour, entry);
-    if (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value!);
-  }
-  return entry;
+  const held = cache.get(hour);
+  if (held && !(held.provisional && Date.now() - held.at > PROVISIONAL_TTL_MS)) return held.value;
+
+  const entry: Entry = { at: Date.now(), provisional: false, value: Promise.resolve(null) };
+  entry.value = load(originMs, () => {
+    entry.provisional = true;
+  }).catch((err) => {
+    console.warn("[afya] climatology unavailable:", (err as Error).message);
+    return null;
+  });
+  cache.delete(hour);
+  cache.set(hour, entry);
+  if (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value!);
+  return entry.value;
 }
 
 function fromArchive(ranges: [number, number][], source: ClimatologySource): Climatology | null {
@@ -54,7 +68,7 @@ function calendarRanges(originMs: number, firstYear: number, lastYear: number): 
   return ranges;
 }
 
-async function load(originMs: number): Promise<Climatology | null> {
+async function load(originMs: number, markProvisional: () => void): Promise<Climatology | null> {
   const coverage = getCsvCoverage();
   const minMs = coverage ? Date.parse(coverage.minIso) : NaN;
   const maxMs = coverage ? Date.parse(coverage.maxIso) : NaN;
@@ -66,7 +80,8 @@ async function load(originMs: number): Promise<Climatology | null> {
     const archive = fromArchive([trailing], "archive");
     if (archive) return archive;
   } else if (!coverage || originMs > maxMs) {
-    const history = await getStationHistory(CLIMATOLOGY_DAYS).catch(() => null);
+    const history = await within(getStationHistory(CLIMATOLOGY_DAYS).catch(() => null), STATION_HISTORY_WAIT_MS);
+    if (history === undefined) markProvisional();
     if (history) {
       const c = computeClimatology(history.series, [trailing], "station");
       if (isComplete(c)) return c;
