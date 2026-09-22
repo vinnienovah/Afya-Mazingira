@@ -28,6 +28,7 @@ interface Audits {
   };
   A05_thermometers: Thermometers[];
 }
+interface DeviceCodes { reported: boolean; codes: { code: number; slots: number }[]; note: string }
 interface Archive {
   first: string;
   last: string;
@@ -44,6 +45,7 @@ interface Archive {
     status: Status; mean_score_if_counted: number; best_score_if_counted: number; days_below_80_if_counted: number;
   };
   audits: Audits;
+  device_codes: DeviceCodes;
   gaps: { over_one_hour: number; longest: { from: string; to: string; hours: number } | null };
   days: { date: string; score: number; bad: string[]; suspect: string[]; missing_minutes: number }[];
 }
@@ -59,6 +61,7 @@ interface HealthResponse {
     missing_minutes: number;
     groups: { group: string; status: Status; rules: string[]; empty_channels: string[]; measured_share: number }[];
     audits: Audits;
+    device_codes: DeviceCodes;
     firmware_below_wet_bulb_now: boolean | null;
   };
 }
@@ -95,6 +98,7 @@ const GROUP_NAMES: Record<string, [string, string]> = {
   rain_gauge_2: both("health_group_rain_gauge_2"),
   gust_direction: both("health_group_gust_direction"),
   battery: both("health_group_battery"),
+  device_code: both("health_group_device_code"),
 };
 
 // A group the feed cannot judge, or that sends nothing, is grey: neither is a fault.
@@ -130,6 +134,7 @@ const RULES: [string, string, string][] = [
   ["R12", ...both("health_rule_r12")],
   ["R13", ...both("health_rule_r13")],
   ["R14", ...both("health_rule_r14")],
+  ["R15", ...both("health_rule_r15")],
   ["R16", "The firmware WBGT is more than 1.5 °C below the wet bulb", "WBGT ya programu dhibiti iko chini ya joto la balbu nyevu kwa zaidi ya 1.5 °C"],
 ];
 
@@ -174,6 +179,8 @@ export default function StationHealthPage() {
     : [];
   const rainNotJudged = !!live?.groups.some((g) => g.group.startsWith("rain_gauge") && g.status === "not_judged");
   const batteryMissing = !!live?.groups.some((g) => g.group === "battery" && g.status === "not_reported");
+  const codesMissing = !!live?.groups.some((g) => g.group === "device_code" && g.status === "not_reported");
+  const codesSeen = live?.device_codes.codes ?? [];
 
   return (
     <div className="max-w-5xl mx-auto space-y-5">
@@ -254,6 +261,15 @@ export default function StationHealthPage() {
           )}
           {rainNotJudged && <p className="mt-3 text-xs text-afya-muted">{t("health_chords_rain_note")}</p>}
           {batteryMissing && <p className="mt-3 text-xs text-afya-muted">{t("health_battery_note")}</p>}
+          {codesMissing && <p className="mt-3 text-xs text-afya-muted">{t("health_device_code_note")}</p>}
+          {codesSeen.length > 0 && (
+            <p className="mt-3 text-xs text-afya-muted">
+              {sw ? "Misimbo ya afya ya kifaa" : "Device health codes"}:{" "}
+              {codesSeen.map((c) => `${c.code} (${c.slots})`).join(", ")}
+              {" - "}
+              {sw ? "maana haijaandikwa" : live.device_codes.note}
+            </p>
+          )}
           {unlisted.length > 0 && (
             <p className="mt-3 text-xs text-afya-muted">
               {sw
@@ -313,6 +329,7 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
   };
 
   const gustShare = archive.gust_direction_copy.share_pct ?? 0;
+  const codeList = archive.device_codes.codes.map((c) => `${c.code} (${c.slots})`).join(", ");
   const longest = archive.gaps.longest;
   // The archive export has no battery column, so the score cannot judge it.
   const notScored = archive.battery.status === "not_reported";
@@ -340,6 +357,12 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
     ],
     both("health_finding_gauges", { g2: archive.summary.gauge2_silent_days, g1: archive.summary.gauge1_silent_days }),
     both("health_finding_uv_column"),
+    archive.device_codes.reported
+      ? [
+          `The station raised these device health codes, each with the 15-minute slots it appeared in: ${codeList}. What they mean is undocumented, so they cannot be acted on; JHUB should document them.`,
+          `Kituo kilitoa misimbo hii ya afya ya kifaa, kila mmoja na vipindi vya dakika 15 ulivyotokea: ${codeList}. Maana yake haijaandikwa, kwa hiyo haiwezi kufanyiwa kazi; JHUB waiandike.`,
+        ] as [string, string]
+      : both("health_finding_device_codes"),
     [
       `The gust-direction column repeats the gust speed on ${archive.gust_direction_copy.days} of ${archive.gust_direction_copy.of} days (${gustShare} % of readings), so gust direction cannot be used. The export should be fixed.`,
       `Safu ya mwelekeo wa upepo mkali inarudia kasi yake siku ${archive.gust_direction_copy.days} kati ya ${archive.gust_direction_copy.of} (${gustShare} % ya usomaji), hivyo haiwezi kutumika. Uhamishaji wa data urekebishwe.`,

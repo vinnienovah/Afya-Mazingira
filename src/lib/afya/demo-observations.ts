@@ -57,6 +57,10 @@ export interface DemoObservation {
   // the gust speed into it (Sentinel R13). Never used as a direction.
   wind_gust_dir?: number | null;
   battery_v?: number | null;
+  // The station's own device health code (Sentinel R15), where the export
+  // carries one. A code, not a measurement: never averaged or filled, and
+  // absent rather than zero where no export carries it.
+  health_code?: number | null;
 }
 
 // Seeded pseudo-random for reproducibility

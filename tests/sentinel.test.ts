@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { audits, checkReadings, dailyHealth, gaps, groupStatus, rainDayTotals } from "../src/lib/afya/sentinel";
+import { audits, checkReadings, dailyHealth, deviceCodes, gaps, groupStatus, rainDayTotals } from "../src/lib/afya/sentinel";
 import { cleanAndGrid } from "../src/lib/afya/sources";
 import { nwsHeatIndex, stullWetBulb } from "../src/lib/afya/constants";
 import type { DemoObservation } from "../src/lib/afya/demo-observations";
@@ -173,6 +173,43 @@ test("an empty battery channel is bad where the feed lists it, and not reported 
   assert.deepEqual(battery(series, true).rules, ["R12"]);
   assert.equal(dailyHealth(series, checkReadings(series), { batteryListed: true })[0].score, 90);
   assert.equal(battery(day(() => ({ battery_v: 12.6 })), true).status, "good");
+});
+
+test("R15 is not reported where no export carries a device code, and recorded where one does", () => {
+  const codeGroup = (s: DemoObservation[]) =>
+    groupStatus(s, checkReadings(s), { exportGroups: true }).find((g) => g.group === "device_code")!;
+
+  const silent = day();
+  assert.equal(codeGroup(silent).status, "not_reported");
+  assert.deepEqual(codeGroup(silent).empty_channels, ["health_code"]);
+  assert.deepEqual(deviceCodes(silent), { reported: false, codes: [], note: "meaning undocumented" });
+  assert.equal(dailyHealth(silent)[0].score, 100);
+
+  // A station reporting itself well is not the same as a station saying nothing.
+  const well = day(() => ({ health_code: 0 }));
+  assert.equal(codeGroup(well).status, "good");
+  assert.deepEqual(codeGroup(well).rules, []);
+  assert.deepEqual(deviceCodes(well).codes, [{ code: 0, slots: 96 }]);
+  assert.ok(!checkReadings(well).some((h) => h.rule === "R15"));
+
+  // A code nobody has written down: listed with its count, judged by nobody.
+  const coded = day((_o, i) => ({ health_code: i < 4 ? 16 : i === 90 ? 32 : 0 }));
+  const codes = deviceCodes(coded);
+  assert.deepEqual(codes.codes, [{ code: 0, slots: 91 }, { code: 16, slots: 4 }, { code: 32, slots: 1 }]);
+  assert.equal(codes.note, "meaning undocumented");
+  assert.equal(codeGroup(coded).status, "not_judged");
+  assert.deepEqual(codeGroup(coded).rules, ["R15"]);
+
+  const hits = checkReadings(coded);
+  const r15 = hits.filter((h) => h.rule === "R15");
+  assert.equal(r15.length, 5);
+  assert.ok(r15.every((h) => h.channel === "health_code" && h.flag === "info"));
+  const [health] = dailyHealth(coded, hits);
+  assert.equal(health.score, 100);
+  assert.ok(health.rules.includes("R15"));
+  assert.deepEqual([health.bad, health.suspect], [[], []]);
+  // The engines' view of the station leaves the column out entirely.
+  assert.ok(!groupStatus(coded, hits).some((g) => g.group === "device_code"));
 });
 
 test("an impossible reading is flagged but never judged as a value", () => {
@@ -412,6 +449,16 @@ test("A01 holds at a 0.1 °C mean difference from Stull", () => {
   const off = (d: number) => day((o) => ({ wet_bulb_temp: stullWetBulb(o.temp_sht, o.humidity_sht) + d }));
   assert.equal(audits(off(0.099)).A01_wet_bulb_vs_stull.verdict, "matches Stull");
   assert.equal(audits(off(0.101)).A01_wet_bulb_vs_stull.verdict, "does not match Stull");
+});
+
+test("a device code rides the 15-minute grid as a code, never as an average", () => {
+  const rows = [raw(0, { health_code: 0 }), raw(5, { health_code: 16 }), raw(20, { health_code: 0 }), raw(30, { health_code: 0 })];
+  const series = cleanAndGrid(rows);
+  assert.equal(series[0].health_code, 16, "the slot reports the complaint, not the mean of 0 and 16");
+  assert.equal(series[1].health_code, 0);
+  assert.deepEqual(deviceCodes(series).codes, [{ code: 0, slots: 2 }, { code: 16, slots: 1 }]);
+  // The station's missing marker is not a code.
+  assert.equal(cleanAndGrid([raw(0, { health_code: -999.9 }), raw(15), raw(30)])[0].health_code, undefined);
 });
 
 test("R14 records a late reading and a silence, and neither moves the score", () => {

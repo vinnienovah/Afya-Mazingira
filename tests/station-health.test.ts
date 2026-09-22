@@ -41,6 +41,12 @@ test("the published report carries the cadence rule and the heat-index audit", (
   assert.equal(archive.rule_slots.R14, archive.cadence.gap_slots);
   assert.equal(archive.cadence.late_slots, 0);
   assert.equal(archive.cadence.late_intervals, 0);
+
+  // R15 cannot be judged from an export without the column, and says so.
+  assert.equal(archive.device_codes.reported, false, "no Conduit export carries the Health column");
+  assert.deepEqual(archive.device_codes.codes, []);
+  assert.equal(archive.device_codes.note, "meaning undocumented");
+  assert.ok(!("R15" in archive.rule_slots), "and fires on nothing");
 });
 
 test("every health string the page fills exists in both languages with the same placeholders", () => {

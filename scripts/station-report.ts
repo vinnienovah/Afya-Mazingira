@@ -7,7 +7,7 @@
 import fs from "fs";
 import path from "path";
 import { getCsvCoverage, getCsvRange } from "../src/lib/afya/csv-source";
-import { audits, checkReadings, dailyHealth, gaps, groupStatus, rainDayTotals, SENTINEL_LIMITS } from "../src/lib/afya/sentinel";
+import { audits, checkReadings, dailyHealth, deviceCodes, gaps, groupStatus, rainDayTotals, SENTINEL_LIMITS } from "../src/lib/afya/sentinel";
 import { slotRain } from "../src/lib/afya/station-history";
 
 const OUT = path.join(process.cwd(), "src", "lib", "afya", "model", "station-health.json");
@@ -89,6 +89,10 @@ function main() {
       days_below_80_if_counted: withBattery.filter((d) => d.score < 80).length,
     },
     audits: audits(series),
+    // R15. No Conduit export carries the Health column the specification's
+    // column map lists, so the archive cannot say whether the device ever
+    // raised a code; it says that rather than reporting a healthy station.
+    device_codes: deviceCodes(series),
     gaps: {
       over_one_hour: longGaps.length,
       longest: longGaps.reduce<(typeof longGaps)[number] | null>((a, b) => (!a || b.hours > a.hours ? b : a), null),

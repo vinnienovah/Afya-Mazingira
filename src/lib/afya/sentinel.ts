@@ -47,18 +47,22 @@ export const CHANNEL_GROUPS = {
 } as const;
 
 // Channels the engines never read, reported beside the sensor groups: the
-// gust-direction column (R13) and the battery. As in the Sentinel spec, a
-// battery channel the feed lists but leaves empty is bad (R12); an export
-// with no battery channel at all cannot be judged and is not reported.
+// gust-direction column (R13), the battery and the station's own device
+// health code (R15). As in the Sentinel spec, a battery channel the feed
+// lists but leaves empty is bad (R12); an export with no battery channel at
+// all cannot be judged and is not reported, and nor can a device code no
+// export carries.
 export const EXPORT_GROUPS = {
   gust_direction: ["wind_gust_dir"],
   battery: ["battery_v"],
+  device_code: ["health_code"],
 } as const;
 
 export type Group = keyof typeof CHANNEL_GROUPS;
 export type ExportGroup = keyof typeof EXPORT_GROUPS;
-// not_judged: the feed cannot show a fault (CHORDS leaves rain out while none
-// falls). not_reported: the station sends no values for it.
+// not_judged: nothing in the feed can settle the question (CHORDS leaves rain
+// out while none falls; a device code carries no documented meaning).
+// not_reported: the station sends no values for it.
 export type GroupStatus = "good" | "suspect" | "bad" | "not_judged" | "not_reported";
 export type Feed = "jhub" | "chords" | null;
 type Channel = (typeof CHANNEL_GROUPS)[Group][number];
@@ -179,6 +183,9 @@ export function checkReadings(series: DemoObservation[]): RuleHit[] {
     // silence, or holding a reading that arrived a whole interval late, says
     // so here; the missing time itself is what the score charges for.
     if (o.gap_minutes || o.late_intervals) hit("R14", "time", i, "info");
+    // R15: the station raised a device code. Nothing the exports point to
+    // says what any of them mean, so it is recorded and left at that.
+    if (typeof o.health_code === "number" && o.health_code !== 0) hit("R15", "health_code", i, "info");
   });
 
   // R08: the same measured value for too long. Calm nights make zero wind
@@ -394,6 +401,34 @@ export function dailyHealth(
   });
 }
 
+// What the report says beside every device code, because nothing in the
+// station's exports or the portal's metadata says what one means.
+export const DEVICE_CODE_NOTE = "meaning undocumented";
+
+export interface DeviceCodes {
+  // False where no export carries the column at all, which is not the same as
+  // a station reporting itself healthy.
+  reported: boolean;
+  codes: { code: number; slots: number }[];
+  note: string;
+}
+
+/** R15: the device health codes a series carries, each with the slots it appeared in. */
+export function deviceCodes(series: DemoObservation[]): DeviceCodes {
+  const counts = new Map<number, number>();
+  for (const o of series) {
+    if (typeof o.health_code !== "number") continue;
+    counts.set(o.health_code, (counts.get(o.health_code) ?? 0) + 1);
+  }
+  return {
+    reported: counts.size > 0,
+    codes: [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0] - b[0])
+      .map(([code, slots]) => ({ code, slots })),
+    note: DEVICE_CODE_NOTE,
+  };
+}
+
 export interface GroupReport {
   group: Group | ExportGroup;
   status: GroupStatus;
@@ -469,6 +504,20 @@ export function groupStatus(
       rules: battery || !batteryListed ? [] : ["R12"],
       empty_channels: battery ? [] : ["battery_v"],
       measured_share: series.length ? Math.round((battery / series.length) * 1000) / 1000 : 0,
+    });
+
+    // R15. An export without the column says nothing about the device; one
+    // with a code says something nobody has written down. Neither is a clean
+    // bill of health, so neither is reported as good.
+    const codes = deviceCodes(series);
+    const raised = codes.codes.some((c) => c.code !== 0);
+    const coded = codes.codes.reduce((s, c) => s + c.slots, 0);
+    out.push({
+      group: "device_code",
+      status: !codes.reported ? "not_reported" : raised ? "not_judged" : "good",
+      rules: raised ? ["R15"] : [],
+      empty_channels: codes.reported ? [] : ["health_code"],
+      measured_share: series.length ? Math.round((coded / series.length) * 1000) / 1000 : 0,
     });
   }
   return out;
