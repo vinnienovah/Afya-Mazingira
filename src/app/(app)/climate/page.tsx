@@ -16,7 +16,7 @@ import { fmtDate, fmtTimeShort } from "@/lib/afya/format";
 import { addDays, nairobiDate } from "@/lib/afya/nairobi-day";
 import { cn } from "@/lib/utils";
 import ClimateVariablesPanel from "@/components/charts/ClimateVariablesPanel";
-import { ReplayContent } from "@/app/(app)/replay/page";
+import { ReplayContent } from "@/components/replay/ReplayContent";
 import { Radio, LineChart as LineChartIcon, History as HistoryIcon } from "lucide-react";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
