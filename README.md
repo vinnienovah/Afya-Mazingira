@@ -62,11 +62,11 @@ Users we have evidence for: outdoor workers and farmers around Juja. Users we th
 
 Afya Mazingira turns the station's readings into decisions, in English and Kiswahili:
 
-- **What is happening:** the current environmental state (cool and humid, rapid warming, hot, cooling), learned from 15 months of the station's own record.
-- **What comes next:** WBGT every 15 minutes out to nine hours, with an uncertainty band tested on months the model never saw.
-- **What it means for you:** a risk band for the activity you choose (walking, sports, construction, field work, events) and the best daylight window to do it.
-- **For farms:** irrigation depth, spraying and field-work windows, crop heat stress and a planting outlook from station temperature and ERA5-Land rainfall and soil moisture.
-- **Around the region:** the same heat method applied to ten neighbouring counties from reanalysis, clearly marked as regional rather than measured.
+- **What is happening:** the current environmental state (cool and humid, rapid warming, hot, cooling), learned from 15 months of the station's own record and held for at least an hour before it counts as a change.
+- **What comes next:** WBGT every 15 minutes out to nine hours, from the usual daily cycle at the station and today's departure from it, with an uncertainty band tested on months the model never saw.
+- **What it means for you:** a risk band for the activity you choose (walking, sports, construction, field work, events) and the best daylight window to do it, never one that has passed or runs beyond the forecast.
+- **For farms:** irrigation from a seven-day water budget: crop water use worked out from the station's measured daily high and low, against the station's own rain gauge. Spraying and field-work windows, crop heat stress and a planting outlook come with it.
+- **Around the region:** hourly air temperature and shade WBGT for ten neighbouring counties from a regional forecast model, labelled as regional, next to Kiambu, where the station stands.
 
 Every number is computed in code. Language models only reword results the code has already produced, and a checker rejects any reply that states a temperature, time or risk band the code did not.
 
@@ -76,27 +76,31 @@ The station (Conduit@Empathy1, JKUAT, lat -1.0997, lon 37.0145, 1,523 m) is the 
 
 **Where the data comes from.** Three routes to the same instrument, in order of preference:
 
-1. **Live, two feeds.** JHUB's Conduit API (needs a key) and the public live feed of the CHORDS portal the station reports to (instrument 61, no key). Both are asked and the one with the more recent observation wins. On 21 September the Conduit API's latest reading was 17 hours old while CHORDS was 13 minutes old.
-2. **The recorded archive,** `data/conduit_master_2025_2026.csv`: 45,043 rows every 15 minutes from 1 June 2025 to 8 September 2026.
+1. **Live, two feeds.** JHUB's Conduit API (needs a key) and the public live feed of the CHORDS portal the station reports to (instrument 61, no key). Both are asked and the one with the more recent observation wins.
+2. **The recorded archive,** `data/conduit_master_2025_2026.csv`: 45,043 rows from 1 June 2025 to 8 September 2026. Each row is one sampled minute, about every 15 minutes. On every minute they share, the archive matches the organisers' one-minute files (28 August to 4 September 2026) to the second.
 3. A synthetic series only if neither covers the time asked for, always labelled DEMO.
 
-**Cleaning.** Every source goes onto one 15-minute grid. Repeated timestamps are removed and counted. The station's missing-value code (-999.9) is treated as missing. Gaps up to 30 minutes are interpolated; longer ones are carried forward so the engines keep running, and every such value is marked as filled in. Data quality is GOOD, DEGRADED (over an hour old, or a critical reading filled in) or POOR (over three hours old), and POOR suppresses recommendations.
+Past days after the archive ends (replay, climate history, the 30 days the forecast needs) come from the same live feeds.
 
-**Conduit Sentinel: station health first.** Conduit Sentinel is the quality-control core of the project: a set of rules, audits and a daily health score written for this station's exports and applied here to the 15-minute data. Every reading passes it before the app uses it.
+**Cleaning.** Every source goes onto one 15-minute grid. Repeated timestamps are removed and counted. The station's missing-value code (-999.9) and physically impossible readings are treated as missing, and marked. Gaps up to 30 minutes are interpolated; longer ones are carried forward so the engines keep running, and every such value is marked as filled in. Gusts keep the slot's highest value and wind direction is averaged on the circle.
+
+**Rain comes from the gauge's own counter.** A sampled minute's rain misses the other fourteen, so adding the samples up gives 76 mm over the archive. Gauge 1 also reports a running total for its day (reset at 06:00 UTC), and the rise in that total gives **1,185 mm**, against 1,199 mm from the gauge's own end-of-day totals (the difference fell before the archive's first row). The wettest day on record, 27 April 2026, had 95.2 mm. Gauge 2 is used only where gauge 1 has no reading, never added to it. Data quality is GOOD, DEGRADED (over an hour old, or a critical reading filled in) or POOR (over three hours old), and POOR suppresses recommendations.
+
+**Conduit Sentinel: station health first.** Conduit Sentinel is the quality-control core of the project: rules, audits and a daily health score written for this station's exports and applied here to the 15-minute data. Every reading passes it before the app uses it.
 
 | Check | What it flags |
 |---|---|
-| R01 to R04 | Temperatures outside -5 to 45 °C, humidity at or below 0 %, pressure outside 800 to 900 hPa (the station is at 1,523 m), impossible wind or gusts |
+| R01 to R04 | Temperatures outside -5 to 45 °C, humidity at or below 0 %, pressure outside 800 to 900 hPa (the station is at 1,523 m), impossible wind or gusts. Such a reading is treated as missing |
 | R06 | Light readings below the sensor's dark floor of 240 counts |
 | R07 | Temperature jumping more than 5 °C in 15 minutes |
-| R08 | The same value for 2 hours (temperature, humidity) or 3 hours (pressure, non-zero wind) |
+| R08 | The same value for 2 hours (a thermometer, only while another thermometer moves by more than 0.5 °C; humidity) or 3 hours (pressure, non-zero wind) |
 | R09 | The three thermometers disagreeing by more than 2 °C |
-| R11 | One rain gauge recording 0.4 mm or more in a day while the other records nothing |
-| R12 | A sensor silent for a whole day |
+| R11 | In a rain day, one gauge's own total is 0.4 mm or more while the other's is zero |
+| R12 | A channel silent for a whole day (Nairobi time). On the CHORDS feed, which sends rain only while it rains, the gauges are not judged until one reports |
 | R13 | The gust-direction column copying the gust speed |
 | R16 | The firmware WBGT more than 1.5 °C below the wet bulb |
 | A01, A03, A05 | Audits: the firmware wet bulb against Stull (2011), the firmware WBGT against the wet bulb, and the three thermometers against each other |
-| Daily score | 100, less 10 for each sensor group that is bad, 2 for each that is suspect, and 1 for every 14.4 minutes without data |
+| Daily score | 100, less 10 for each group that is bad, 2 for each that is suspect, and 1 for every 14.4 minutes without data. Time without data counts only where readings are more than 20 minutes apart; the station's cadence drifts by a few seconds, which leaves some quarter hours empty without losing data |
 
 Where it lives: the rules in `src/lib/afya/sentinel.ts`; `npm run station-report` runs them over the whole archive into `src/lib/afya/model/station-health.json`; `/api/station-health` serves that report and the same checks live on the last 24 hours; the **Station Health** page shows both; `tests/sentinel.test.ts` tests them.
 
@@ -105,76 +109,84 @@ What it changes in the app:
 - a sensor group that fails the rules over the last 24 hours lowers data quality, which widens the forecast band or suppresses recommendations;
 - the firmware WBGT fails audit A03, so WBGT is computed from the wet bulb and air temperature instead;
 - the firmware wet bulb passes audit A01, so the app uses it;
-- rain gauge 2 fails R11 on many rainy days, so rainfall totals come from ERA5-Land;
 - values filled in over gaps are never judged as good and never used to fit the models.
 
-Over the 465 days on record:
+Over the 466 days on record (Nairobi days):
 
-- the station is healthy most of the time: a mean daily score of 98.8 out of 100, no day below 80, and only two gaps longer than an hour;
-- the firmware WBGT is more than 1.5 °C below the wet bulb in 42.9 % of readings (62 % at night);
-- rain gauge 2 recorded nothing on 53 days when gauge 1 measured rain;
-- the gust-direction column is a copy of the gust speed on every day;
+- a mean daily score of 89.5 and no day below 80. The gust-direction copy (R13) is bad every day, as the Sentinel specification counts it, so 90 is the best any day scores;
+- 313 minutes without data, on 10 days; two gaps longer than an hour, the longest 1.6 hours;
+- the firmware WBGT is below the wet bulb in 63.5 % of readings and more than 1.5 °C below in 42.9 % (62.2 % at night, 26.8 % by day);
+- by each gauge's own daily totals, gauge 2 recorded nothing on 85 rain days when gauge 1 measured 0.4 mm or more, and gauge 1 nothing on 16 days when gauge 2 did;
+- since 1 July 2025 the records carry the UV index in gauge 2's running-total column, so gauge 2's running total is lost and only its daily totals remain;
+- the archive export has no battery channel; the CHORDS feed lists one but leaves it empty, which counts as bad (R12);
 - the firmware wet bulb agrees with Stull (2011) to 0.032 °C.
 
-These go on the page as findings to report to JHUB. The same checks also run live, unchanged, on other 3D-PAWS stations on the CHORDS portal: the page's station selector adds KALRO Thika, Machakos Stoni Athi and Embu, the nearby stations that were reporting on 21 September 2026.
+These go on the page as findings to report to JHUB. The same checks also run live, unchanged, on other 3D-PAWS stations on the CHORDS portal: the page's station selector adds KALRO Thika, Machakos Stoni Athi and Embu.
 
-**WBGT from the station's own sensors.** The station's firmware WBGT column reads **below the wet bulb in 63.6 % of the archive**, which a real WBGT cannot do. We do not use it. WBGT here is the ISO 7243 form without solar load, 0.7 x wet bulb + 0.3 x air temperature, from the station's wet bulb (which agrees with Stull (2011) to 0.03 °C) and its air temperature. When the firmware value falls below the wet bulb, the Why? page says so.
+**WBGT from the station's own sensors.** The station's firmware WBGT column reads below the wet bulb in 63.5 % of the archive, which a real WBGT cannot do. We do not use it. WBGT here is the ISO 7243 form without solar load, 0.7 x wet bulb + 0.3 x air temperature, from the station's wet bulb and its air temperature.
 
-**Environmental states.** k-means with four clusters on the archive's training months (June 2025 to March 2026), named by their centres:
+**Environmental states.** k-means with four clusters on the archive's training months, named by their centres. A new state counts only after it has held for an hour, which takes the changes from 9.4 a day (mostly clouds passing) to 4.0.
 
 | State | Mean air temperature | Humidity | Temperature change | Typical time |
 |---|---|---|---|---|
 | Cool and humid, stable | 16.4 °C | 84 % | -0.1 °C/h | 05:00 |
 | Rapid warming | 23.0 °C | 60 % | +2.2 °C/h | 10:00 |
-| Hot, high radiation | 27.0 °C | 45 % | +0.2 °C/h | 14:00 |
+| Hot, peak heat | 27.0 °C | 45 % | +0.2 °C/h | 14:00 |
 | Cooling, recovery | 20.9 °C | 64 % | -1.2 °C/h | 19:00 |
 
-The "next state" shown on the page is the one that most often followed in the archive, with how often it did.
+The "next state" shown on the page is the one that most often followed the current state at the same time of day (in three-hour blocks), with how often it did and the typical wait. On April to September 2026, held out of the fit, it names the next state correctly 94.9 % of the time, and the typical wait is off by a median of 0.7 hours.
 
-**Forecast.** One ridge regression for each 15-minute step ahead, from 25 features of the last hour of station data (temperature, humidity, pressure, wind, light, wet bulb, WBGT, their one-hour changes and means, and time of day and year). Fitted on June 2025 to March 2026, the 80 % band set from April and May 2026, and scored on June to September 2026, which the fit never saw:
+**Forecast.** `npm run evaluate` tests four forecasts month by month: each month from October 2025 to September 2026 is forecast by models refitted on everything recorded before it, with the usual daily cycle taken only from the 30 days before each forecast. Mean error / RMSE / share inside the 80 % band:
+
+| Forecast | +1 h | +3 h | +6 h | +9 h |
+|---|---|---|---|---|
+| No change | 0.68 / 0.94 / 81 % | 1.69 / 2.15 / 82 % | 2.93 / 3.50 / 82 % | 3.69 / 4.33 / 82 % |
+| **Seasonal anomaly (shipped)** | **0.45 / 0.62 / 80 %** | **0.69 / 0.90 / 81 %** | **0.82 / 1.06 / 82 %** | **0.86 / 1.12 / 82 %** |
+| Ridge regression, 25 inputs | 0.52 / 0.70 / 80 % | 0.88 / 1.14 / 83 % | 0.97 / 1.25 / 84 % | 1.07 / 1.38 / 83 % |
+| Ridge with the seasonal terms | 0.45 / 0.62 / 81 % | 0.70 / 0.92 / 84 % | 0.85 / 1.11 / 87 % | 0.90 / 1.17 / 88 % |
+
+The seasonal anomaly model beats the 25-input ridge in all 12 months at every horizon, and ties the ridge that also has its terms, so the simpler model ships: the usual WBGT for the target's 15-minute time of day over the last 30 days, plus the current departure from usual times a factor fitted for each step ahead. Its band is the 80th percentile of the errors on held-out months, for each step and each three-hour block of the day. In the hot season (January to March 2026) it scores 0.48 / 0.75 / 0.90 / 0.96 °C, stays inside its band 79 % of the time, and puts the hour in too low a risk band 8.5 % of the time at +3 hours (17.1 % with the ridge).
+
+On a single split (fitted to May 2026, tested on June to September 2026, which the fit never saw):
 
 | Lead time | Mean error | Assuming no change | 80 % band | Inside the band | Same risk band | Band too low |
 |---|---|---|---|---|---|---|
-| +1 h | 0.45 °C | 0.64 °C | ±0.74 °C | 81 % | 91.8 % | 4.3 % |
-| +3 h | 0.79 °C | 1.64 °C | ±1.20 °C | 79 % | 86.2 % | 5.7 % |
-| +6 h | 0.90 °C | 2.85 °C | ±1.31 °C | 76 % | 84.9 % | 7.5 % |
-| +9 h | 0.98 °C | 3.56 °C | ±1.55 °C | 79 % | 85.2 % | 8.3 % |
+| +1 h | 0.43 °C | 0.64 °C | ±0.70 °C | 82 % | 92.2 % | 4.1 % |
+| +3 h | 0.69 °C | 1.64 °C | ±1.09 °C | 80 % | 88.4 % | 5.8 % |
+| +6 h | 0.86 °C | 2.85 °C | ±1.31 °C | 79 % | 85.6 % | 7.8 % |
+| +9 h | 0.90 °C | 3.57 °C | ±1.39 °C | 79 % | 85.4 % | 7.5 % |
 
-The last two columns score what people act on: how often the forecast puts the hour in the same risk band as the station then measured, and how often in a lower one, the error that could leave someone unprepared.
+`npm run fit` refits the forecast, the states and the rain chance from the archive through the same cleaning and feature code the app runs.
 
-**Tested month by month.** Those scores come from one cool season, so `npm run evaluate` also refits the forecast on everything before each month from October 2025 to September 2026 and scores that month alone:
+**Rain chance.** A logistic model of whether gauge 1 records rain in the next three hours, from humidity, pressure and temperature changes, the time of day and recent rain, fitted to the gauge's counter rain. Tested month by month, its Brier score is 0.055 against 0.072 for each month's own rain frequency (skill +0.24). When it says 50 % or more, it rained 84 % of the time.
 
-| Season | +1 h | +3 h | +9 h | Assuming no change, +3 h | Same risk band, +3 h | Band too low, +3 h |
-|---|---|---|---|---|---|---|
-| Hot, January to March 2026 | 0.58 °C | 1.01 °C | 1.12 °C | 1.91 °C | 76.9 % | 17.1 % |
-| All other months | 0.49 °C | 0.84 °C | 1.05 °C | 1.61 °C | 81.3 % | 7.8 % |
+**Farm advisory.**
 
-The forecast beats "no change" in every month at every horizon. In the hot season it is less accurate, and it puts the hour in too low a band about twice as often, running about 0.3 °C low in February and March. That is where the next round of work goes (see Known limitations).
+- Reference evapotranspiration (ET₀) is Hargreaves (FAO-56) from the highest and lowest air temperature the station measured over the last 24 hours, and the sun's energy for JKUAT's latitude and the date. On 16 days in late August and September 2026 it tracked Open-Meteo's FAO-56 Penman-Monteith ET₀ with r = 0.90 and a mean absolute difference of 0.41 mm/day; the page shows both.
+- The irrigation advice is a seven-day water budget: crop water use (ET₀ times the FAO-56 crop coefficient for the stage) against effective rain (80 % of each day's rain above 2 mm). Rain comes from gauge 1 when it reported on at least 6 of the last 7 days, otherwise from Open-Meteo's regional model, and the page says which. The shortfall is the depth, rounded to 5 mm and capped at what a clay root zone of that stage's depth can hold. With 10 mm or more of rain forecast in the next 48 hours, the advice is to hold.
+- Regional soil moisture (ERA5-Land, 7 to 28 cm) is shown as context only, ranked against its own past year.
+- The page marks the advice as indicative.
 
-`npm run fit` refits both models from the archive through the same cleaning and feature code the app runs.
-
-**Farm advisory.** Station air temperature drives Hargreaves reference evapotranspiration and FAO-56 crop water demand, balanced against ERA5-Land rainfall and soil moisture for a clay soil typical of JKUAT (about 43 % clay per SoilGrids; water limits from FAO-56 Table 19). The irrigation depth is given as a range rounded to 5 mm. When the last week's rain exceeded crop demand but the regional soil-moisture layer reads the root zone as dry, the advice is to check the soil by hand first. The page marks the advice as indicative.
-
-**Regional outlook.** Kiambu, where the station stands, uses the station pipeline. The other ten counties use ERA5-Land and Open-Meteo through the same shade WBGT (with Stull's wet bulb), labelled as regional.
+**Regional outlook.** Kiambu, where the station stands, uses the station: its measured temperature for hours already past and its forecast WBGT for the outlook. The other ten counties use Open-Meteo's forecast model through the same shade WBGT (with Stull's wet bulb), labelled as regional. The Thermal layer colours each county by its air temperature at the chosen hour.
 
 ## 5. Features
 
 | Page | What it does |
 |---|---|
-| **Situation** | The current state, readings, data quality, the +1/+3/+6/+9 h forecast with each horizon's tested error, the best window for an activity, and the AI explanation |
-| **Forecast** | Measured WBGT with the 15-minute forecast and its band, shaded by state |
-| **Plan Activity** | Best-time search for an activity, duration and time window, with reasons, an alternative and saved plans |
-| **Farm Advisory** | Irrigate, hold, or check the soil first, with the depth as a range in mm; spray and field-work windows, crop heat stress and planting outlook for 7 crops and 4 growth stages; marked indicative |
-| **Risk Map** | Leaflet on OpenStreetMap: 11 county boundaries with outlook, heat, rain and vegetation layers and a time slider; station-backed versus regional marked on each |
-| **Dashboard** | Live climate variables, a climate history explorer over any date range, and historical replay: step through a past day with the future hidden, then reveal what the station recorded |
+| **Situation** | The current state, readings (filled-in values marked), data quality with the time of the data, the risk band now beside the band forecast for +3 hours, the +1/+3/+6/+9 h forecast with each horizon's tested error, the best daylight window for an activity, and the AI explanation |
+| **Forecast** | The station's measured WBGT over the last 12 hours joined to the 15-minute forecast and its band, shaded by state |
+| **Plan Activity** | Best-time search for an activity, duration and time window: only windows still ahead, in daylight and fully covered by the forecast, with reasons that hold for that window, an alternative, and saved plans that can be edited and rerun |
+| **Farm Advisory** | Irrigate (with the depth), hold for rain, or no irrigation needed, from the seven-day water budget; spray and field-work windows, crop heat stress and planting outlook for 7 crops and 4 growth stages; marked indicative |
+| **Risk Map** | Leaflet on OpenStreetMap: 11 county boundaries with outlook, thermal (air temperature), rain and vegetation layers and a time slider; station-backed versus regional marked on each; grey where a source has no data |
+| **Dashboard** | Live station variables and daily station rain, a climate history explorer over any date range (station or ERA5), and historical replay of any day from June 2025 to yesterday: step through the day with the future hidden, then reveal each forecast against what the station recorded |
 | **Station Health** | Conduit Sentinel: sensor-group status for the last 24 hours at JKUAT or three nearby CHORDS stations, the daily health score since June 2025, firmware and thermometer audits, the rules, and findings to report to JHUB |
-| **Why?** | Data quality flags, the state timeline, the fitted model table with test-month scores, and the regional context |
-| **Operations** | A day's planned activities, each judged against the forecast with a cooler window suggested when there is one |
-| **Flood Risk** | Current rainfall and soil saturation by county. Conditions only; not a flood forecast |
-| **Notifications** | Threshold alerts by email (daily job) and web push |
+| **Why?** | Data quality flags, the state timeline, what moves the +3 h forecast in °C, the model comparison table with test-month scores, and the regional context with the hours it compares |
+| **Operations** | A day's planned activities, saved in the browser, each judged on the part of its window still ahead and forecast, with a cooler daylight window suggested when there is one |
+| **Flood Risk** | Today's rainfall (so far plus forecast) and topsoil saturation by county from Open-Meteo. Conditions only; not a flood forecast |
+| **Notifications** | Alert rules checked once a day at 08:00 EAT: the day's forecast heat peak for the rule's activity, a hot state ahead, or a saved plan moving into a higher band. Sent by email, and by browser push where the server has VAPID keys |
 | **Briefing** | A printable one-page summary, rendered on the server |
 
-Also: sign-in with email and password or Google, email verification, saved plans, a ⌘K command palette, and an installable app that shows the last known situation offline.
+Also: sign-in with email and password or Google, email verification, rate limits on sign-in, sign-up and the AI, a ⌘K command palette, and an installable app that shows the last known situation offline.
 
 ## 6. Technology stack
 
@@ -182,9 +194,9 @@ Also: sign-in with email and password or Google, email verification, saved plans
 |---|---|
 | App | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4 |
 | Charts and maps | Recharts, Leaflet with react-leaflet |
-| Data | PostgreSQL with Drizzle ORM (Neon in production) |
-| Models | Ridge regression and k-means, fitted in TypeScript by `scripts/fit-models.ts` |
-| Language models | Gemini, then Groq, OpenAI and Anthropic, then written templates |
+| Data | PostgreSQL with Drizzle ORM (Neon in production); optional, the station pages run without it |
+| Models | Seasonal-anomaly forecast, k-means states, logistic rain chance, all fitted in TypeScript by `scripts/fit-models.ts` |
+| Language models | Gemini, then Groq, OpenAI and Anthropic, then written templates; about 8 seconds in all |
 | Email and push | Resend, Web Push (VAPID) |
 | Hosting | Vercel, with a daily Vercel Cron job for alerts |
 | Checks | TypeScript, ESLint, Node's test runner via tsx, GitHub Actions |
@@ -196,30 +208,31 @@ Three real, redundant station feeds and Sentinel's quality checks feed one deter
 ```
 ┌───────────────────────────────────────────────────────────────────────┐
 │ INGESTION   Conduit API · CHORDS live · Archive CSV                   │
-│             (3 fallbacks in order; the freshest live feed wins)       │
+│             (the freshest live feed wins; history past the archive    │
+│              comes from the same feeds)                               │
 └───────────────────────────────────┬───────────────────────────────────┘
                                     ▼
 ┌───────────────────────────────────────────────────────────────────────┐
 │ CLEAN + CHECK   15-minute grid · duplicates counted · gaps marked     │
-│                 Sentinel QC (rules + audits) · shade WBGT             │
+│                 rain from gauge 1's counter · Sentinel QC · shade WBGT│
 └───────────────────────────────────┬───────────────────────────────────┘
                                     ▼
 ┌───────────────────────────────────────────────────────────────────────┐
-│ FEATURES   25 signals — level, 1h change, 1h mean/std, hour-of-day    │
-│            and day-of-year (cyclic)                                   │
+│ FEATURES   level, 1 h change and mean, the usual value for the time   │
+│            of day over the last 30 days                               │
 └───────────────────────────────────┬───────────────────────────────────┘
                                     ▼
 ┌────────────────────────────┐        ┌───────────────────────────────┐
-│ STATE   k-means, 4 clusters │        │ FORECAST   ridge regression,  │
-│ (cool/warming/hot/cooling)  │        │ one model per 15-min step     │
+│ STATE   k-means, 4 clusters │        │ FORECAST   usual daily cycle  │
+│ held for an hour to count   │        │ + today's departure, per step │
 └──────────────┬──────────────┘        └───────────────┬───────────────┘
                └──────────────────┬───────────────────┘
                                    ▼
 ┌───────────────────────────────────────────────────────────────────────┐
 │ DECISION   risk band per activity · best daylight window ·            │
-│            farm advisory · alert rules                                │
-│            (also fed by ERA5-Land / Open-Meteo / Sentinel-2 for       │
-│             the regional map and the 10 non-station counties)         │
+│            farm water budget · rain chance · alert rules              │
+│            (also fed by ERA5, Open-Meteo and Sentinel-2 for the       │
+│             regional map and context)                                 │
 └───────────────────────────────────┬───────────────────────────────────┘
                                     ▼
 ┌───────────────────────────────────────────────────────────────────────┐
@@ -230,11 +243,11 @@ Three real, redundant station feeds and Sentinel's quality checks feed one deter
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
-Code: `src/lib/afya/` holds the engines (`sources`, `sentinel`, `data-quality`, `feature-engine`, `state-engine`, `forecast-engine`, `risk-engine`, `best-time-engine`, `farm-engine`, `explanation`), `src/lib/afya/model/` the fitted models, `src/app/` the pages and API routes, `scripts/` the model fit, the station report and the database seed, `tests/` the tests.
+Code: `src/lib/afya/` holds the engines (`sources`, `station-history`, `sentinel`, `data-quality`, `feature-engine`, `climatology`, `state-engine`, `forecast-engine`, `risk-engine`, `best-time-engine`, `farm-engine`, `alert-engine`, `explanation`, `grounding`), `src/lib/afya/model/` the fitted models, `src/app/` the pages and API routes, `scripts/` the model fit and evaluation, the station report and the database seed, `tests/` the tests.
 
 ## 8. Installation and setup
 
-Requires Node.js 20 or later.
+Requires Node.js 20.9 or later.
 
 ```bash
 npm install
@@ -242,13 +255,13 @@ cp .env.example .env
 npm run dev
 ```
 
-The app runs with an empty `.env`: station data comes from the public CHORDS feed, or the committed archive when offline. `.env.example` explains each variable. For sign-in, saved plans and alerts, set `DATABASE_URL` to a PostgreSQL database and create the tables:
+The app runs with an empty `.env`: station data comes from the public CHORDS feed, or the committed archive when offline, and answers use the written templates. `.env.example` explains each variable. For sign-in, saved plans and alerts, set `DATABASE_URL` to a PostgreSQL database and create the tables:
 
 ```bash
 npm run db:push
 ```
 
-Deploying to Vercel: import the repository, add the Neon integration (it sets `DATABASE_URL`), add the variables from `.env.example` including `CRON_SECRET`, run `npm run db:push` once against the production database, and set `NEXT_PUBLIC_APP_URL` to the deployed address.
+Deploying to Vercel: import the repository, add the Neon integration (it sets `DATABASE_URL`), add the variables from `.env.example` including `CRON_SECRET` (and `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` for browser push, made with `npx web-push generate-vapid-keys`), run `npm run db:push` once against the production database, and set `NEXT_PUBLIC_APP_URL` to the deployed address.
 
 ## 9. Usage
 
@@ -257,9 +270,10 @@ Open the app and start at **Situation**. Choose an activity to see its risk and 
 | Command | What it does |
 |---|---|
 | `npm run dev` | Development server on http://localhost:3000 |
-| `npm test` | 48 tests, no network |
+| `npm test` | 286 tests, no network |
 | `npm run typecheck` / `npm run lint` | Type check and lint |
-| `npm run fit` | Refit the forecast and states from the archive |
+| `npm run fit` | Refit the forecast, the states and the rain chance from the archive |
+| `npm run evaluate` | Test the four forecasts month by month |
 | `npm run station-report` | Rerun the station health checks over the archive |
 | `npm run build` | Production build |
 
@@ -267,29 +281,32 @@ Main API routes (JSON):
 
 | Route | Returns |
 |---|---|
-| `GET /api/situation` | The whole pipeline output: readings, quality, state, forecast, risk, best time, context |
+| `GET /api/situation` | The whole pipeline output: readings, quality, state, forecast, risk, best time, context. `?activity=` sets the activity |
 | `GET /api/forecast` | Forecast horizons and the 15-minute series with bands |
 | `POST /api/recommendations` | Best window for `{activity, duration_minutes, window_start, window_end}` |
 | `POST /api/farm` | Advisory for `{crop, stage}` |
-| `POST /api/replay` | Hour-by-hour replay of a past day `{date}` |
-| `GET /api/map` | County indicators and satellite acquisitions |
+| `POST /api/replay` | Hour-by-hour replay of a past day `{date}`, each forecast against what the station recorded |
+| `GET /api/map` | County indicators by hour, with their sources |
 | `GET /api/station-health` | The archive health report and the same checks on the last 24 hours; `?instrument=10` runs them on another CHORDS station |
-| `GET /api/climate-history` | Any date range, daily or hourly, station or ERA5-Land |
+| `GET /api/climate-history` | Any date range, daily or hourly, station or ERA5 |
+| `GET /api/health` | Whether the app is up, and whether it has a database |
 
 ## 10. Data sources
 
 | Source | Used for | Credit and terms |
 |---|---|---|
-| Conduit@Empathy1, via JHUB's Conduit API | Live station readings | JHUB Africa (JKUAT) and SPACE-SI. Access by API key |
-| Conduit@Empathy1 on the UCAR 3D-PAWS FEWS NET CHORDS portal, instrument 61 | Live station readings | Public live feed. CHORDS: Daniels et al. (2014), doi:10.5065/d6v1236q |
+| Conduit@Empathy1, via JHUB's Conduit API | Live station readings and history past the archive | JHUB Africa (JKUAT) and SPACE-SI. Access by API key |
+| Conduit@Empathy1 on the UCAR 3D-PAWS FEWS NET CHORDS portal, instrument 61 | Live station readings and history past the archive | Public live feed. CHORDS: Daniels et al. (2014), doi:10.5065/d6v1236q |
 | Conduit archive, `data/conduit_master_2025_2026.csv` | Model fitting, fallback, history, replay | Exported from the Conduit dashboard |
-| ERA5-Land via the Open-Meteo archive API | Regional temperature, humidity, rainfall and soil moisture | Open-Meteo, CC BY 4.0. Contains modified Copernicus Climate Change Service information |
-| Open-Meteo forecast API | Regional forecast when the station is silent, county map | Open-Meteo, CC BY 4.0 |
+| The organisers' Hack The Weather files (one-minute exports, 28 August to 4 September and 11 to 15 September 2026) | Checking the archive by hand: on every minute they share (28 August to 4 September) the archive matches them to the second | JHUB Africa |
+| ERA5 via the Open-Meteo archive API (`models=era5`, about 28 km, about 5 days behind) | Regional context at the station's hour of day, climate history | Open-Meteo, CC BY 4.0. Contains modified Copernicus Climate Change Service information |
+| ERA5-Land via the Open-Meteo archive API | Regional soil moisture at 7 to 28 cm, as context on the Farm page | Open-Meteo, CC BY 4.0. Contains modified Copernicus Climate Change Service information |
+| Open-Meteo forecast API | County map and Thermal layer, Flood page, rainfall context up to today, the farm's regional rain and Penman-Monteith ET₀, plans past the station forecast | Open-Meteo, CC BY 4.0 |
 | Copernicus Sentinel-2, via the Copernicus Data Space | NDVI and acquisition dates | Contains modified Copernicus Sentinel data |
 | County boundaries, `public/geo/counties.geojson` | Map | _Source to be added by the team_ |
 | Landing page photographs | Decoration | Unsplash licence |
 
-Methods: Stull (2011), *J. Appl. Meteor. Climatol.* 50, 2267-2269 (wet bulb); ISO 7243 (WBGT); Hargreaves and Samani (1985) and FAO-56, Allen et al. (1998) (crop water).
+Methods: Stull (2011), *J. Appl. Meteor. Climatol.* 50, 2267-2269 (wet bulb); ISO 7243 (WBGT); Hargreaves and Samani (1985) and FAO-56, Allen et al. (1998) (reference evapotranspiration, extraterrestrial radiation, crop coefficients and water balance).
 
 ## 11. AI usage
 
@@ -301,7 +318,7 @@ Demo video: _link to be added_
 
 ![Situation](docs/screenshots/situation.png)
 
-![Why? page with the fitted model table](docs/screenshots/why.png)
+![Why? page with the model table](docs/screenshots/why.png)
 
 ![Station Health](docs/screenshots/station-health.png)
 
@@ -325,9 +342,9 @@ Between them the team covers the environmental science behind the heat and farm 
 - **More stations.** The station health checks already run on any 3D-PAWS station on the CHORDS portal (75 instruments in Kenya); the forecast needs each station's archive to refit with `npm run fit`.
 - **Refit monthly** as the archive grows, and publish the scores each time.
 - **Reach people without a smartphone.** Send the daily best window and heat alerts by SMS and WhatsApp. The first partner to approach is the Kiambu county agricultural extension service, which already advises farmers around Juja.
-- **CHIRPS rainfall** by point extraction from its gridded files, in place of ERA5-Land.
-- **Partners:** JHUB Africa for station access, Kiambu county agriculture officers for the farm advisory, and the JKUAT sports and estates departments as first users.
-- **Localize by location.** Use GPS (or a chosen pin, backed by Conduit/CHORDS station coverage and regional ERA5-Land data) so someone can select where they are and get a localized picture, rather than only JKUAT and the fixed 11-county list.
+- **CHIRPS rainfall** by point extraction from its gridded files, as regional context beside the station's gauge.
+- **Partners:** JHUB Africa for station access and the export fixes the station health findings point to, Kiambu county agriculture officers for the farm advisory, and the JKUAT sports and estates departments as first users.
+- **Localize by location.** Use GPS (or a chosen pin, backed by Conduit/CHORDS station coverage and regional data) so someone can select where they are and get a localized picture, rather than only JKUAT and the fixed 11-county list.
 - **More datasets on the Risk Map.** Bring in further regional layers — air quality, a drought index, additional satellite products — so the map covers more than heat, rain and vegetation.
 
 ## 15. Licence
@@ -339,23 +356,24 @@ MIT. See [LICENSE](LICENSE). Station and reanalysis data remain under their prov
 ## Known limitations
 
 - **WBGT is shade WBGT.** It leaves out direct sun because the station's light sensor is not calibrated to irradiance. In full midday sun WBGT is several degrees higher, so the bands understate risk for work in the open.
-- **The risk bands are our own.** 18, 21 and 24 °C WBGT and the activity adjustments are screening bands chosen by the project, not a published occupational or medical limit.
-- **The forecast under-warns more in the hot season.** Tested month by month, it put the hour in too low a risk band 17.1 % of the time from January to March 2026, against 7.8 % in other months. Treat hot-season forecasts near a band boundary as the higher band.
-- **Rain probability is a rule of thumb** (falling pressure and high humidity raise it), not fitted: the station's rain gauges are too sparse to fit it on.
-- **Farm advice is indicative.** It uses ERA5-Land's top soil layer at about 9 km and typical clay-soil values, not a measurement in the field.
+- **The risk bands are our own.** 18, 21 and 24 °C WBGT and the activity adjustments are screening bands chosen by the project, not a published occupational or medical limit. In Juja's climate the top band is rare in shade (0.05 % of the archive).
+- **The forecast under-warns a little more in the hot season.** Tested month by month, it put the hour in too low a band at +3 hours 8.5 % of the time from January to March 2026, against 7.4 % in other months.
+- **Heat alerts use the 08:00 forecast of the day's peak,** which runs on average 0.85 °C below the peak the station then measures, so some days that turn out HIGH get no alert.
+- **Farm advice is indicative.** It assumes a clay soil typical of JKUAT, not a measurement in the field, and uses the regional model's rain when the gauge is short of data.
 - **The flood page shows conditions,** rainfall and soil saturation, not a flood forecast.
-- **The Conduit API can lag by most of a day;** the CHORDS feed covers for it, but carries no rain readings, so live rain is only seen when the Conduit API is current. Rainfall totals always come from ERA5-Land.
-- **Rate limits are per server instance,** so they are weak on a serverless host.
+- **The Conduit API can lag by most of a day;** the CHORDS feed covers for it. CHORDS sends rain only while it rains, so its rain gauges are not judged on a dry day.
+- **Browser push needs VAPID keys** on the server; without them alerts go by email only.
+- **Rate limits are per server instance,** so they are weak on a serverless host; the email caps are kept in the database.
 - **The Kiswahili text** should be checked by a fluent speaker before wider use.
 
 ## Reproducibility
 
 - `npm test` runs every test without network access.
-- `npm run fit` rebuilds `src/lib/afya/model/wbgt-forecast.json` and `states.json` from the archive, and `npm run station-report` rebuilds `station-health.json`. The split is fixed by date and the clustering is seeded, so a refit on the same archive gives the same models.
+- `npm run fit` rebuilds `wbgt-forecast.json`, `states.json` and `rain-model.json` in `src/lib/afya/model/` from the archive, `npm run evaluate` rebuilds `forecast-evaluation.json`, and `npm run station-report` rebuilds `station-health.json`. The splits are fixed by date and the clustering is seeded, so a rerun on the same archive gives the same files.
 
 ## Build timeline
 
-The repository starts on 18 September 2026 with the first version of the app in one commit. Everything since, through 21 September, is in the commit history.
+The repository starts on 18 September 2026 with the first version of the app in one commit. Everything since, through 25 September, is in the commit history.
 
 ## Sources
 
