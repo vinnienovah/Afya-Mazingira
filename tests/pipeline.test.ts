@@ -41,3 +41,24 @@ test("every contributor the pipeline can name has a label in both languages", as
     assert.ok(STRINGS.sw[`contributor_${c.feature}`], c.feature);
   }
 });
+
+test("the situation's state is the last settled one, with no history segment under an hour", async () => {
+  for (const anchorIso of ["2026-02-10T12:00:00Z", "2026-07-15T06:00:00Z", "2025-11-03T15:00:00Z"]) {
+    const s = await situationAt(anchorIso);
+    const history = s.state_history_24h;
+    assert.equal(s.state.state_id, history[history.length - 1].state_id, anchorIso);
+    assert.equal(s.state.since, history[history.length - 1].start, anchorIso);
+    history.slice(0, -1).forEach((seg) => {
+      assert.ok(Date.parse(seg.end) - Date.parse(seg.start) >= 3600_000, `${anchorIso}: ${seg.start}-${seg.end}`);
+    });
+    const next = s.state.transition_likelihood!;
+    assert.notEqual(next.state_id, s.state.state_id);
+    assert.ok(next.typical_hours! > 0, anchorIso);
+  }
+});
+
+test("at 15:00 on a hot afternoon the next state shown is Cooling, not Rapid Warming", async () => {
+  const s = await situationAt("2026-02-10T12:00:00Z");
+  assert.equal(s.state.state_id, 2);
+  assert.equal(s.state.transition_likelihood!.state_id, 3);
+});

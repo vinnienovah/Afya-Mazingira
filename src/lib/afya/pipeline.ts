@@ -87,11 +87,12 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
   if (!fv) throw new Error("Insufficient history for feature computation");
   const currentObs = series[latestIdx];
 
-  // Step 4: Environmental state
-  const stateId: StateId = classifyState(fv);
+  // Step 4: Environmental state. A change counts once the new state has held
+  // for an hour, so the current state is the last one that did.
   const featureSeries = series.map((_, i) => computeFeatures(series, i));
   const timestamps = series.map((o) => o.ts);
   const allSegments = buildStateHistory(featureSeries, timestamps);
+  const stateId: StateId = allSegments.length ? allSegments[allSegments.length - 1].state_id : classifyState(fv);
   const cutoffMs = new Date(anchor).getTime() - 24 * 3600 * 1000;
   const state_history_24h = allSegments.filter(
     (s) => new Date(s.end).getTime() >= cutoffMs,
@@ -100,7 +101,7 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
   const prevState = allSegments.length >= 2
     ? allSegments[allSegments.length - 2].state_id
     : null;
-  const transition = getNextTransition(stateId);
+  const transition = getNextTransition(stateId, currentObs.ts);
 
   // Step 5: Forecast (+ uncertainty widening when degraded)
   const inputs: ForecastInputs = { fv, nowIso: currentObs.ts, climatology: await climatology };

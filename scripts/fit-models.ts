@@ -14,7 +14,9 @@ import fs from "fs";
 import path from "path";
 import { FORECAST_FEATURES, STATE_FEATURES, type FeatureVector } from "../src/lib/afya/feature-engine";
 import { riskRank, wbgtToRisk } from "../src/lib/afya/constants";
-import { CLIMATOLOGY_DAYS, BLOCK_HOURS } from "../src/lib/afya/climatology";
+import { CLIMATOLOGY_DAYS, BLOCK_HOURS, timeOfDayBlock } from "../src/lib/afya/climatology";
+import { MIN_DWELL_SLOTS, smoothStates, stateRuns } from "../src/lib/afya/state-engine";
+import type { StateId } from "../src/lib/afya/types";
 import evaluation from "../src/lib/afya/model/forecast-evaluation.json";
 import { featureScale, mean, round } from "./ridge";
 import {
@@ -39,6 +41,8 @@ const BAND_FROM = "2025-08";
 const BAND_SHARE = 0.8;
 const STATES_TRAIN_UNTIL = "2026-04-01T00:00:00Z";
 const STATE_COUNT = 4;
+// A state and time-of-day block needs this many readings for its own next-state row.
+const MIN_BLOCK_READINGS = 20;
 const OUT_DIR = path.join(process.cwd(), "src", "lib", "afya", "model");
 
 const METHODS: Record<ModelKind, string> = {
@@ -229,23 +233,61 @@ function fitStates(a: Archive) {
     return stateOfCluster.get(bestK)!;
   };
 
-  // How often each state is followed by each other state, over the whole archive.
-  const labels = series.map((_, i) => (usable[i] ? nearest(zs(features[i]!)) : null));
-  const moves = Array.from({ length: STATE_COUNT }, () => new Array(STATE_COUNT).fill(0));
-  let prev: number | null = null;
-  for (const l of labels) {
-    if (l === null) {
-      prev = null;
-      continue;
+  // Changes of state are counted after short flips are smoothed away, as the
+  // app shows them. For every reading: the state that came next, and when.
+  const labels = series.map((_, i) => (usable[i] ? (nearest(zs(features[i]!)) as StateId) : null));
+  const smoothed = smoothStates(labels);
+  const runs = stateRuns(smoothed);
+  const next: ({ to: number; hours: number } | null)[] = series.map(() => null);
+  runs.forEach((r, k) => {
+    const after = runs[k + 1];
+    if (!after) return;
+    for (let i = r.start; i < r.end; i++) {
+      if (smoothed[i] !== null) next[i] = { to: after.state_id, hours: (a.ms[after.start] - a.ms[i]) / 3600_000 };
     }
-    if (prev !== null && l !== prev) moves[prev][l]++;
-    prev = l;
-  }
+  });
+
+  const moves = Array.from({ length: STATE_COUNT }, () => new Array(STATE_COUNT).fill(0));
+  runs.slice(1).forEach((r, k) => moves[runs[k].state_id][r.state_id]++);
   const transitions = moves.map((counts, from) => {
     const total = counts.reduce((x, y) => x + y, 0);
     const to = counts.indexOf(Math.max(...counts));
     return { from, to, probability: total ? round(counts[to] / total, 2) : 0, changes: total };
   });
+
+  // Which state comes next, given the state and the three-hour block of the
+  // day, from the training months; scored on the months after them.
+  const inTraining = (i: number) => series[i].ts < STATES_TRAIN_UNTIL;
+  const blockOf = (i: number) => timeOfDayBlock(a.ms[i]);
+  const nextRow = (idx: number[]) => {
+    const counts = new Array(STATE_COUNT).fill(0);
+    idx.forEach((i) => counts[next[i]!.to]++);
+    const to = counts.indexOf(Math.max(...counts));
+    const hours = idx.filter((i) => next[i]!.to === to).map((i) => next[i]!.hours);
+    return { to, probability: round(counts[to] / idx.length, 2), typical_hours: round(quantile(hours, 0.5), 1), n: idx.length };
+  };
+  const known = series.map((_, i) => i).filter((i) => smoothed[i] !== null && next[i] !== null);
+  const trainKnown = known.filter(inTraining);
+  const nextState: (ReturnType<typeof nextRow> & { state: number; block: number })[] = [];
+  for (let state = 0; state < STATE_COUNT; state++) {
+    for (let block = 0; block < 24 / BLOCK_HOURS; block++) {
+      const idx = trainKnown.filter((i) => smoothed[i] === state && blockOf(i) === block);
+      if (idx.length >= MIN_BLOCK_READINGS) nextState.push({ state, block, ...nextRow(idx) });
+    }
+  }
+  const nextStateAnyTime = [0, 1, 2, 3].map((state) => ({ state, ...nextRow(trainKnown.filter((i) => smoothed[i] === state)) }));
+  const predictNext = (i: number) =>
+    (nextState.find((r) => r.state === smoothed[i] && r.block === blockOf(i)) ??
+      nextStateAnyTime.find((r) => r.state === smoothed[i])!);
+  const tested = known.filter((i) => !inTraining(i));
+  const right = tested.filter((i) => predictNext(i).to === next[i]!.to);
+  const hoursOff = right.map((i) => Math.abs(predictNext(i).typical_hours - next[i]!.hours));
+
+  const days = (a.ms[a.ms.length - 1] - a.ms[0]) / 86_400_000;
+  const changes = (l: (StateId | null)[]) => {
+    const seen = l.filter((x) => x !== null);
+    return round(seen.slice(1).filter((x, k) => x !== seen[k]).length / days, 1);
+  };
 
   const summary = [0, 1, 2, 3].map((state) => {
     const cluster = [...stateOfCluster.entries()].find(([, s]) => s === state)![0];
@@ -274,7 +316,17 @@ function fitStates(a: Archive) {
       return best.centres[cluster].map((v) => round(v, 4));
     }),
     summary,
+    dwell_slots: MIN_DWELL_SLOTS,
+    changes_per_day: { unsmoothed: changes(labels), smoothed: changes(smoothed) },
     transitions,
+    next_state: nextState,
+    next_state_any_time: nextStateAnyTime,
+    next_state_test: {
+      from: STATES_TRAIN_UNTIL.slice(0, 10),
+      n: tested.length,
+      right_pct: round((right.length / tested.length) * 100, 1),
+      typical_hours_median_error: round(quantile(hoursOff, 0.5), 2),
+    },
     n_training_slots: trainIdx.length,
   };
 }
@@ -301,7 +353,8 @@ function main() {
     );
   }
   console.log("states", JSON.stringify(states.summary));
-  console.log("transitions", JSON.stringify(states.transitions));
+  console.log("changes per day", JSON.stringify(states.changes_per_day), "transitions", JSON.stringify(states.transitions));
+  console.log("next state", JSON.stringify(states.next_state_test));
 }
 
 main();

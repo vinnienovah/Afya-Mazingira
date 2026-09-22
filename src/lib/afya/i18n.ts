@@ -51,6 +51,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     state_3: "Cooling / Recovery",
     state_since: "State active since",
     next_transition: "Expected next transition",
+    next_transition_typical_hours: "usually in about {hours} h",
     state_timeline: "Environmental State History",
     environmental_state: "Environmental State",
 
@@ -585,6 +586,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     state_3: "Kupoa / Kupona",
     state_since: "Hali imeanza",
     next_transition: "Mabadiliko yanayotarajiwa",
+    next_transition_typical_hours: "kwa kawaida baada ya takriban saa {hours}",
     state_timeline: "Historia ya Hali ya Mazingira",
     environmental_state: "Hali ya Mazingira",
 

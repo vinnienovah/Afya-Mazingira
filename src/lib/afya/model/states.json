@@ -166,31 +166,250 @@
    "median_local_hour": 19
   }
  ],
+ "dwell_slots": 4,
+ "changes_per_day": {
+  "unsmoothed": 9.4,
+  "smoothed": 4
+ },
  "transitions": [
   {
    "from": 0,
    "to": 1,
-   "probability": 0.89,
-   "changes": 657
+   "probability": 0.96,
+   "changes": 471
   },
   {
    "from": 1,
    "to": 2,
-   "probability": 0.83,
-   "changes": 1552
+   "probability": 0.84,
+   "changes": 491
   },
   {
    "from": 2,
-   "to": 1,
-   "probability": 0.61,
-   "changes": 1369
+   "to": 3,
+   "probability": 0.96,
+   "changes": 415
   },
   {
    "from": 3,
    "to": 0,
-   "probability": 0.66,
-   "changes": 716
+   "probability": 0.95,
+   "changes": 492
   }
  ],
+ "next_state": [
+  {
+   "state": 0,
+   "block": 0,
+   "to": 1,
+   "probability": 0.96,
+   "typical_hours": 7.5,
+   "n": 3104
+  },
+  {
+   "state": 0,
+   "block": 1,
+   "to": 1,
+   "probability": 0.97,
+   "typical_hours": 4.5,
+   "n": 3482
+  },
+  {
+   "state": 0,
+   "block": 2,
+   "to": 1,
+   "probability": 0.96,
+   "typical_hours": 1.8,
+   "n": 3095
+  },
+  {
+   "state": 0,
+   "block": 3,
+   "to": 1,
+   "probability": 0.85,
+   "typical_hours": 1,
+   "n": 568
+  },
+  {
+   "state": 0,
+   "block": 4,
+   "to": 1,
+   "probability": 0.55,
+   "typical_hours": 1.4,
+   "n": 77
+  },
+  {
+   "state": 0,
+   "block": 5,
+   "to": 1,
+   "probability": 0.8,
+   "typical_hours": 20.4,
+   "n": 25
+  },
+  {
+   "state": 0,
+   "block": 6,
+   "to": 1,
+   "probability": 1,
+   "typical_hours": 13.5,
+   "n": 83
+  },
+  {
+   "state": 0,
+   "block": 7,
+   "to": 1,
+   "probability": 0.95,
+   "typical_hours": 10.3,
+   "n": 1102
+  },
+  {
+   "state": 1,
+   "block": 2,
+   "to": 2,
+   "probability": 0.97,
+   "typical_hours": 3.8,
+   "n": 526
+  },
+  {
+   "state": 1,
+   "block": 3,
+   "to": 2,
+   "probability": 0.94,
+   "typical_hours": 2.5,
+   "n": 2822
+  },
+  {
+   "state": 1,
+   "block": 4,
+   "to": 2,
+   "probability": 0.8,
+   "typical_hours": 1,
+   "n": 1368
+  },
+  {
+   "state": 1,
+   "block": 5,
+   "to": 3,
+   "probability": 0.92,
+   "typical_hours": 0.8,
+   "n": 86
+  },
+  {
+   "state": 2,
+   "block": 3,
+   "to": 3,
+   "probability": 0.84,
+   "typical_hours": 6.3,
+   "n": 183
+  },
+  {
+   "state": 2,
+   "block": 4,
+   "to": 3,
+   "probability": 0.98,
+   "typical_hours": 3.8,
+   "n": 2046
+  },
+  {
+   "state": 2,
+   "block": 5,
+   "to": 3,
+   "probability": 1,
+   "typical_hours": 1.5,
+   "n": 2312
+  },
+  {
+   "state": 2,
+   "block": 6,
+   "to": 3,
+   "probability": 1,
+   "typical_hours": 0.5,
+   "n": 35
+  },
+  {
+   "state": 3,
+   "block": 0,
+   "to": 0,
+   "probability": 1,
+   "typical_hours": 0.8,
+   "n": 252
+  },
+  {
+   "state": 3,
+   "block": 3,
+   "to": 1,
+   "probability": 0.86,
+   "typical_hours": 0.8,
+   "n": 56
+  },
+  {
+   "state": 3,
+   "block": 4,
+   "to": 0,
+   "probability": 0.76,
+   "typical_hours": 7.3,
+   "n": 119
+  },
+  {
+   "state": 3,
+   "block": 5,
+   "to": 0,
+   "probability": 1,
+   "typical_hours": 5.5,
+   "n": 1084
+  },
+  {
+   "state": 3,
+   "block": 6,
+   "to": 0,
+   "probability": 1,
+   "typical_hours": 4,
+   "n": 3216
+  },
+  {
+   "state": 3,
+   "block": 7,
+   "to": 0,
+   "probability": 1,
+   "typical_hours": 1.5,
+   "n": 2290
+  }
+ ],
+ "next_state_any_time": [
+  {
+   "state": 0,
+   "to": 1,
+   "probability": 0.95,
+   "typical_hours": 4.8,
+   "n": 11536
+  },
+  {
+   "state": 1,
+   "to": 2,
+   "probability": 0.89,
+   "typical_hours": 2,
+   "n": 4802
+  },
+  {
+   "state": 2,
+   "to": 3,
+   "probability": 0.98,
+   "typical_hours": 2.5,
+   "n": 4576
+  },
+  {
+   "state": 3,
+   "to": 0,
+   "probability": 0.99,
+   "typical_hours": 3.3,
+   "n": 7017
+  }
+ ],
+ "next_state_test": {
+  "from": "2026-04-01",
+  "n": 14601,
+  "right_pct": 94.9,
+  "typical_hours_median_error": 0.75
+ },
  "n_training_slots": 27931
 }

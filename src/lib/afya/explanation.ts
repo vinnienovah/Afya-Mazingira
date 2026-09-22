@@ -40,6 +40,7 @@ export interface ExplanationFacts {
   transition_next_en: string | null;
   transition_next_sw: string | null;
   transition_probability: number | null;
+  transition_typical_hours: number | null;
   era5_temp_anomaly: number;
   era5_humidity_anomaly: number;
   chirps_7d_mm: number;
@@ -107,6 +108,7 @@ export function buildExplanationFacts(situation: SituationResult): ExplanationFa
       ? STATES[f.state.transition_likelihood.state_id].name_sw
       : null,
     transition_probability: f.state.transition_likelihood?.probability ?? null,
+    transition_typical_hours: f.state.transition_likelihood?.typical_hours ?? null,
     era5_temp_anomaly: f.era5.local_temp_anomaly_c,
     era5_humidity_anomaly: f.era5.local_humidity_anomaly,
     chirps_7d_mm: f.chirps.chirps_7d_mm,
@@ -196,8 +198,11 @@ export function buildFarmExplanationFacts(advisory: {
 export function deterministicExplanationEn(facts: ExplanationFacts): string {
   const stateDesc = getStateDescriptionEn(facts.state_id);
   const riskDesc = getRiskDescriptionEn(facts.thermal_risk_level);
+  const hours = Math.max(1, Math.round(facts.transition_typical_hours ?? 0));
   const transitionPart = facts.transition_next_en
-    ? ` The environment is likely to transition to ${facts.transition_next_en} within the next few hours.`
+    ? facts.transition_typical_hours !== null
+      ? ` The environment is likely to change to ${facts.transition_next_en} in about ${hours} hour${hours === 1 ? "" : "s"}.`
+      : ` The environment is likely to change to ${facts.transition_next_en} next.`
     : "";
   const peakPart = facts.peak_time && facts.peak_wbgt
     ? ` The expected peak exposure is ${facts.peak_wbgt.toFixed(1)}°C at around ${fmtTime(facts.peak_time)}.`
@@ -231,8 +236,11 @@ export function deterministicExplanationEn(facts: ExplanationFacts): string {
 
 export function deterministicExplanationSw(facts: ExplanationFacts): string {
   const stateDesc = getStateDescriptionSw(facts.state_id);
+  const hours = Math.max(1, Math.round(facts.transition_typical_hours ?? 0));
   const transitionPart = facts.transition_next_sw
-    ? ` Mazingira yana uwezekano wa kubadilika kuwa ${facts.transition_next_sw} ndani ya masaa machache yanayokuja.`
+    ? facts.transition_typical_hours !== null
+      ? ` Mazingira yana uwezekano wa kubadilika kuwa ${facts.transition_next_sw} baada ya takriban saa ${hours}.`
+      : ` Mazingira yana uwezekano wa kubadilika kuwa ${facts.transition_next_sw} baadaye.`
     : "";
   const peakPart = facts.peak_time && facts.peak_wbgt
     ? ` Kilele cha kupatwa kinatarajiwa kuwa ${facts.peak_wbgt.toFixed(1)}°C katika karibu ${fmtTime(facts.peak_time)}.`

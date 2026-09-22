@@ -54,7 +54,8 @@ export interface EnvironmentalState {
   state_id: StateId;
   since: string;
   previous_state_id: StateId | null;
-  transition_likelihood: { state_id: StateId; probability: number } | null;
+  // Most likely next state at this time of day, and the median hours until it.
+  transition_likelihood: { state_id: StateId; probability: number; typical_hours?: number } | null;
 }
 
 export interface StateSegment {
