@@ -59,16 +59,20 @@ export default async function BriefingPage() {
       icon: <Radio className="h-4 w-4" strokeWidth={1.8} />,
     },
     {
-      name: "ERA5-Land",
+      name: "ERA5 (~28 km)",
       tag: t("regional_model_label"),
-      detail: `${era5.era5_temp_c.toFixed(1)}°C · ${t("local_vs_regional")} ${era5.local_temp_anomaly_c >= 0 ? "+" : ""}${era5.local_temp_anomaly_c.toFixed(1)}°C`,
+      detail: era5.available
+        ? `${era5.era5_temp_c.toFixed(1)}°C · ${t("local_vs_regional")} ${era5.local_temp_anomaly_c >= 0 ? "+" : ""}${era5.local_temp_anomaly_c.toFixed(1)}°C`
+        : t("data_unavailable"),
       color: "#3786B5",
       icon: <Wind className="h-4 w-4" strokeWidth={1.8} />,
     },
     {
-      name: "ERA5-Land rainfall",
-      tag: t("historical_label"),
-      detail: `${chirps.chirps_7d_mm.toFixed(1)} mm / 7d · ${chirps.chirps_30d_mm.toFixed(1)} mm / 30d`,
+      name: "Open-Meteo rainfall",
+      tag: t("regional_model_label"),
+      detail: chirps.available
+        ? `${chirps.chirps_7d_mm.toFixed(1)} mm / 7d · ${chirps.chirps_30d_mm.toFixed(1)} mm / 30d`
+        : t("data_unavailable"),
       color: "#247B78",
       icon: <CloudRain className="h-4 w-4" strokeWidth={1.8} />,
     },

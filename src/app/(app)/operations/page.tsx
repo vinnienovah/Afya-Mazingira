@@ -255,9 +255,11 @@ export default function OperationsPage() {
             {situation && (
               <div className="space-y-2">
                 <p className="text-xs text-afya-muted">
-                  {lang === "sw"
-                    ? `Tofauti ya joto ya kimaeneo: ${situation.era5.local_temp_anomaly_c >= 0 ? "+" : ""}${situation.era5.local_temp_anomaly_c}°C. Unyevu wa udongo: ${(situation.era5.era5_soil_moisture * 100).toFixed(0)}%.`
-                    : `Local temp anomaly vs ERA5: ${situation.era5.local_temp_anomaly_c >= 0 ? "+" : ""}${situation.era5.local_temp_anomaly_c}°C. Soil moisture: ${(situation.era5.era5_soil_moisture * 100).toFixed(0)}%.`}
+                  {!situation.era5.available
+                    ? t("era5_unavailable")
+                    : lang === "sw"
+                      ? `Tofauti ya joto dhidi ya ERA5 (~km 28): ${situation.era5.local_temp_anomaly_c >= 0 ? "+" : ""}${situation.era5.local_temp_anomaly_c}°C. Unyevu wa udongo wa ERA5 (sm 0-7): ${(situation.era5.era5_soil_moisture * 100).toFixed(0)}%.`
+                      : `Local temp anomaly vs ERA5 (~28 km): ${situation.era5.local_temp_anomaly_c >= 0 ? "+" : ""}${situation.era5.local_temp_anomaly_c}°C. ERA5 soil moisture (0-7 cm): ${(situation.era5.era5_soil_moisture * 100).toFixed(0)}%.`}
                 </p>
                 <Link
                   href="/map"
