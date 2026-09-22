@@ -48,13 +48,21 @@ export interface CurrentObservation {
   wet_bulb_c: number;
   wbgt_c: number;
   rain_observed: boolean;
+  // Station fields in this reading that were filled in (interpolated or
+  // carried forward) rather than measured.
+  imputed?: string[];
 }
 
 export interface EnvironmentalState {
   state_id: StateId;
   since: string;
   previous_state_id: StateId | null;
-  transition_likelihood: { state_id: StateId; probability: number } | null;
+  transition_likelihood: {
+    state_id: StateId;
+    probability: number;
+    // Typical hours until that change, when the transition table gives it.
+    typical_hours?: number | null;
+  } | null;
 }
 
 export interface StateSegment {
@@ -72,6 +80,7 @@ export interface DataQuality {
 
 export interface RiskAssessment {
   thermal: RiskLevel;
+  thermal_now?: RiskLevel; // band of the current WBGT; thermal is the +3 h band
   rain_probability: number; // 0–1
   uncertainty: UncertaintyCategory;
   data_quality: QualityStatus;
@@ -122,6 +131,10 @@ export interface ChirpsContext {
   chirps_dry_spell_days: number;
   chirps_wet_spell_days: number;
   valid_date: string;
+  // Days each total covers (YYYY-MM-DD, inclusive). Without them both
+  // totals end on valid_date.
+  window_7d?: { from: string; to: string };
+  window_30d?: { from: string; to: string };
 }
 
 export interface SentinelContext {
@@ -136,6 +149,7 @@ export interface SentinelContext {
 export interface Contributor {
   feature: string; // feature key (i18n on client)
   direction: "increasing" | "high" | "low" | "stable";
+  contribution_c?: number; // signed effect on the +3 h forecast, °C
 }
 
 export interface SituationResult {
