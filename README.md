@@ -99,8 +99,10 @@ Past days after the archive ends (replay, climate history, the 30 days the forec
 | R11 | In a rain day, one gauge's own total is 0.4 mm or more while the other's is zero. It is reported against the date the rain day starts, 06:00 UTC |
 | R12 | A channel silent for a whole day (Nairobi time), or flagged in every reading of it. On the CHORDS feed, which sends rain only while it rains, the gauges are not judged until one reports |
 | R13 | The gust-direction column copying the gust speed, judged on the readings that carry a gust |
+| R14 | Cadence: a reading arriving a whole interval late, or inside a gap. Reported, never scored |
+| R15 | A non-zero device health code. This export carries no such column, so the check reports itself as not reported rather than passing; where a feed sends one, a code is noted and never counted as a fault, its meaning being undocumented |
 | R16 | The firmware WBGT more than 1.5 °C below the wet bulb |
-| A01, A03, A05 | Audits: the firmware wet bulb against Stull (2011), the firmware WBGT against the wet bulb, and the three thermometers against each other |
+| A01 to A05 | Audits: the firmware wet bulb against Stull (2011), the firmware heat index against the NWS Rothfusz regression, the firmware WBGT against the wet bulb, the firmware WBGT against a standards-grade estimate (Liljegren et al. 2008), and the three thermometers against each other |
 | Daily score | 100, less 10 for each group that is bad, 2 for each that is suspect, and 1 for every 14.4 minutes without data. The groups are the three thermometers, humidity, pressure, wind, light, and each rain gauge on its own. Missing time follows the feed's own cadence: a gap opens when a reading is more than four minutes later than the spacing the feed keeps (906 s in the archive, 900 s from CHORDS, 61 s in the organisers' one-minute exports), and is charged from one interval after the last reading |
 
 Where it lives: the rules in `src/lib/afya/sentinel.ts`; `npm run station-report` runs them over the whole archive into `src/lib/afya/model/station-health.json`; `/api/station-health` serves that report and the same checks live on the last 24 hours; the **Station Health** page shows both; `tests/sentinel.test.ts` tests them.
@@ -117,6 +119,8 @@ Over the 466 days on record (Nairobi days):
 - a mean daily score of 89.5 and no day below 80. The gust-direction copy (R13) is bad every day, as the Sentinel specification counts it, so 90 is the best any day scores. That score leaves out the battery, because this export carries no battery channel to judge; counting it as the specification does, the mean is 79.5, no day reaches above 80 and 112 fall below it. The page shows both;
 - 320 minutes without data, on 12 days; two gaps longer than an hour, the longest 1.6 hours (27 August 2026, 20:02 to 21:38 UTC);
 - the firmware WBGT is below the wet bulb in 63.5 % of readings and more than 1.5 °C below in 42.9 % (62.2 % at night, 26.8 % by day);
+- the firmware heat index matches the NWS Rothfusz regression to 0.101 °C on average, and to 0.034 °C over the readings at or above 27 °C the formula is built for (A02). The largest single difference, 1.058 °C, sits on the 80 °F switch between the simple form and the regression;
+- the firmware WBGT reads below a standards-grade estimate at every hour of the day (A04): about 2 °C at night, 8.6 °C at 09:00 EAT, 3.99 °C over the record. The gap follows the sun rather than the temperature peak. The estimate needs solar irradiance the station does not measure, inferred from the SI1145 infrared counts, so the daytime figures carry real uncertainty (held-out r² 0.674, RMSE 155 W/m², worth 1.1 to 2.0 °C of WBGT); the night-time gap uses no irradiance at all. The firmware's column matches none of the usual conventions: against the archive it differs from the wet bulb alone by 1.92 °C on average, from 0.7 × wet bulb + 0.3 × air (ISO 7243 without solar load) by 1.99 °C, and from the Liljegren estimate by 4.05 °C;
 - by each gauge's own daily totals, gauge 2 recorded nothing on 85 rain days when gauge 1 measured 0.4 mm or more, and gauge 1 nothing on 16 days when gauge 2 did;
 - since 1 July 2025 the records carry the UV index in gauge 2's running-total column, so gauge 2's running total is lost and only its daily totals remain;
 - the archive export has no battery channel; the CHORDS feed lists one but leaves it empty, which counts as bad (R12);
@@ -354,6 +358,8 @@ Between them the team covers the environmental science behind the heat and farm 
 ## 15. Licence
 
 MIT. See [LICENSE](LICENSE). Station and reanalysis data remain under their providers' terms (section 10).
+
+One file carries a second licence: `src/lib/afya/liljegren.ts` implements the heat-balance equations of WBGT version 1.1 by James C. Liljegren, Copyright © 2008 UChicago Argonne, LLC, and keeps that program's open-source notice in full at the head of the file, as its terms require.
 
 ---
 
