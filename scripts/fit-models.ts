@@ -1,6 +1,6 @@
-// Fits the WBGT forecast and the environmental states on the committed
-// Conduit archive, through the same cleaning and feature code the app runs,
-// and writes them to src/lib/afya/model/. Run with:
+// Fits the WBGT forecast, the environmental states and the rain probability
+// on the committed Conduit archive, through the same cleaning and feature code
+// the app runs, and writes them to src/lib/afya/model/. Run with:
 //
 //   npx tsx scripts/fit-models.ts
 //
