@@ -2,8 +2,12 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { runPipeline } from "@/lib/afya/pipeline";
 import { t as tr } from "@/lib/afya/i18n";
-import { STATES, RISK_META } from "@/lib/afya/constants";
-import { fmtTime, fmtWindow, fmtDate, fmtAgo } from "@/lib/afya/format";
+import { STATES } from "@/lib/afya/constants";
+import { fill, fmtAsOf, fmtTime, fmtWindow, fmtDate, fmtAgo, fmtDayMonth, fmtSigned } from "@/lib/afya/format";
+import {
+  activityName, contributionBars, contributorLabel, currentBand, nextStateNote, rainWindows,
+} from "@/lib/afya/display";
+import { ACTIVITY_COOKIE, parseActivityKey } from "@/lib/preferred-activity";
 import type { Lang } from "@/lib/afya/types";
 import { StateChip } from "@/components/ui/StateChip";
 
@@ -31,25 +35,31 @@ export default async function BriefingPage() {
   const lang: Lang = cookieStore.get("afya_lang")?.value === "sw" ? "sw" : "en";
   const t = (k: string) => tr(lang, k);
 
-  const situation = await runPipeline();
+  // Plan the window for the same default activity as the Situation page.
+  const activity = parseActivityKey(cookieStore.get(ACTIVITY_COOKIE)?.value);
+  const situation = await runPipeline(activity ? { activityKey: activity } : {});
   const {
     state, current, forecast, quality, risk, best_time,
     expected_peak, state_history_24h, contributors,
     era5, chirps, sentinel, data_source,
   } = situation;
 
-  const stateMeta = STATES[state.state_id];
-  const stateName = lang === "sw" ? stateMeta.name_sw : stateMeta.name;
-  const riskMeta = RISK_META[risk.thermal];
-  const riskLabel = lang === "sw" ? riskMeta.sw : riskMeta.en;
   const transition = state.transition_likelihood;
-  const now = situation.generated_at;
+  const dataTime = situation.generated_at;
+  const renderedAt = new Date().toISOString();
+  const nowBand = currentBand(situation);
+  const bars = contributionBars(contributors);
+  const rain = rainWindows(chirps);
+  const num = (v: number | null | undefined): v is number => typeof v === "number" && Number.isFinite(v);
 
   const f1h = forecast.find((f) => f.horizon === "1h");
   const f3h = forecast.find((f) => f.horizon === "3h");
   const f6h = forecast.find((f) => f.horizon === "6h");
   const f9h = forecast.find((f) => f.horizon === "9h");
 
+  // ERA5 runs days behind, so each regional figure carries the time it is for.
+  const era5Ok = era5.available !== false && num(era5.era5_temp_c);
+  const rainOk = chirps.available !== false && num(chirps.chirps_7d_mm) && num(chirps.chirps_30d_mm);
   const provenance = [
     {
       name: "Conduit · JKUAT/Juja",
@@ -59,23 +69,31 @@ export default async function BriefingPage() {
       icon: <Radio className="h-4 w-4" strokeWidth={1.8} />,
     },
     {
-      name: "ERA5-Land",
+      name: "ERA5",
       tag: t("regional_model_label"),
-      detail: `${era5.era5_temp_c.toFixed(1)}°C · ${t("local_vs_regional")} ${era5.local_temp_anomaly_c >= 0 ? "+" : ""}${era5.local_temp_anomaly_c.toFixed(1)}°C`,
+      detail: era5Ok
+        ? [
+            `${era5.era5_temp_c.toFixed(1)}°C`,
+            num(era5.local_temp_anomaly_c) ? `${t("local_vs_regional")} ${fmtSigned(era5.local_temp_anomaly_c)}°C` : null,
+            era5.valid_time ? fill(t("era5_valid"), { time: fmtAsOf(era5.valid_time, lang, Date.parse(renderedAt)) }) : null,
+          ].filter(Boolean).join(" · ")
+        : t("context_unavailable"),
       color: "#3786B5",
       icon: <Wind className="h-4 w-4" strokeWidth={1.8} />,
     },
     {
-      name: "ERA5-Land rainfall",
+      name: lang === "sw" ? "Mvua ya ERA5" : "ERA5 rainfall",
       tag: t("historical_label"),
-      detail: `${chirps.chirps_7d_mm.toFixed(1)} mm / 7d · ${chirps.chirps_30d_mm.toFixed(1)} mm / 30d`,
+      detail: rainOk
+        ? `${chirps.chirps_7d_mm.toFixed(1)} mm · ${fill(t("rain_days_to"), { days: 7, day: fmtDayMonth(rain.week.to, lang) })} · ${chirps.chirps_30d_mm.toFixed(1)} mm · ${fill(t("rain_days_to"), { days: 30, day: fmtDayMonth(rain.month.to, lang) })}`
+        : t("context_unavailable"),
       color: "#247B78",
       icon: <CloudRain className="h-4 w-4" strokeWidth={1.8} />,
     },
     {
       name: "Sentinel-2 / Sentinel-3",
       tag: t("satellite_label"),
-      detail: `${sentinel.sentinel2_acquired ?? "-"} · ${sentinel.sentinel3_acquired ?? "-"}`,
+      detail: `${sentinel.sentinel2_acquired ? fmtDate(sentinel.sentinel2_acquired) : "-"} · ${sentinel.sentinel3_acquired ? fmtDate(sentinel.sentinel3_acquired) : "-"}`,
       color: "#68756F",
       icon: <Satellite className="h-4 w-4" strokeWidth={1.8} />,
     },
@@ -104,11 +122,13 @@ export default async function BriefingPage() {
             </div>
             <div className="text-right">
               <p className="text-xs font-semibold">{t("location")}</p>
-              <p className="text-xs text-white/60">{fmtDate(now)} · {fmtTime(now)} EAT</p>
+              <p className="text-xs text-white/60">
+                {t("data_as_of")} {fmtDate(dataTime)} · {fmtTime(dataTime)} EAT
+              </p>
               <p className="mt-1 text-[10px] font-bold tracking-wide">
-                {data_source === "DEMO" && <span className="text-afya-gold">DEMO MODE</span>}
-                {data_source === "CONDUIT_ARCHIVE" && <span className="text-[#247B78]">STATION ARCHIVE</span>}
-                {data_source === "CONDUIT_LIVE" && <span className="text-afya-green">LIVE · CONDUIT</span>}
+                {data_source === "DEMO" && <span className="text-afya-gold">{t("demo_mode")}</span>}
+                {data_source === "CONDUIT_ARCHIVE" && <span className="text-[#247B78]">{t("conduit_archive_badge")}</span>}
+                {data_source === "CONDUIT_LIVE" && <span className="text-afya-green">{t("conduit_live_badge")}</span>}
               </p>
             </div>
           </div>
@@ -125,7 +145,14 @@ export default async function BriefingPage() {
           <div className="ml-auto" />
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-afya-muted">{t("thermal_exposure")}</p>
-            <div className="mt-2"><RiskChip level={risk.thermal} size="md" /></div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <RiskChip level={nowBand} size="md" />
+              <span className="text-xs tabular-nums text-afya-muted">{t("wbgt_now")}: {current.wbgt_c.toFixed(1)}°C</span>
+            </div>
+            <div className="mt-1.5 flex items-center gap-2 text-xs text-afya-muted">
+              {t("horizon_3h_short")}
+              <RiskChip level={risk.thermal} size="sm" />
+            </div>
           </div>
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-afya-muted">{t("data_quality")}</p>
@@ -149,9 +176,9 @@ export default async function BriefingPage() {
               sub: f3h ? `${f3h.lower.toFixed(1)}–${f3h.upper.toFixed(1)}°C` : "-",
             },
             {
-              en: "Next transition", sw: "Mabadiliko yanayotarajiwa",
+              en: t("next_transition"), sw: t("next_transition"),
               value: transition ? (lang === "sw" ? STATES[transition.state_id].name_sw : STATES[transition.state_id].name) : "-",
-              sub: transition ? `~${Math.round(transition.probability * 100)}%` : "-",
+              sub: nextStateNote(transition, lang) ?? "-",
             },
             {
               en: "Current WBGT", sw: "WBGT ya sasa",
@@ -175,6 +202,12 @@ export default async function BriefingPage() {
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-afya-muted">{t("best_window_result")}</p>
             <p className="mt-1 text-3xl font-bold tabular-nums text-afya-charcoal">
               {fmtWindow(best_time.recommended.start, best_time.recommended.end)}
+            </p>
+            <p className="mt-1 text-sm text-afya-muted">
+              {fill(t("window_for_activity"), {
+                minutes: best_time.duration_minutes,
+                activity: activityName(best_time.activity, lang),
+              })}
             </p>
             {best_time.alternative && (
               <p className="mt-1 text-sm text-afya-muted">
@@ -269,11 +302,14 @@ export default async function BriefingPage() {
               {contributors.map((c, i) => (
                 <li key={i} className="flex items-center gap-2 text-sm text-afya-charcoal">
                   <TrendingUp className="h-3.5 w-3.5 shrink-0 text-afya-gold" strokeWidth={2} aria-hidden="true" />
-                  {c.feature.replace(/_/g, " ")}
+                  <span className="flex-1">{contributorLabel(c.feature, lang)}</span>
+                  {bars && <span className="tabular-nums text-afya-muted">{fmtSigned(bars[i].value_c, 2)}°C</span>}
                 </li>
               ))}
             </ul>
-            <p className="mt-3 text-[11px] italic text-afya-muted">{t("contributor_note")}</p>
+            <p className="mt-3 text-[11px] italic text-afya-muted">
+              {bars ? t("contributor_values_note") : t("contributor_list_note")}
+            </p>
           </div>
           <div className="bg-white px-7 py-5">
             <h2 className="text-xs font-bold uppercase tracking-[0.16em] text-afya-muted">{t("technical_measurements")}</h2>
@@ -318,7 +354,7 @@ export default async function BriefingPage() {
         <footer className="border-t border-afya-border bg-afya-canvas/60 px-7 py-4">
           <p className="text-[10px] leading-relaxed text-afya-muted">{t("about_disclaimer")}</p>
           <p className="mt-1 text-[10px] text-afya-muted/70">
-            {t("briefing_generated")} {fmtDate(now)} {fmtTime(now)} EAT · AFYA MAZINGIRA · {t("location")}
+            {t("briefing_generated")} {fmtDate(renderedAt)} {fmtTime(renderedAt)} EAT · AFYA MAZINGIRA · {t("location")}
           </p>
         </footer>
       </article>
