@@ -7,11 +7,15 @@ import { STATES, RISK_META } from "@/lib/afya/constants";
 import { horizonScores, FORECAST_PERIODS } from "@/lib/afya/forecast-engine";
 import evaluation from "@/lib/afya/model/forecast-evaluation.json";
 import type { Lang } from "@/lib/afya/types";
-import { fmtTime, fmtAgo } from "@/lib/afya/format";
-import { Card, CardTitle, CardMeta } from "@/components/ui/Card";
+import { fill, fmtAsOf, fmtDate, fmtDayMonth, fmtSigned, MONTH_NAMES } from "@/lib/afya/format";
+import {
+  contributorLabel, currentBand, nextStateNote, rainWindows, timeOfDayGapHours,
+} from "@/lib/afya/display";
+import { Card, CardTitle } from "@/components/ui/Card";
 import { StateChip } from "@/components/ui/StateChip";
 import { RiskChip } from "@/components/ui/RiskChip";
 import { QualityDot } from "@/components/ui/QualityDot";
+import { ContributorList } from "@/components/ui/ContributorList";
 import MeasurementStrip from "@/components/ui/MeasurementStrip";
 import StateTimeline from "@/components/charts/StateTimeline";
 import AiPanel from "@/components/ai/AiPanel";
@@ -20,10 +24,12 @@ import { AlertTriangle, Cpu, Globe, CloudRain, Satellite, Database, TrendingUp, 
 
 const HORIZONS = ["1h", "3h", "6h", "9h"] as const;
 
-const MONTH_NAMES: Record<Lang, string[]> = {
-  en: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
-  sw: ["Jan", "Feb", "Mac", "Apr", "Mei", "Jun", "Jul", "Ago", "Sep", "Okt", "Nov", "Des"],
-};
+// ERA5 compared at another time of day mostly shows the daily cycle.
+const MAX_COMPARABLE_GAP_HOURS = 1.5;
+
+const isNum = (v: number | null | undefined): v is number => typeof v === "number" && Number.isFinite(v);
+
+const UNCERTAINTY_SW = { LOW: "chini", MODERATE: "wastani", HIGH: "juu" } as const;
 
 /** "2026-01" as "Jan 2026", or "Jan" without the year. */
 function monthName(month: string, lang: Lang, withYear = true): string {
@@ -68,39 +74,52 @@ export default function IntelligencePage() {
   const rainOk = chirps.available !== false;
   const f3h = forecast.find((f) => f.horizon === "3h");
   const transition = state.transition_likelihood;
+  const nowBand = currentBand(situation);
+  const bandName = (level: keyof typeof RISK_META) => RISK_META[level][lang].toLowerCase();
+  const stateName = (id: keyof typeof STATES) => (lang === "sw" ? STATES[id].name_sw : STATES[id].name);
+
+  const era5Time = era5Ok && era5.valid_time ? era5.valid_time : null;
+  const anomaly = era5Ok ? era5.local_temp_anomaly_c : null;
+  const humidityAnomaly = era5Ok ? era5.local_humidity_anomaly : null;
+  const hoursApart = era5Time ? timeOfDayGapHours(current.time, era5Time) : 0;
+  const rain = rainWindows(chirps);
+  const days = (n: number) => (lang === "sw" ? `siku ${n}` : `${n} days`);
 
   const WHAT_WHY_NEXT = [
     {
       icon: <Info className="w-5 h-5 text-afya-teal" />,
       title_en: "WHAT?", title_sw: "NINI?",
-      body_en: `The JKUAT environment is in a ${STATES[state.state_id].name} state. WBGT in shade is ${current.wbgt_c.toFixed(1)}°C with ${risk.thermal.toLowerCase()} thermal exposure risk.`,
-      body_sw: `Mazingira ya JKUAT iko katika hali ya ${STATES[state.state_id].name_sw}. Kupatwa na WBGT ni ${current.wbgt_c.toFixed(1)}°C yenye hatari ${risk.thermal.toLowerCase()}.`,
+      body: fill(t("why_what"), {
+        state: stateName(state.state_id),
+        wbgt: current.wbgt_c.toFixed(1),
+        band_now: bandName(nowBand),
+        wbgt_3h: f3h ? f3h.value.toFixed(1) : "-",
+        band_3h: bandName(risk.thermal),
+      }),
     },
     {
       icon: <TrendingUp className="w-5 h-5 text-afya-gold" />,
       title_en: "WHY?", title_sw: "KWA NINI?",
-      body_en: contributors.length
-        ? `Main model contributors: ${contributors.slice(0, 3).map((c) => c.feature.replace(/_/g, " ")).join(", ")}.`
-        : "Conditions are consistent with the current environmental state pattern.",
-      body_sw: contributors.length
-        ? `Vichangiaji vikuu vya mfumo: ${contributors.slice(0, 3).map((c) => c.feature.replace(/_/g, " ")).join(", ")}.`
-        : "Hali ni sawa na muonekano wa hali ya mazingira ya sasa.",
+      body: contributors.length
+        ? fill(t("why_why"), { list: contributors.slice(0, 3).map((c) => contributorLabel(c.feature, lang).toLowerCase()).join(", ") })
+        : lang === "sw"
+          ? "Hali ni sawa na muonekano wa hali ya mazingira ya sasa."
+          : "Conditions are consistent with the current environmental state pattern.",
     },
     {
       icon: <Cpu className="w-5 h-5 text-afya-green" />,
       title_en: "WHAT NEXT?", title_sw: "NINI KINACHOFUATA?",
-      body_en: transition
-        ? `Likely next transition: ${STATES[transition.state_id].name} (~${Math.round((transition.probability ?? 0) * 100)}% likelihood). +3h forecast: ${f3h?.value.toFixed(1)}°C.`
-        : `+3h forecast: ${f3h?.value.toFixed(1)}°C.`,
-      body_sw: transition
-        ? `Mabadiliko yanayoweza kutokea: ${STATES[transition.state_id].name_sw} (~${Math.round((transition.probability ?? 0) * 100)}%). Utabiri wa +saa 3: ${f3h?.value.toFixed(1)}°C.`
-        : `Utabiri wa +saa 3: ${f3h?.value.toFixed(1)}°C.`,
+      body: [
+        transition ? `${t("next_transition")}: ${stateName(transition.state_id)} (${nextStateNote(transition, lang)}).` : "",
+        f3h ? `${t("horizon_3h")}: ${f3h.value.toFixed(1)}°C.` : "",
+      ].filter(Boolean).join(" "),
     },
     {
       icon: <Database className="w-5 h-5 text-afya-rain" />,
-      title_en: "HOW CERTAIN?", title_sw: "NI UHAKIKA KUPI?",
-      body_en: `Data quality: ${quality.status}. Forecast uncertainty: ${risk.uncertainty.toLowerCase()}. Interval for +3h: ${f3h?.lower.toFixed(1)}–${f3h?.upper.toFixed(1)}°C. ${quality.status !== "GOOD" ? "Confidence is reduced, strong recommendations are suppressed." : ""}`,
-      body_sw: `Ubora wa data: ${quality.status}. Utata wa utabiri: ${risk.uncertainty.toLowerCase()}. Kipindi cha +saa 3: ${f3h?.lower.toFixed(1)}–${f3h?.upper.toFixed(1)}°C.`,
+      title_en: "HOW CERTAIN?", title_sw: "NI UHAKIKA KIASI GANI?",
+      body: lang === "sw"
+        ? `Ubora wa data: ${t(`quality_${quality.status.toLowerCase()}`)}. Utata wa utabiri: ${UNCERTAINTY_SW[risk.uncertainty]}. Kipindi cha +saa 3: ${f3h?.lower.toFixed(1)}–${f3h?.upper.toFixed(1)}°C. ${quality.status !== "GOOD" ? "Uhakika umepungua, mapendekezo madhubuti yamesitishwa." : ""}`
+        : `Data quality: ${quality.status}. Forecast uncertainty: ${risk.uncertainty.toLowerCase()}. Interval for +3h: ${f3h?.lower.toFixed(1)}–${f3h?.upper.toFixed(1)}°C. ${quality.status !== "GOOD" ? "Confidence is reduced, strong recommendations are suppressed." : ""}`,
     },
   ];
 
@@ -110,6 +129,7 @@ export default function IntelligencePage() {
       <div>
         <h1 className="text-2xl font-bold text-afya-charcoal">{t("intelligence_title")}</h1>
         <p className="text-sm text-afya-muted mt-0.5">{t("intelligence_subtitle")}</p>
+        <p className="text-xs text-afya-muted mt-1">{t("data_as_of")} {fmtAsOf(situation.generated_at, lang)}</p>
       </div>
 
       {/* WHAT/WHY/WHAT NEXT/HOW CERTAIN */}
@@ -118,7 +138,7 @@ export default function IntelligencePage() {
           <Card key={i}>
             <div className="flex items-center gap-2 mb-2" aria-hidden="true">{item.icon}</div>
             <div className="text-sm font-bold text-afya-charcoal mb-1">{lang === "sw" ? item.title_sw : item.title_en}</div>
-            <p className="text-sm text-afya-muted leading-relaxed">{lang === "sw" ? item.body_sw : item.body_en}</p>
+            <p className="text-sm text-afya-muted leading-relaxed">{item.body}</p>
           </Card>
         ))}
       </div>
@@ -132,18 +152,24 @@ export default function IntelligencePage() {
             <div className="mt-3 text-xs text-afya-muted">
               {t("next_transition")}:{" "}
               <strong style={{ color: STATES[transition.state_id].color }}>
-                {lang === "sw" ? STATES[transition.state_id].name_sw : STATES[transition.state_id].name}
-              </strong>{" "}
-              (~{Math.round((transition.probability ?? 0) * 100)}%)
+                {stateName(transition.state_id)}
+              </strong>
+              <div className="mt-0.5">{nextStateNote(transition, lang)}</div>
             </div>
           )}
         </Card>
         <Card>
           <CardTitle>{t("thermal_exposure")}</CardTitle>
-          <RiskChip level={risk.thermal} size="lg" />
+          <RiskChip level={nowBand} size="lg" />
           <div className="mt-3 text-xs text-afya-muted">
-            {lang === "sw" ? "Hatari kutokana na utabiri wa +saa 3" : "Risk from +3h forecast"}: {f3h ? `${f3h.value.toFixed(1)}°C` : "-"}
+            {t("wbgt_now")}: {current.wbgt_c.toFixed(1)}°C
           </div>
+          {f3h && (
+            <div className="mt-2 flex items-center gap-1.5 text-xs text-afya-muted">
+              {t("horizon_3h_short")}: {f3h.value.toFixed(1)}°C
+              <RiskChip level={risk.thermal} size="sm" />
+            </div>
+          )}
         </Card>
         <Card>
           <CardTitle>{t("data_quality")}</CardTitle>
@@ -163,7 +189,12 @@ export default function IntelligencePage() {
       {/* Measurements */}
       <Card>
         <CardTitle>{t("current_measurements")}</CardTitle>
-        <MeasurementStrip obs={current} freshnessMinutes={quality.freshness_minutes} />
+        <MeasurementStrip
+          obs={current}
+          freshnessMinutes={quality.freshness_minutes}
+          dataSource={situation.data_source}
+          feed={situation.data_feed}
+        />
       </Card>
 
       {/* Live climate variables now live on the consolidated Dashboard
@@ -317,156 +348,140 @@ export default function IntelligencePage() {
 
       {/* ERA5 context */}
       <Card>
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex items-center gap-2 mb-1">
           <Globe className="w-5 h-5 text-afya-rain" strokeWidth={1.8} aria-hidden="true" />
           <CardTitle className="mb-0">{t("era5_context")}</CardTitle>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-          {[
-            { l_en: "ERA5 Temp", l_sw: "Joto la ERA5", v: era5Ok ? `${era5.era5_temp_c.toFixed(1)}°C` : "-" },
-            { l_en: "ERA5 RH", l_sw: "Unyevu wa ERA5", v: era5Ok ? `${era5.era5_relative_humidity.toFixed(0)}%` : "-" },
-            { l_en: "ERA5 Wind", l_sw: "Upepo wa ERA5", v: era5Ok ? `${era5.era5_wind_speed_ms.toFixed(1)} m/s` : "-" },
-            { l_en: "ERA5 Solar", l_sw: "Mionzi ya ERA5", v: era5Ok ? `${era5.era5_solar_wm2.toFixed(0)} W/m²` : "-" },
-          ].map((item, i) => (
-            <div key={i} className="rounded-lg border border-afya-border bg-afya-canvas/50 px-3 py-2">
-              <div className="text-[10px] text-afya-muted">{lang === "sw" ? item.l_sw : item.l_en}</div>
-              <div className="text-sm font-bold text-afya-charcoal">{item.v}</div>
-              <div className="text-[9px] text-afya-muted/60 font-semibold uppercase">{t("regional_model_label")} · ERA5-Land · ~9km</div>
+        {era5Ok ? (
+          <>
+            {era5Time && (
+              <p className="text-xs text-afya-muted mb-4">{fill(t("era5_valid"), { time: fmtAsOf(era5Time, lang) })}</p>
+            )}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+              {[
+                { l_en: "ERA5 Temp", l_sw: "Joto la ERA5", v: isNum(era5.era5_temp_c) ? `${era5.era5_temp_c.toFixed(1)}°C` : "-" },
+                { l_en: "ERA5 RH", l_sw: "Unyevu wa ERA5", v: isNum(era5.era5_relative_humidity) ? `${era5.era5_relative_humidity.toFixed(0)}%` : "-" },
+                { l_en: "ERA5 Wind", l_sw: "Upepo wa ERA5", v: isNum(era5.era5_wind_speed_ms) ? `${era5.era5_wind_speed_ms.toFixed(1)} m/s` : "-" },
+                { l_en: "ERA5 Solar", l_sw: "Mionzi ya ERA5", v: isNum(era5.era5_solar_wm2) ? `${era5.era5_solar_wm2.toFixed(0)} W/m²` : "-" },
+              ].map((item, i) => (
+                <div key={i} className="rounded-lg border border-afya-border bg-afya-canvas/50 px-3 py-2">
+                  <div className="text-[10px] text-afya-muted">{lang === "sw" ? item.l_sw : item.l_en}</div>
+                  <div className="text-sm font-bold text-afya-charcoal">{item.v}</div>
+                  <div className="text-[9px] text-afya-muted/60 font-semibold uppercase">{t("regional_model_label")} · ERA5 · ~28 km</div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        {/* Local vs regional anomaly */}
-        <div className="rounded-xl border border-afya-border bg-afya-canvas/50 px-4 py-3">
-          <p className="text-xs font-semibold text-afya-charcoal mb-2">{t("local_vs_regional")}</p>
-          <div className="flex gap-6">
-            <div>
-              <div className="text-lg font-bold" style={{ color: era5.local_temp_anomaly_c >= 0 ? "#E27832" : "#247B78" }}>
-                {era5Ok ? `${era5.local_temp_anomaly_c >= 0 ? "+" : ""}${era5.local_temp_anomaly_c.toFixed(1)}°C` : "-"}
+            {/* Local vs regional anomaly, with both times so the comparison can be judged */}
+            <div className="rounded-xl border border-afya-border bg-afya-canvas/50 px-4 py-3">
+              <p className="text-xs font-semibold text-afya-charcoal mb-2">{t("local_vs_regional")}</p>
+              <div className="flex flex-wrap gap-6">
+                <div>
+                  <div
+                    className="text-lg font-bold"
+                    style={{ color: !isNum(anomaly) ? "#68756f" : anomaly >= 0 ? "#E27832" : "#247B78" }}
+                  >
+                    {isNum(anomaly) ? `${fmtSigned(anomaly)}°C` : "-"}
+                  </div>
+                  <div className="text-[10px] text-afya-muted">{lang === "sw" ? "Tofauti ya Joto" : "Temp anomaly"}</div>
+                </div>
+                <div>
+                  <div
+                    className="text-lg font-bold"
+                    style={{ color: !isNum(humidityAnomaly) ? "#68756f" : humidityAnomaly >= 0 ? "#247B78" : "#E27832" }}
+                  >
+                    {isNum(humidityAnomaly) ? `${fmtSigned(humidityAnomaly)}%` : "-"}
+                  </div>
+                  <div className="text-[10px] text-afya-muted">{lang === "sw" ? "Tofauti ya Unyevu" : "RH anomaly"}</div>
+                </div>
+                <div className="flex-1 min-w-[12rem] text-[11px] text-afya-muted space-y-1">
+                  {era5Time && (
+                    <p>{fill(t("anomaly_compare"), { station: fmtAsOf(current.time, lang), era5: fmtAsOf(era5Time, lang) })}</p>
+                  )}
+                  {hoursApart > MAX_COMPARABLE_GAP_HOURS && (
+                    <p className="font-semibold text-afya-orange">{t("anomaly_hours_differ")}</p>
+                  )}
+                </div>
               </div>
-              <div className="text-[10px] text-afya-muted">{lang === "sw" ? "Tofauti ya Joto" : "Temp anomaly"}</div>
             </div>
-            <div>
-              <div className="text-lg font-bold" style={{ color: era5.local_humidity_anomaly >= 0 ? "#247B78" : "#E27832" }}>
-                {era5Ok ? `${era5.local_humidity_anomaly >= 0 ? "+" : ""}${era5.local_humidity_anomaly.toFixed(1)}%` : "-"}
-              </div>
-              <div className="text-[10px] text-afya-muted">{lang === "sw" ? "Tofauti ya Unyevu" : "RH anomaly"}</div>
-            </div>
-            <div className="ml-auto text-right">
-              <p className="text-[10px] text-afya-muted/60 max-w-xs">
-                {lang === "sw"
-                  ? "Conduit inalinganishwa na mfumo wa kikanda wa ERA5-Land. Tofauti zinaonyesha athari za kimaeneo."
-                  : "Conduit station is compared with ERA5-Land regional reanalysis. Differences show local microclimate effects."}
-              </p>
-            </div>
-          </div>
-        </div>
+          </>
+        ) : (
+          <p className="mt-3 text-sm text-afya-muted">{t("context_unavailable")}</p>
+        )}
       </Card>
 
-      {/* Rainfall context (ERA5-Land) */}
+      {/* Rainfall context, dated by the days each total covers */}
       <Card>
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex items-center gap-2 mb-1">
           <CloudRain className="w-5 h-5 text-afya-rain" strokeWidth={1.8} aria-hidden="true" />
           <CardTitle className="mb-0">{t("chirps_context")}</CardTitle>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {[
-            { l_en: "Today's rainfall", l_sw: "Mvua ya leo", v: rainOk ? `${chirps.chirps_mm.toFixed(1)} mm` : "-" },
-            { l_en: "7-day total", l_sw: "Jumla ya siku 7", v: rainOk ? `${chirps.chirps_7d_mm.toFixed(1)} mm` : "-" },
-            { l_en: "30-day total", l_sw: "Jumla ya siku 30", v: rainOk ? `${chirps.chirps_30d_mm.toFixed(1)} mm` : "-" },
-            { l_en: "Rainfall percentile", l_sw: "Asilimia ya mvua", v: rainOk ? `${chirps.chirps_percentile.toFixed(0)}th` : "-" },
-            { l_en: "Dry spell", l_sw: "Kipindi kavu", v: rainOk ? `${chirps.chirps_dry_spell_days} ${lang === "sw" ? "siku" : "days"}` : "-" },
-            { l_en: "Wet spell", l_sw: "Kipindi cha mvua", v: rainOk ? `${chirps.chirps_wet_spell_days} ${lang === "sw" ? "siku" : "days"}` : "-" },
-          ].map((item, i) => (
-            <div key={i} className="rounded-lg border border-afya-border bg-afya-canvas/50 px-3 py-2">
-              <div className="text-[10px] text-afya-muted">{lang === "sw" ? item.l_sw : item.l_en}</div>
-              <div className="text-sm font-bold text-afya-charcoal">{item.v}</div>
-              <div className="text-[9px] text-afya-muted/60 font-semibold uppercase">{t("historical_label")} · ERA5-Land</div>
+        {rainOk ? (
+          <>
+            <p className="text-xs text-afya-muted mb-4">{fill(t("rain_lag_note"), { day: fmtDayMonth(rain.day, lang) })}</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {[
+                { l: fill(t("rain_on_day"), { day: fmtDayMonth(rain.day, lang) }), v: isNum(chirps.chirps_mm) ? `${chirps.chirps_mm.toFixed(1)} mm` : "-" },
+                {
+                  l: fill(t("rain_days_to"), { days: 7, day: fmtDayMonth(rain.week.to, lang) }),
+                  sub: `${fmtDayMonth(rain.week.from, lang)}–${fmtDayMonth(rain.week.to, lang)}`,
+                  v: isNum(chirps.chirps_7d_mm) ? `${chirps.chirps_7d_mm.toFixed(1)} mm` : "-",
+                },
+                {
+                  l: fill(t("rain_days_to"), { days: 30, day: fmtDayMonth(rain.month.to, lang) }),
+                  sub: `${fmtDayMonth(rain.month.from, lang)}–${fmtDayMonth(rain.month.to, lang)}`,
+                  v: isNum(chirps.chirps_30d_mm) ? `${chirps.chirps_30d_mm.toFixed(1)} mm` : "-",
+                },
+                { l: fill(t("rain_percentile"), { day: fmtDayMonth(rain.day, lang) }), v: isNum(chirps.chirps_percentile) ? chirps.chirps_percentile.toFixed(0) : "-" },
+                { l: fill(t("dry_spell_to"), { day: fmtDayMonth(rain.day, lang) }), v: isNum(chirps.chirps_dry_spell_days) ? days(chirps.chirps_dry_spell_days) : "-" },
+                { l: fill(t("wet_spell_to"), { day: fmtDayMonth(rain.day, lang) }), v: isNum(chirps.chirps_wet_spell_days) ? days(chirps.chirps_wet_spell_days) : "-" },
+              ].map((item, i) => (
+                <div key={i} className="rounded-lg border border-afya-border bg-afya-canvas/50 px-3 py-2">
+                  <div className="text-[10px] text-afya-muted">{item.l}</div>
+                  <div className="text-sm font-bold text-afya-charcoal">{item.v}</div>
+                  {item.sub && <div className="text-[10px] text-afya-muted">{item.sub}</div>}
+                  <div className="text-[9px] text-afya-muted/60 font-semibold uppercase">{t("historical_label")} · ERA5</div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </>
+        ) : (
+          <p className="mt-3 text-sm text-afya-muted">{t("context_unavailable")}</p>
+        )}
       </Card>
 
-      {/* Satellite context */}
+      {/* Satellite context: only what was actually retrieved */}
       <Card>
         <div className="flex items-center gap-2 mb-4">
           <Satellite className="w-5 h-5 text-afya-teal" strokeWidth={1.8} aria-hidden="true" />
           <CardTitle className="mb-0">{t("satellite_context")}</CardTitle>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {/* Sentinel-2 */}
           <div className="rounded-lg border border-afya-border bg-afya-canvas/50 px-4 py-3">
             <div className="text-xs font-bold text-afya-green mb-1">Sentinel-2</div>
-            <div className="text-sm font-bold text-afya-charcoal mb-1">
-              NDVI {sentinel.sentinel2_ndvi_mean !== null ? sentinel.sentinel2_ndvi_mean.toFixed(2) : "-"}
+            <div className={`text-sm font-bold mb-1 ${sentinel.sentinel2_ndvi_mean !== null ? "text-afya-charcoal" : "text-afya-muted"}`}>
+              {sentinel.sentinel2_ndvi_mean !== null ? `NDVI ${sentinel.sentinel2_ndvi_mean.toFixed(2)}` : t("ndvi_unavailable")}
             </div>
             <div className="text-[10px] text-afya-muted space-y-0.5">
-              <div>{t("acquired")}: {sentinel.sentinel2_acquired ?? "-"}</div>
+              {sentinel.sentinel2_acquired && <div>{t("latest_scene")}: {fmtDate(sentinel.sentinel2_acquired)}</div>}
               <div>{t("native_resolution")}: 10 m</div>
               <div className="font-semibold text-afya-muted/70 uppercase">{t("satellite_label")}</div>
             </div>
           </div>
-          {/* Sentinel-3 */}
           <div className="rounded-lg border border-afya-border bg-afya-canvas/50 px-4 py-3">
             <div className="text-xs font-bold text-afya-rain mb-1">Sentinel-3</div>
-            <div className="text-sm font-bold text-afya-charcoal mb-1">
-              LST {sentinel.sentinel3_lst_c !== null ? `${sentinel.sentinel3_lst_c.toFixed(1)}°C` : "-"}
-            </div>
-            <div className="text-[10px] text-afya-muted space-y-0.5">
-              <div>{t("acquired")}: {sentinel.sentinel3_acquired ?? "-"}</div>
-              <div>{t("native_resolution")}: ~1 km</div>
-              <div className="font-semibold text-afya-muted/70 uppercase">{t("satellite_label")}</div>
-            </div>
-            <p className="text-[9px] text-afya-muted/60 mt-2">
-              {lang === "sw"
-                ? "Joto la uso wa ardhi si joto la hewa. Ni muktadha wa kikanda."
-                : "Land surface temperature ≠ air temperature. Regional context only."}
-            </p>
+            <p className="text-sm text-afya-muted mb-1">{t("lst_unavailable")}</p>
+            {sentinel.sentinel3_acquired && (
+              <div className="text-[10px] text-afya-muted">{t("latest_scene")}: {fmtDate(sentinel.sentinel3_acquired)}</div>
+            )}
           </div>
         </div>
       </Card>
 
-      {/* Forecast contributors with SHAP-style values */}
+      {/* Forecast contributors: the model's own effects when it sends them */}
       {contributors.length > 0 && (
         <Card>
           <CardTitle>{t("contributor_title")}</CardTitle>
-          <p className="text-xs text-afya-muted mb-4">{t("contributor_note")}</p>
-          <div className="space-y-3">
-            {contributors.map((c, i) => {
-              const importance = [85, 62, 48, 31][i] ?? 20;
-              const colors = ["#E27832", "#F2B705", "#3786B5", "#6B8F71"];
-              const labels_en: Record<string, string> = {
-                temp_rising: "Air temperature rising", temp_falling: "Temperature falling",
-                high_radiation: "High solar radiation signal", low_ventilation: "Relatively weak ventilation (low wind)",
-                humidity_falling: "Relative humidity falling", peak_radiation: "Peak radiation period of day",
-              };
-              const labels_sw: Record<string, string> = {
-                temp_rising: "Joto la hewa linaongezeka", temp_falling: "Joto linapungua",
-                high_radiation: "Ishara ya mionzi mikali ya jua", low_ventilation: "Uingizaji hewa mdogo (upepo mdogo)",
-                humidity_falling: "Unyevu unapungua", peak_radiation: "Kipindi cha mionzi ya juu cha siku",
-              };
-              return (
-                <div key={i}>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="font-medium text-afya-charcoal">
-                      {lang === "sw" ? labels_sw[c.feature] ?? c.feature : labels_en[c.feature] ?? c.feature}
-                    </span>
-                    <span className="text-afya-muted font-mono">{importance}%</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-afya-canvas overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-500"
-                      style={{ width: `${importance}%`, backgroundColor: colors[i % colors.length] }}
-                      role="progressbar"
-                      aria-valuenow={importance}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-label={`Contribution: ${importance}%`}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <ContributorList contributors={contributors} />
         </Card>
       )}
 
