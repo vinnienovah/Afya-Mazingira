@@ -6,7 +6,7 @@ import {
   getObservationSeries,
   type SeriesBundle,
 } from "@/lib/afya/sources";
-import { audits, CHANNEL_GROUPS, checkReadings, EXPORT_GROUPS, groupStatus, type GroupReport } from "@/lib/afya/sentinel";
+import { audits, CHANNEL_GROUPS, checkReadings, deviceCodes, EXPORT_GROUPS, groupStatus, type GroupReport } from "@/lib/afya/sentinel";
 import type { DemoObservation } from "@/lib/afya/demo-observations";
 import archive from "@/lib/afya/model/station-health.json";
 
@@ -44,6 +44,7 @@ function liveChecks(
     groups: groupStatus(recent, hits, { feed, exportGroups: true, batteryListed: channels.includes("battery_v") })
       .filter((g) => listed(g.group)),
     audits: audits(recent),
+    device_codes: deviceCodes(recent),
     firmware_below_wet_bulb_now:
       latest && typeof latest.firmware_wbgt === "number" ? latest.firmware_wbgt < latest.wet_bulb_temp : null,
   };

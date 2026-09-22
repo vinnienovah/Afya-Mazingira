@@ -27,6 +27,28 @@ test("a gap is reported between the readings either side of it, not between slot
   assert.ok(!longest.from.endsWith(":00:00.000Z") || !longest.to.endsWith(":00:00.000Z"));
 });
 
+test("the published report carries the cadence rule and the heat-index audit", () => {
+  const a02 = archive.audits.A02_heat_index_vs_nws;
+  assert.ok(a02.mae_c !== null && a02.mae_hot_c !== null);
+  assert.equal(a02.hot_from_c, 27);
+  assert.ok(a02.hot_slots > 0 && a02.hot_slots < a02.slots);
+  assert.ok(a02.mae_hot_c < a02.mae_c, "the NWS formula agrees best in the heat it is built for");
+  assert.ok(!("verdict" in a02), "A02 is reported, not judged");
+
+  // R14 reaches the report against every slot inside a silence. The archive
+  // is sampled about every 15 minutes, where a skipped reading is already a
+  // silence, so it holds no late slot to record.
+  assert.equal(archive.rule_slots.R14, archive.cadence.gap_slots);
+  assert.equal(archive.cadence.late_slots, 0);
+  assert.equal(archive.cadence.late_intervals, 0);
+
+  // R15 cannot be judged from an export without the column, and says so.
+  assert.equal(archive.device_codes.reported, false, "no Conduit export carries the Health column");
+  assert.deepEqual(archive.device_codes.codes, []);
+  assert.equal(archive.device_codes.note, "meaning undocumented");
+  assert.ok(!("R15" in archive.rule_slots), "and fires on nothing");
+});
+
 test("every health string the page fills exists in both languages with the same placeholders", () => {
   const keys = Object.keys(STRINGS.en).filter((k) => k.startsWith("health_"));
   assert.ok(keys.length > 20);

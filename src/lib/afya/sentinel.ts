@@ -1,5 +1,5 @@
 import type { DemoObservation } from "./demo-observations";
-import { stullWetBulb } from "./constants";
+import { nwsHeatIndex, stullWetBulb } from "./constants";
 import { EAT_OFFSET_MS, nairobiDate } from "./nairobi-day";
 
 // Station health: quality rules applied to every measured reading, a daily
@@ -31,6 +31,7 @@ export const SENTINEL_LIMITS = {
   suspect_group_penalty: 2,
   missing_minutes_per_point: 14.4, // 1 % of a day
   stull_max_mae_c: 0.1, // A01
+  heat_index_hot_c: 27, // A02: the heat the NWS index is built for
 } as const;
 
 // The specification's channel groups, less the ones this feed does not carry
@@ -46,18 +47,22 @@ export const CHANNEL_GROUPS = {
 } as const;
 
 // Channels the engines never read, reported beside the sensor groups: the
-// gust-direction column (R13) and the battery. As in the Sentinel spec, a
-// battery channel the feed lists but leaves empty is bad (R12); an export
-// with no battery channel at all cannot be judged and is not reported.
+// gust-direction column (R13), the battery and the station's own device
+// health code (R15). As in the Sentinel spec, a battery channel the feed
+// lists but leaves empty is bad (R12); an export with no battery channel at
+// all cannot be judged and is not reported, and nor can a device code no
+// export carries.
 export const EXPORT_GROUPS = {
   gust_direction: ["wind_gust_dir"],
   battery: ["battery_v"],
+  device_code: ["health_code"],
 } as const;
 
 export type Group = keyof typeof CHANNEL_GROUPS;
 export type ExportGroup = keyof typeof EXPORT_GROUPS;
-// not_judged: the feed cannot show a fault (CHORDS leaves rain out while none
-// falls). not_reported: the station sends no values for it.
+// not_judged: nothing in the feed can settle the question (CHORDS leaves rain
+// out while none falls; a device code carries no documented meaning).
+// not_reported: the station sends no values for it.
 export type GroupStatus = "good" | "suspect" | "bad" | "not_judged" | "not_reported";
 export type Feed = "jhub" | "chords" | null;
 type Channel = (typeof CHANNEL_GROUPS)[Group][number];
@@ -119,18 +124,23 @@ export function slotsByDay(series: DemoObservation[]): Map<string, number[]> {
   return byDay;
 }
 
+// info: recorded and reported, never counted. The specification gives some
+// rules no flag at all (R14, R15); a hit is still the only way they reach the
+// report, so they are emitted and the health score skips them.
+export type RuleFlag = "info" | "suspect" | "bad";
+
 export interface RuleHit {
   rule: string;
   channel: string;
   index: number;
-  flag: "suspect" | "bad";
+  flag: RuleFlag;
 }
 
 /** Every rule hit in a series, slot by slot. */
 export function checkReadings(series: DemoObservation[]): RuleHit[] {
   const L = SENTINEL_LIMITS;
   const hits: RuleHit[] = [];
-  const hit = (rule: string, channel: string, index: number, flag: "suspect" | "bad") =>
+  const hit = (rule: string, channel: string, index: number, flag: RuleFlag) =>
     hits.push({ rule, channel, index, flag });
 
   series.forEach((o, i) => {
@@ -169,6 +179,13 @@ export function checkReadings(series: DemoObservation[]): RuleHit[] {
     ) {
       hit("R16", "firmware_wbgt", i, "suspect");
     }
+    // R14: the station kept to its own cadence or it did not. A slot inside a
+    // silence, or holding a reading that arrived a whole interval late, says
+    // so here; the missing time itself is what the score charges for.
+    if (o.gap_minutes || o.late_intervals) hit("R14", "time", i, "info");
+    // R15: the station raised a device code. Nothing the exports point to
+    // says what any of them mean, so it is recorded and left at that.
+    if (typeof o.health_code === "number" && o.health_code !== 0) hit("R15", "health_code", i, "info");
   });
 
   // R08: the same measured value for too long. Calm nights make zero wind
@@ -384,6 +401,34 @@ export function dailyHealth(
   });
 }
 
+// What the report says beside every device code, because nothing in the
+// station's exports or the portal's metadata says what one means.
+export const DEVICE_CODE_NOTE = "meaning undocumented";
+
+export interface DeviceCodes {
+  // False where no export carries the column at all, which is not the same as
+  // a station reporting itself healthy.
+  reported: boolean;
+  codes: { code: number; slots: number }[];
+  note: string;
+}
+
+/** R15: the device health codes a series carries, each with the slots it appeared in. */
+export function deviceCodes(series: DemoObservation[]): DeviceCodes {
+  const counts = new Map<number, number>();
+  for (const o of series) {
+    if (typeof o.health_code !== "number") continue;
+    counts.set(o.health_code, (counts.get(o.health_code) ?? 0) + 1);
+  }
+  return {
+    reported: counts.size > 0,
+    codes: [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0] - b[0])
+      .map(([code, slots]) => ({ code, slots })),
+    note: DEVICE_CODE_NOTE,
+  };
+}
+
 export interface GroupReport {
   group: Group | ExportGroup;
   status: GroupStatus;
@@ -460,6 +505,20 @@ export function groupStatus(
       empty_channels: battery ? [] : ["battery_v"],
       measured_share: series.length ? Math.round((battery / series.length) * 1000) / 1000 : 0,
     });
+
+    // R15. An export without the column says nothing about the device; one
+    // with a code says something nobody has written down. Neither is a clean
+    // bill of health, so neither is reported as good.
+    const codes = deviceCodes(series);
+    const raised = codes.codes.some((c) => c.code !== 0);
+    const coded = codes.codes.reduce((s, c) => s + c.slots, 0);
+    out.push({
+      group: "device_code",
+      status: !codes.reported ? "not_reported" : raised ? "not_judged" : "good",
+      rules: raised ? ["R15"] : [],
+      empty_channels: codes.reported ? [] : ["health_code"],
+      measured_share: series.length ? Math.round((coded / series.length) * 1000) / 1000 : 0,
+    });
   }
   return out;
 }
@@ -473,6 +532,19 @@ export function audits(series: DemoObservation[]) {
   const wb = series.filter((o) => measured(o, "temp_sht") && measured(o, "humidity_sht") && measured(o, "wet_bulb_temp"));
   const stullDiff = wb.map((o) => Math.abs(o.wet_bulb_temp - stullWetBulb(o.temp_sht, o.humidity_sht)));
   const stullMae = stullDiff.length ? stullDiff.reduce((a, b) => a + b, 0) / stullDiff.length : null;
+
+  // A02. The NWS index is built for hot conditions and falls back to
+  // Steadman's simple form below them, so the agreement is reported twice:
+  // over every slot, and over the slots the index is meant for.
+  const heat = series
+    .filter((o) => measured(o, "temp_sht") && measured(o, "humidity_sht") && measured(o, "heat_idx"))
+    .map((o) => {
+      const nws = nwsHeatIndex(o.temp_sht, o.humidity_sht);
+      return { nws, diff: Math.abs(o.heat_idx - nws) };
+    });
+  const hot = heat.filter((h) => h.nws >= L.heat_index_hot_c);
+  const mae = (rows: { diff: number }[]) =>
+    rows.length ? Math.round((rows.reduce((s, h) => s + h.diff, 0) / rows.length) * 1000) / 1000 : null;
 
   const fw = wb.filter((o) => typeof o.firmware_wbgt === "number");
   const below = fw.filter((o) => (o.firmware_wbgt as number) < o.wet_bulb_temp);
@@ -502,6 +574,14 @@ export function audits(series: DemoObservation[]) {
       max_c: stullDiff.length ? Math.round(Math.max(...stullDiff) * 1000) / 1000 : null,
       slots: stullDiff.length,
       verdict: stullMae !== null && stullMae <= L.stull_max_mae_c ? "matches Stull" : "does not match Stull",
+    },
+    A02_heat_index_vs_nws: {
+      mae_c: mae(heat),
+      max_c: heat.length ? Math.round(Math.max(...heat.map((h) => h.diff)) * 1000) / 1000 : null,
+      slots: heat.length,
+      mae_hot_c: mae(hot),
+      hot_slots: hot.length,
+      hot_from_c: L.heat_index_hot_c,
     },
     A03_firmware_wbgt_vs_wet_bulb: {
       below_pct: share(below, fw),

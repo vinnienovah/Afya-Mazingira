@@ -280,7 +280,10 @@ const CHORDS_CACHE_MAX = 2000;
 
 // CHORDS short names for the columns the Conduit API calls by longer names.
 // wgd is read only for the gust-direction check; the export copies the gust
-// speed into it.
+// speed into it. The portal's own device health code (hth) is left out: the
+// live endpoint answers with the mean of each quarter hour, and the mean of
+// two device codes is not a device code. R15 reads the column from a feed
+// that sends whole rows instead.
 const CHORDS_FIELDS: Record<string, string> = {
   rg: "rg1", rg2: "rg2", rgt: "rg1tt", rgt2: "rg2tt", rgp: "rg1tp", rgp2: "rg2tp",
   bt1: "temp_bmx", bp1: "press_bmx", mt1: "temp_mcp",
@@ -463,6 +466,12 @@ const SLOT_MS = 900_000;
 // cadence interval after the last reading, so both follow the readings' own
 // spacing rather than a fixed quarter hour.
 const GAP_GRACE_MS = 4 * 60_000;
+// A reading that arrives this many cadence intervals or more after the one
+// before it, but still too soon to open a gap, is late: R14 records it and
+// charges nothing. At the one-minute cadence of the organisers' exports that
+// is the specification's 120 to 300 s band. At a quarter-hour cadence a
+// skipped reading already opens a gap, so nothing falls in the band.
+const LATE_AFTER_INTERVALS = 2;
 
 // The gauges' running totals restart at 06:00 UTC, the start of the station's
 // rain day. They move in 0.2 mm tips.
@@ -479,6 +488,15 @@ export interface Reading {
   rain: [number | null, number | null];
   rejected: string[];
   faults: string[];
+  // The device health code the row carried, or null. It is not a measurement,
+  // so it sits outside `v`: nothing averages, interpolates or fills it.
+  code: number | null;
+}
+
+/** A raw cell as a number, with the station's -999.9 missing marker read as nothing. */
+function numeric(raw: unknown): number | null {
+  const x = raw === null || raw === undefined || raw === "" ? null : Number(raw);
+  return x === null || !Number.isFinite(x) || x === -999.9 ? null : x;
 }
 
 /** Epoch milliseconds for a timestamp; one without a zone is read as UTC. */
@@ -555,9 +573,7 @@ export function toReadings(
       const v = {} as Record<Field, number | null>;
       const rejected: string[] = [];
       for (const f of NUMERIC_FIELDS) {
-        const raw = r[f];
-        let x: number | null = raw === null || raw === undefined || raw === "" ? null : Number(raw);
-        if (x !== null && (!Number.isFinite(x) || x === -999.9)) x = null;
+        let x = numeric(r[f]);
         if (x !== null && hardLimitRule(f, x)) {
           rejected.push(f);
           x = null;
@@ -574,7 +590,7 @@ export function toReadings(
       // here, on the reading that shows it.
       const faults: string[] = [];
       if (v.wind_gust !== null && v.wind_spd !== null && v.wind_gust < v.wind_spd) faults.push("wind_gust");
-      return { t, v, rain: [null, null], rejected, faults };
+      return { t, v, rain: [null, null], rejected, faults, code: numeric(r.health_code) };
     });
 
   if (rain === "counters") {
@@ -638,6 +654,7 @@ export function gridReadings(readings: Reading[]): DemoObservation[] {
     prior: [null, null] as (number | null)[],
     rejected: new Set<string>(),
     faults: new Set<string>(),
+    code: null as number | null,
   }));
   for (const r of readings) {
     const s = acc[Math.floor(r.t / SLOT_MS) - bucket0];
@@ -666,6 +683,9 @@ export function gridReadings(readings: Reading[]): DemoObservation[] {
     if (r.v.rg2tp !== null) s.prior[1] = r.v.rg2tp;
     r.rejected.forEach((f) => s.rejected.add(f));
     r.faults.forEach((f) => s.faults.add(f));
+    // A code is never averaged. The slot keeps the highest one its readings
+    // carried, so a device that complained in any of them still says so.
+    if (r.code !== null) s.code = s.code === null ? r.code : Math.max(s.code, r.code);
   }
   const grid = acc.map((s) => {
     const rec: Record<string, number | null> = {};
@@ -682,13 +702,18 @@ export function gridReadings(readings: Reading[]): DemoObservation[] {
   // 2. Time between readings further apart than the feed's own cadence allows,
   //    charged to the slots it covers. Each of those slots also carries the
   //    silence it belongs to, so the report can name the readings either side.
+  //    Shorter slippage leaves the slot its late reading landed in marked.
   const expected = expectedInterval(readings);
   const gapMinutes = new Array<number>(slots).fill(0);
   const gapSpan = new Array<{ from: string; to: string } | null>(slots).fill(null);
+  const late = new Array<number>(slots).fill(0);
   for (let i = 1; i < readings.length; i++) {
     const prev = readings[i - 1].t;
     const next = readings[i].t;
-    if (next - prev <= expected + GAP_GRACE_MS) continue;
+    if (next - prev <= expected + GAP_GRACE_MS) {
+      if (next - prev >= LATE_AFTER_INTERVALS * expected) late[Math.floor(next / SLOT_MS) - bucket0]++;
+      continue;
+    }
     const span = { from: new Date(prev).toISOString(), to: new Date(next).toISOString() };
     const missingFrom = prev + expected;
     for (let b = Math.floor(missingFrom / SLOT_MS); b * SLOT_MS < next; b++) {
@@ -781,8 +806,10 @@ export function gridReadings(readings: Reading[]): DemoObservation[] {
       o.gap_minutes = gapMinutes[b];
       o.gap = gapSpan[b]!;
     }
+    if (late[b] > 0) o.late_intervals = late[b];
     if (typeof rec.wind_gust_dir === "number") o.wind_gust_dir = rec.wind_gust_dir;
     if (typeof rec.battery_v === "number") o.battery_v = rec.battery_v;
+    if (acc[b].code !== null) o.health_code = acc[b].code;
     out.push(o);
     if (rec.rg1tt !== null && rec.rg1tt !== undefined) lastKnown.rg1tt = rec.rg1tt;
     if (rec.rg2tt !== null && rec.rg2tt !== undefined) lastKnown.rg2tt = rec.rg2tt;

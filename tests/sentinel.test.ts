@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { audits, checkReadings, dailyHealth, gaps, groupStatus, rainDayTotals } from "../src/lib/afya/sentinel";
+import { audits, checkReadings, dailyHealth, deviceCodes, gaps, groupStatus, rainDayTotals } from "../src/lib/afya/sentinel";
 import { cleanAndGrid } from "../src/lib/afya/sources";
-import { stullWetBulb } from "../src/lib/afya/constants";
+import { nwsHeatIndex, stullWetBulb } from "../src/lib/afya/constants";
 import type { DemoObservation } from "../src/lib/afya/demo-observations";
 
 // 21:00 UTC is midnight in Nairobi.
@@ -175,6 +175,43 @@ test("an empty battery channel is bad where the feed lists it, and not reported 
   assert.equal(battery(day(() => ({ battery_v: 12.6 })), true).status, "good");
 });
 
+test("R15 is not reported where no export carries a device code, and recorded where one does", () => {
+  const codeGroup = (s: DemoObservation[]) =>
+    groupStatus(s, checkReadings(s), { exportGroups: true }).find((g) => g.group === "device_code")!;
+
+  const silent = day();
+  assert.equal(codeGroup(silent).status, "not_reported");
+  assert.deepEqual(codeGroup(silent).empty_channels, ["health_code"]);
+  assert.deepEqual(deviceCodes(silent), { reported: false, codes: [], note: "meaning undocumented" });
+  assert.equal(dailyHealth(silent)[0].score, 100);
+
+  // A station reporting itself well is not the same as a station saying nothing.
+  const well = day(() => ({ health_code: 0 }));
+  assert.equal(codeGroup(well).status, "good");
+  assert.deepEqual(codeGroup(well).rules, []);
+  assert.deepEqual(deviceCodes(well).codes, [{ code: 0, slots: 96 }]);
+  assert.ok(!checkReadings(well).some((h) => h.rule === "R15"));
+
+  // A code nobody has written down: listed with its count, judged by nobody.
+  const coded = day((_o, i) => ({ health_code: i < 4 ? 16 : i === 90 ? 32 : 0 }));
+  const codes = deviceCodes(coded);
+  assert.deepEqual(codes.codes, [{ code: 0, slots: 91 }, { code: 16, slots: 4 }, { code: 32, slots: 1 }]);
+  assert.equal(codes.note, "meaning undocumented");
+  assert.equal(codeGroup(coded).status, "not_judged");
+  assert.deepEqual(codeGroup(coded).rules, ["R15"]);
+
+  const hits = checkReadings(coded);
+  const r15 = hits.filter((h) => h.rule === "R15");
+  assert.equal(r15.length, 5);
+  assert.ok(r15.every((h) => h.channel === "health_code" && h.flag === "info"));
+  const [health] = dailyHealth(coded, hits);
+  assert.equal(health.score, 100);
+  assert.ok(health.rules.includes("R15"));
+  assert.deepEqual([health.bad, health.suspect], [[], []]);
+  // The engines' view of the station leaves the column out entirely.
+  assert.ok(!groupStatus(coded, hits).some((g) => g.group === "device_code"));
+});
+
 test("an impossible reading is flagged but never judged as a value", () => {
   const reading = (minutes: number, temp: number) => ({
     ts: new Date(NAIROBI_MIDNIGHT + minutes * 60_000).toISOString(),
@@ -195,6 +232,48 @@ test("the audits recognise a Stull wet bulb and a firmware WBGT below it", () =>
   assert.equal(a.A03_firmware_wbgt_vs_wet_bulb.below_pct, 100);
   assert.equal(a.A03_firmware_wbgt_vs_wet_bulb.verdict, "non-standard");
   assert.ok(checkReadings(series).some((h) => h.rule === "R16"));
+});
+
+test("the NWS heat index keeps its two branches and both humidity adjustments", () => {
+  const near = (got: number, want: number, what: string) =>
+    assert.ok(Math.abs(got - want) < 1e-6, `${what}: ${got}`);
+  near(nwsHeatIndex(20, 60), 19.622222, "Steadman's simple form, below 80 °F");
+  near(nwsHeatIndex(35, 40), 37.216351, "the Rothfusz regression");
+  // The adjustments are worth more than a degree in dry air and three
+  // quarters of one in saturated air, so dropping either would show here.
+  near(nwsHeatIndex(35, 5), 31.209325, "the regression less the dry adjustment");
+  near(nwsHeatIndex(28, 100), 36.378836, "the regression plus the humid adjustment");
+  // The switch at 80 °F is a step between two formulas, not a blend.
+  assert.ok(nwsHeatIndex(26.53, 60) - nwsHeatIndex(26.52, 60) > 0.7);
+});
+
+test("A02 reports the firmware heat index against the NWS one, and again in the heat it is built for", () => {
+  const exact = day((o) => ({ heat_idx: nwsHeatIndex(o.temp_sht, o.humidity_sht) }));
+  const cool = audits(exact).A02_heat_index_vs_nws;
+  assert.equal(cool.mae_c, 0);
+  assert.equal(cool.slots, 96);
+  // A day that never reaches 27 °C has nothing to say about a formula built
+  // for the heat, which is not the same as agreeing with it.
+  assert.equal(cool.hot_slots, 0);
+  assert.equal(cool.mae_hot_c, null);
+
+  const warm = flatDay((o) => {
+    const temp_sht = o.temp_sht + 12;
+    return {
+      temp_sht,
+      temp_bmx: temp_sht - 0.3,
+      temp_mcp: temp_sht - 0.2,
+      heat_idx: nwsHeatIndex(temp_sht, o.humidity_sht) + 0.5,
+    };
+  });
+  const hot = audits(warm).A02_heat_index_vs_nws;
+  assert.equal(hot.hot_slots, 96);
+  assert.equal(hot.mae_c, 0.5);
+  assert.equal(hot.mae_hot_c, 0.5);
+  assert.equal(hot.max_c, 0.5);
+  // Report only: no verdict, and the day still scores 100.
+  assert.ok(!("verdict" in hot));
+  assert.equal(dailyHealth(warm)[0].score, 100);
 });
 
 // Thresholds. Each rule is held at its limit and then pushed a hundredth past
@@ -370,6 +449,52 @@ test("A01 holds at a 0.1 °C mean difference from Stull", () => {
   const off = (d: number) => day((o) => ({ wet_bulb_temp: stullWetBulb(o.temp_sht, o.humidity_sht) + d }));
   assert.equal(audits(off(0.099)).A01_wet_bulb_vs_stull.verdict, "matches Stull");
   assert.equal(audits(off(0.101)).A01_wet_bulb_vs_stull.verdict, "does not match Stull");
+});
+
+test("a device code rides the 15-minute grid as a code, never as an average", () => {
+  const rows = [raw(0, { health_code: 0 }), raw(5, { health_code: 16 }), raw(20, { health_code: 0 }), raw(30, { health_code: 0 })];
+  const series = cleanAndGrid(rows);
+  assert.equal(series[0].health_code, 16, "the slot reports the complaint, not the mean of 0 and 16");
+  assert.equal(series[1].health_code, 0);
+  assert.deepEqual(deviceCodes(series).codes, [{ code: 0, slots: 2 }, { code: 16, slots: 1 }]);
+  // The station's missing marker is not a code.
+  assert.equal(cleanAndGrid([raw(0, { health_code: -999.9 }), raw(15), raw(30)])[0].health_code, undefined);
+});
+
+test("R14 records a late reading and a silence, and neither moves the score", () => {
+  // One reading a minute for four hours, with `drop` of them missing at 02:00.
+  const minutes = (drop: number) =>
+    Array.from({ length: 240 }, (_, i) => i).filter((i) => i < 120 || i >= 120 + drop).map((i) => raw(i));
+  const r14 = (drop: number) => ruleAt(minutes(drop), "R14");
+
+  // Five minutes between readings at a one-minute cadence: late, no gap.
+  assert.equal(r14(3).length, 1);
+  assert.deepEqual(r14(4).map((h) => [h.channel, h.flag]), [["time", "info"]]);
+  const late = cleanAndGrid(minutes(4));
+  assert.equal(late.reduce((s, o) => s + (o.gap_minutes ?? 0), 0), 0);
+  assert.equal(late.reduce((s, o) => s + (o.late_intervals ?? 0), 0), 1);
+  // A minute late is the cadence itself, not a late reading.
+  assert.equal(r14(0).length, 0);
+
+  // Past the gap threshold it is a silence, which R14 also records.
+  const outage = cleanAndGrid(minutes(60));
+  assert.ok(outage.some((o) => (o.gap_minutes ?? 0) > 0));
+  assert.ok(!outage.some((o) => o.late_intervals));
+  assert.ok(checkReadings(outage).filter((h) => h.rule === "R14").length > 1);
+
+  // The score with R14 in hand is the score without it, on both series.
+  for (const series of [late, outage]) {
+    const hits = checkReadings(series);
+    assert.ok(hits.some((h) => h.rule === "R14"));
+    const before = dailyHealth(series, hits.filter((h) => h.rule !== "R14"));
+    const after = dailyHealth(series, hits);
+    assert.deepEqual(after.map((d) => d.score), before.map((d) => d.score));
+    assert.deepEqual(after.map((d) => [d.bad, d.suspect]), before.map((d) => [d.bad, d.suspect]));
+    // Only the rule list changes, which is the point of emitting it.
+    assert.ok(after.every((d) => d.rules.includes("R14")));
+    assert.ok(before.every((d) => !d.rules.includes("R14")));
+    assert.ok(!groupStatus(series, hits, { exportGroups: true }).some((g) => g.rules.includes("R14")));
+  }
 });
 
 test("a gap opens four minutes past the cadence the readings themselves keep", () => {
