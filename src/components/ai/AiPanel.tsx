@@ -4,6 +4,8 @@ import { useState, useRef, useEffect } from "react";
 import { useLanguage } from "@/lib/contexts/language";
 import { t as translate } from "@/lib/afya/i18n";
 import type { Lang } from "@/lib/afya/types";
+import { exposureTrend, type Trend } from "@/lib/afya/display";
+import { useSituation } from "@/lib/contexts/situation";
 import { Sparkles, Send, Loader2, BookOpen, GraduationCap } from "lucide-react";
 
 interface AiPanelProps {
@@ -15,15 +17,20 @@ interface AiPanelProps {
   extraParams?: Record<string, string>;
 }
 
+// The first suggestion follows where the forecast says exposure is heading.
+const TREND_QUESTION: Record<Trend, Record<Lang, string>> = {
+  rising: { en: "Why is exposure rising?", sw: "Kwa nini kupatwa na joto kunaongezeka?" },
+  falling: { en: "Why is exposure falling?", sw: "Kwa nini kupatwa na joto kunapungua?" },
+  stable: { en: "Why is exposure steady?", sw: "Kwa nini kupatwa na joto hakubadiliki?" },
+};
+
 const SUGGESTED_EN = [
-  "Why is exposure rising?",
   "What does this mean for outdoor work?",
   "Why is this the recommended time?",
   "How reliable is this data right now?",
 ];
 
 const SUGGESTED_SW = [
-  "Kwa nini kupatwa kunazidi?",
   "Hii ina maana gani kwa kazi za nje?",
   "Kwa nini huu ndio wakati unaopendekezwa?",
   "Data hii ina uhakika kiasi gani sasa hivi?",
@@ -52,7 +59,12 @@ export default function AiPanel({ context = "situation", initialQuestions, extra
   const answerLang: Lang = chosenLang ?? lang;
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const suggested = initialQuestions ?? (lang === "sw" ? SUGGESTED_SW : SUGGESTED_EN);
+  const { situation } = useSituation();
+  const trend = situation ? exposureTrend(situation.current.wbgt_c, situation.forecast) : null;
+  const suggested = initialQuestions ?? [
+    ...(trend ? [TREND_QUESTION[trend][lang]] : []),
+    ...(lang === "sw" ? SUGGESTED_SW : SUGGESTED_EN),
+  ];
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
