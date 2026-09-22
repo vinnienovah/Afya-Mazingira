@@ -9,7 +9,8 @@
 // Both are asked and the one with the more recent observation is used.
 
 import { generateDemoSeries, type DemoObservation } from "./demo-observations";
-import { fixUvRainColumns, getCsvSeries } from "./csv-source";
+import { fixUvRainColumns, getCsvCoverage, getCsvSeries } from "./csv-source";
+import { getStationHistory } from "./station-history";
 import { hardLimitRule } from "./sentinel";
 import { shadeWbgt, stullWetBulb } from "./constants";
 
@@ -29,7 +30,8 @@ export interface SeriesBundle {
 
 // The station records about every 15 minutes, so the live caches are checked
 // on the same cadence. Staleness is always judged from the latest observation's
-// own timestamp (see evaluateQuality), never from when we last polled.
+// own timestamp (see evaluateQuality), never from when we last polled. A cache
+// older than LIVE_MAX_STALE_MS is refreshed before it is used.
 const LIVE_TTL_MS = 15 * 60 * 1000;
 const LIVE_MAX_STALE_MS = 6 * 3600 * 1000;
 const LIVE_LOOKBACK_MS = 30 * 3600 * 1000;
@@ -44,26 +46,43 @@ export function hasConduitCreds(): boolean {
 
 /**
  * The observation series for the pipeline. Near "now" the freshest live feed
- * wins; otherwise the recorded archive; the synthetic series only when neither
- * real source covers the anchor.
+ * wins; for a time the archive covers, the archive; for a later time, the
+ * station history from the live feeds; the synthetic series only when no real
+ * source covers the anchor.
  *
  * On a cold cache the live fetches are awaited: Vercel can freeze a function
  * as soon as its response is sent, so a fire-and-forget refresh may never
- * finish. Once a cached bundle exists, a stale one is served while a refresh
- * runs for the next request.
+ * finish. A cached bundle younger than six hours is served while a refresh
+ * runs for the next request; an older one is refreshed first.
  */
 export async function getObservationSeries(anchorIso: string, lookbackHours = 30): Promise<SeriesBundle> {
   const anchorMs = new Date(anchorIso).getTime();
   const nearNow = Date.now() - anchorMs < 3 * 3600 * 1000;
+  const archiveEnd = Date.parse(getCsvCoverage()?.maxIso ?? "");
 
   if (nearNow) {
     const feeds: ("jhub" | "chords")[] = hasConduitCreds() ? ["jhub", "chords"] : ["chords"];
     await Promise.all(feeds.map((feed) => ensureFresh(feed)));
     const usable = feeds
       .map((feed) => liveCache[feed])
-      .filter((b): b is LiveBundle => !!b && Date.now() - b.fetchedAt < LIVE_MAX_STALE_MS)
+      .filter((b): b is LiveBundle => !!b && !(Date.parse(b.anchorIso) < archiveEnd))
       .sort((a, b) => Date.parse(b.anchorIso) - Date.parse(a.anchorIso));
     if (usable.length) return usable[0];
+  } else if (anchorMs > archiveEnd) {
+    // A past time after the archive ends: the archive's last window would be
+    // the wrong day, so the live feeds' record for that time is used.
+    const history = await getStationHistory(lookbackHours / 24, new Date(anchorMs).toISOString());
+    if (history && history.series.length >= 20) {
+      return {
+        series: history.series,
+        source: history.source === "csv" ? "csv" : "live",
+        feed: history.feed ?? null,
+        anchorIso: history.to,
+        realtime: false,
+        duplicatesRemoved: 0,
+      };
+    }
+    return demoBundle(anchorIso, lookbackHours);
   }
 
   const csv = getCsvSeries(anchorIso, lookbackHours);
@@ -78,6 +97,10 @@ export async function getObservationSeries(anchorIso: string, lookbackHours = 30
     };
   }
 
+  return demoBundle(anchorIso, lookbackHours);
+}
+
+function demoBundle(anchorIso: string, lookbackHours: number): SeriesBundle {
   return {
     series: generateDemoSeries(anchorIso, lookbackHours),
     source: "demo",
@@ -90,9 +113,10 @@ export async function getObservationSeries(anchorIso: string, lookbackHours = 30
 
 async function ensureFresh(feed: "jhub" | "chords"): Promise<void> {
   const cached = liveCache[feed];
-  if (!cached) {
+  const age = cached ? Date.now() - cached.fetchedAt : Infinity;
+  if (age > LIVE_MAX_STALE_MS) {
     await refresh(feed);
-  } else if (Date.now() - cached.fetchedAt > LIVE_TTL_MS) {
+  } else if (age > LIVE_TTL_MS) {
     void refresh(feed);
   }
 }
