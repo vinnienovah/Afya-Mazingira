@@ -8,7 +8,7 @@ import { getEra5ContextLive, getSentinelContextLive, getRainfallContext, getRegi
 import { computeFeatures } from "./feature-engine";
 import { classifyState, buildStateHistory, stateSince, getNextTransition } from "./state-engine";
 import {
-  predictHorizon, buildForecastSeries, findExpectedPeak, horizonScores,
+  predictHorizon, buildForecastSeries, findExpectedPeak, horizonScores, forecastContributions,
   FORECAST_METHOD, FORECAST_MODEL_NAME, FORECAST_PERIODS, type ForecastInputs,
 } from "./forecast-engine";
 import { getClimatology } from "./climatology-source";
@@ -174,8 +174,8 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
     effectiveNow,
   );
 
-  // Step 10: Contributors (deterministic feature importance proxy)
-  const contributors: Contributor[] = buildContributors(fv, stateId);
+  // Step 10: What moves the +3 h forecast, from the model itself
+  const contributors: Contributor[] = buildContributors(inputs);
 
   // Build output
   const current: CurrentObservation = {
@@ -224,18 +224,24 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
 
 const round1 = (v: number) => Math.round(v * 10) / 10;
 
-function buildContributors(fv: {
-  temp_delta_1h: number; si1145_ir: number; wind_spd: number;
-  humidity_delta_1h: number; hour_cos: number;
-}, stateId: StateId): Contributor[] {
-  const contribs: Contributor[] = [];
-  if (fv.temp_delta_1h > 0.3) contribs.push({ feature: "temp_rising", direction: "increasing" });
-  if (fv.temp_delta_1h < -0.3) contribs.push({ feature: "temp_falling", direction: "low" });
-  if (fv.si1145_ir > 3500) contribs.push({ feature: "high_radiation", direction: "high" });
-  if (fv.wind_spd < 1.0) contribs.push({ feature: "low_ventilation", direction: "low" });
-  if (fv.humidity_delta_1h < -2) contribs.push({ feature: "humidity_falling", direction: "low" });
-  if (stateId === 2) contribs.push({ feature: "peak_radiation", direction: "high" });
-  return contribs.slice(0, 4);
+// Smaller effects than this are reported as steady.
+const STEADY_C = 0.05;
+
+/**
+ * The model's own terms for the +3 h forecast, largest first, each with its
+ * effect in °C. For the seasonal model they add up to the forecast minus the
+ * current reading; for a ridge, to the forecast minus its mean.
+ */
+function buildContributors(inputs: ForecastInputs): Contributor[] {
+  return forecastContributions(inputs, "3h").terms
+    .filter((t) => Number.isFinite(t.contribution_c))
+    .sort((a, b) => Math.abs(b.contribution_c) - Math.abs(a.contribution_c))
+    .slice(0, 4)
+    .map((t) => ({
+      feature: t.feature,
+      direction: t.contribution_c > STEADY_C ? "increasing" : t.contribution_c < -STEADY_C ? "decreasing" : "stable",
+      contribution_c: Math.round(t.contribution_c * 100) / 100,
+    }));
 }
 
 // Historical Replay Pipeline

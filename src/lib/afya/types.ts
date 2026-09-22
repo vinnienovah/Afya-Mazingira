@@ -135,7 +135,9 @@ export interface SentinelContext {
 
 export interface Contributor {
   feature: string; // feature key (i18n on client)
-  direction: "increasing" | "high" | "low" | "stable";
+  direction: "increasing" | "decreasing" | "high" | "low" | "stable";
+  // Signed effect of this input on the +3 h forecast, °C.
+  contribution_c?: number;
 }
 
 export interface SituationResult {

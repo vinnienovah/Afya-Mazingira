@@ -84,6 +84,8 @@ export function buildExplanationFacts(situation: SituationResult): ExplanationFa
         low_ventilation: { en: "ventilation is relatively weak", sw: "uingizaji hewa ni mdogo" },
         humidity_falling: { en: "relative humidity is falling", sw: "unyevu wa hewa unapungua" },
         peak_radiation: { en: "the environment is near its peak-radiation period", sw: "mazingira yako karibu na kipindi cha mionzi ya juu" },
+        usual_daily_change: { en: "the usual change at this time of day", sw: "mabadiliko ya kawaida ya wakati huu wa siku" },
+        departure_from_usual: { en: "a return toward the usual level", sw: "kurudi kwenye kiwango cha kawaida" },
       };
       const label = labels[c.feature] ?? {
         en: c.feature.replace(/_/g, " "),
