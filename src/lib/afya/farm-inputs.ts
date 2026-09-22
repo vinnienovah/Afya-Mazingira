@@ -3,7 +3,7 @@
 // that pick between them live in farm-engine.ts; this module only fetches.
 
 import { getObservationSeries } from "./sources";
-import { getStationDailyRain, getStationHistory } from "./station-history";
+import { dailyRainFrom, getStationHistory } from "./station-history";
 import { STATION_HISTORY_WAIT_MS, within } from "./wait";
 import {
   getRegionalDaily,
@@ -14,6 +14,7 @@ import {
   type RegionalSoilMoisture,
 } from "./sources-external";
 import {
+  BALANCE_DAYS,
   chooseRainRecord,
   computeEt0,
   estimateEt0,
@@ -27,10 +28,11 @@ import {
 } from "./farm-engine";
 import { datesEnding, dayOfYear, nairobiDate } from "./nairobi-time";
 
-const RAIN_DAYS = 30;
-// A week of station readings covers the 7-day demand; earlier days of the
-// 30-day balance take the regional model.
-const HISTORY_DAYS = 8;
+// The root-zone balance is carried over BALANCE_DAYS, so the rain record and
+// the past ET₀ have to reach that far back. Days the station cannot cover take
+// the regional model, which holds a month.
+const RAIN_DAYS = BALANCE_DAYS;
+const HISTORY_DAYS = BALANCE_DAYS + 1;
 
 export interface FarmSources {
   /** Station 15-minute slots, oldest first. Never the synthetic demo series. */
@@ -84,16 +86,20 @@ export function assembleFarmInputs(nowMs: number, sources: FarmSources): FarmInp
 }
 
 export async function loadFarmInputs(nowIso: string = new Date().toISOString()): Promise<FarmInputs | null> {
-  const [history, stationRain, regional, soil] = await Promise.all([
+  const nowMs = Date.parse(nowIso);
+  // One history covers both the temperatures and the gauge: the daily rain is
+  // read off the same 15-minute grid rather than fetched a second time.
+  const [history, regional, soil] = await Promise.all([
     within(getStationHistory(HISTORY_DAYS, nowIso).catch(() => null), STATION_HISTORY_WAIT_MS),
-    within(getStationDailyRain(RAIN_DAYS, nowIso).catch(() => null), STATION_HISTORY_WAIT_MS),
     getRegionalDaily(),
     getRegionalSoilMoisture(),
   ]);
+  const firstDay = datesEnding(nairobiDate(nowMs), RAIN_DAYS)[0];
+  const stationRain: RainDay[] | null = history ? dailyRainFrom(history.series, firstDay, nowMs) : null;
   let station: TempSlot[] | null = history?.series ?? null;
   if (!station) {
     const live = await getObservationSeries(nowIso, 30).catch(() => null);
     station = live && live.source !== "demo" ? live.series : null;
   }
-  return assembleFarmInputs(Date.parse(nowIso), { station, stationRain: stationRain ?? null, regional, soil });
+  return assembleFarmInputs(nowMs, { station, stationRain, regional, soil });
 }
