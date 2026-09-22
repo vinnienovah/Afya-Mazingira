@@ -420,10 +420,13 @@ test("missing rain days are counted, and too many stop the advice", () => {
 });
 
 test("a record shorter than the window runs anyway, and says how short", () => {
-  const short = Object.fromEntries(datesEnding(ago(35), 25).map((d) => [d, null]));
+  // The regional model reaches back 31 days, so the fallback has to keep
+  // working on a window that short.
+  const short = Object.fromEntries(datesEnding(ago(31), BALANCE_DAYS - 31).map((d) => [d, null]));
   const wb = computeWaterBalance(inputs({ et0: 5, rain: short }), maize, "vegetative");
-  assert.equal(wb.balance_days, 35);
+  assert.equal(wb.balance_days, 31);
   assert.equal(wb.balance_available, true);
+  // A window that short starts too near today to claim full confidence.
   assert.equal(computeIrrigationAdvice(wb, maize, "vegetative").confidence, "MODERATE");
 });
 
