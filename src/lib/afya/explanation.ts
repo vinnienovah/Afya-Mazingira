@@ -628,7 +628,7 @@ function templateEn({ facts: f, farm, intent, mode }: TemplateInput): string[] {
 
   const signals = () => {
     if (plain || !f.contributors.length) return null;
-    return `The main signals behind this are that ${f.contributors.map((c) => c.label_en).join(" and ")}.`;
+    return `The main signals behind this are ${f.contributors.map((c) => c.label_en).join(" and ")}.`;
   };
 
   const transition = () => {
@@ -923,7 +923,7 @@ function templateSw({ facts: f, farm, intent, mode }: TemplateInput): string[] {
 
   const signals = () => {
     if (plain || !f.contributors.length) return null;
-    return `Ishara kuu ni kwamba ${f.contributors.map((c) => c.label_sw).join(" na ")}.`;
+    return `Ishara kuu ni ${f.contributors.map((c) => c.label_sw).join(" na ")}.`;
   };
 
   const transition = () => {

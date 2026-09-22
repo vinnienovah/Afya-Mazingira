@@ -76,6 +76,18 @@ export function fmtDate(iso: string): string {
   }
 }
 
+/** Format an ISO timestamp to "17 Sep 14:00" in Africa/Nairobi. Hourly points
+ * spanning more than a day need the date: without it an axis repeats a time. */
+export function fmtDateTimeShort(iso: string): string {
+  try {
+    const d = new Date(iso);
+    const day = d.toLocaleDateString("en-KE", { day: "numeric", month: "short", timeZone: "Africa/Nairobi" });
+    return `${day} ${fmtTime(iso)}`;
+  } catch {
+    return iso;
+  }
+}
+
 /** Format a time window: "16:30–17:30" */
 export function fmtWindow(start: string, end: string): string {
   return `${fmtTime(start)}–${fmtTime(end)}`;

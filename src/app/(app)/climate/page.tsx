@@ -12,7 +12,7 @@ import { useLanguage } from "@/lib/contexts/language";
 import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { CLIMATE_LOCATIONS } from "@/lib/afya/constants";
-import { fmtDate, fmtTimeShort } from "@/lib/afya/format";
+import { fmtDate, fmtDateTimeShort, fmtTimeShort } from "@/lib/afya/format";
 import { addDays, nairobiDate } from "@/lib/afya/nairobi-day";
 import { cn } from "@/lib/utils";
 import ClimateVariablesPanel from "@/components/charts/ClimateVariablesPanel";
@@ -173,7 +173,10 @@ function ClimateHistoryTab() {
   }
 
   const points = data?.points ?? [];
-  const timeFmt = granularity === "daily" ? fmtDate : fmtTimeShort;
+  // Hourly points over more than a day repeat their times, so the axis and the
+  // tooltip carry the date once the range is wider than one day.
+  const spansOneDay = Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`) <= 24 * 60 * 60 * 1000;
+  const timeFmt = granularity === "daily" ? fmtDate : spansOneDay ? fmtTimeShort : fmtDateTimeShort;
   const PRESETS: [string, number][] = [
     [t("ch_preset_7d"), 7], [t("ch_preset_30d"), 30], [t("ch_preset_3m"), 90], [t("ch_preset_6m"), 182],
   ];
