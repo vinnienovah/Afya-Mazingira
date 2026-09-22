@@ -45,6 +45,28 @@ const SLOT_MINUTES = 15;
 const measured = (o: DemoObservation, f: string) => !o.imputed?.includes(f);
 const value = (o: DemoObservation, f: Channel) => o[f as keyof DemoObservation] as number;
 
+/** The hard-limit rule (R01 to R04) a reading breaks, or null. */
+export function hardLimitRule(channel: string, v: number): string | null {
+  const L = SENTINEL_LIMITS;
+  const outside = (range: readonly [number, number]) => v < range[0] || v > range[1];
+  switch (channel) {
+    case "temp_sht":
+    case "temp_bmx":
+    case "temp_mcp":
+      return outside(L.temperature_c) ? "R01" : null;
+    case "humidity_sht":
+      return v <= 0 ? "R02" : null;
+    case "press_bmx":
+      return outside(L.pressure_hpa) ? "R03" : null;
+    case "wind_spd":
+      return outside(L.wind_speed_ms) ? "R04" : null;
+    case "wind_gust":
+      return outside(L.wind_gust_ms) ? "R04" : null;
+    default:
+      return null;
+  }
+}
+
 export interface RuleHit {
   rule: string;
   channel: string;
