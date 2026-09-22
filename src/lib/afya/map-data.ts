@@ -1,39 +1,67 @@
 // Regional outlook: real county boundaries (public/geo/counties.geojson) with
 // indicators per county.
-//   - Weather (temperature, humidity, wind, rain, soil moisture): one batched
-//     Open-Meteo request for every county centroid, no key required.
-//   - Thermal category: the same wbgtToRisk() bands as the rest of the app,
-//     applied to shade WBGT from temperature and humidity (Stull wet bulb),
-//     the same method the station uses, with no sun term.
+//   - Weather: one batched request to Open-Meteo's forecast API for every
+//     county centroid, no key required: current temperature and humidity,
+//     today's hourly temperature and humidity, this hour's 0-1 cm soil moisture
+//     and today's rain total (the Nairobi day, hours still to come included).
+//     All of it is model output, not measurement.
+//   - Thermal and outlook: air temperature at 09:00, 12:00, 15:00 and 18:00,
+//     and the same wbgtToRisk() bands as the rest of the app applied to shade
+//     WBGT from temperature and humidity (Stull wet bulb, no sun term).
 //   - NDVI: Copernicus Sentinel-2 statistics per county when CDSE credentials
 //     are configured (not filtered for cloud; see copernicus.ts).
-//   - Land surface temperature: left null. It needs SLSTR thermal statistics
-//     and is not estimated from anything else.
-// Kiambu, the county the Conduit station stands in, uses the station pipeline
-// (station WBGT, observed rain) whenever station data is available.
+// Kiambu, the county the Conduit station stands in, takes the station for the
+// hours it covers while the station is current: its measurement for hours
+// already past today, its WBGT forecast for hours the forecast reaches.
+// A county Open-Meteo did not answer for has null weather values, shown on the
+// map and the flood page as unavailable.
 
 import fs from "fs";
 import path from "path";
 import type { Geometry } from "geojson";
+import type { RiskLevel, SituationResult } from "./types";
 import { wbgtToRisk, shadeWbgtFromHumidity } from "./constants";
 import { hasCopernicusCreds, cdseToken, ndviStatisticsForBbox, type Bbox } from "./copernicus";
+import { EAT_OFFSET_MS, nairobiDate, nairobiTimeMs } from "./nairobi-time";
+
+export type HourSource = "station_measured" | "station_forecast" | "regional_forecast";
+
+export interface OutlookHour {
+  /** Nairobi clock time today */
+  hour: string;
+  category: RiskLevel | null;
+  /** Shade WBGT behind the category */
+  wbgt_c: number | null;
+  wbgt_source: HourSource | null;
+  /** Air temperature, for the Thermal layer */
+  temp_c: number | null;
+  temp_source: HourSource | null;
+}
+
+export type FloodRisk = "LOW" | "ELEVATED" | "HIGH";
 
 export interface CountyFeature {
   type: "Feature";
   properties: {
     name: string;
     name_sw: string;
-    outlook_category: "LOW" | "ELEVATED" | "HIGH" | "VERY_HIGH";
+    /** False when Open-Meteo gave nothing for this county */
+    weather_available: boolean;
+    /** Now: the station's WBGT in Kiambu while it is current, the forecast model elsewhere */
+    outlook_category: RiskLevel | null;
     confidence: "LOW" | "MODERATE" | "HIGH";
-    temperature_anomaly_c: number;
-    rain_24h_mm: number;
-    soil_moisture: number;
-    flood_risk: "LOW" | "ELEVATED" | "HIGH";
+    /** Current temperature minus the mean of the counties */
+    temperature_anomaly_c: number | null;
+    /** Today's total (Nairobi day) in the forecast, hours still to come included */
+    rain_today_mm: number | null;
+    /** This hour, 0 to 1 cm, m³/m³, forecast model */
+    soil_moisture: number | null;
+    /** Null when the rain or soil value it needs is missing */
+    flood_risk: FloodRisk | null;
     ndvi_mean: number | null;
-    lst_c: number | null;
     sources: string[];
-    trend: "rising" | "stable" | "falling";
-    outlook_hours: { hour: string; category: string }[];
+    trend: "rising" | "stable" | "falling" | null;
+    outlook_hours: OutlookHour[];
   };
   geometry: {
     type: "Polygon";
@@ -46,14 +74,41 @@ export interface CountyCollection {
   features: CountyFeature[];
 }
 
-export interface StationOverride {
-  countyName: string;
-  wbgt: number;
-  rainObserved: boolean;
-  isRealData: boolean;
+export interface StationSlot {
+  ts: string;
+  temp_sht: number;
+  wet_bulb_globe_temp: number;
+  imputed?: string[];
 }
 
-const OUTLOOK_HOURS = ["09:00", "12:00", "15:00", "18:00"];
+export interface StationOverride {
+  countyName: string;
+  /** Current shade WBGT at the station */
+  wbgt: number;
+  /** Real station data no more than three hours old */
+  isRealData: boolean;
+  /** The station's 15-minute slots, oldest first */
+  measured: StationSlot[];
+  /** The station's WBGT forecast */
+  forecast: { time: string; value: number }[];
+}
+
+export const OUTLOOK_HOURS = ["09:00", "12:00", "15:00", "18:00"];
+
+const STATION_COUNTY = "Kiambu";
+const STATION_FRESH_MINUTES = 180;
+
+/** Kiambu's station override from a pipeline run and the station series behind it. */
+export function stationOverrideFrom(situation: SituationResult, series: StationSlot[] | null): StationOverride {
+  return {
+    countyName: STATION_COUNTY,
+    wbgt: situation.current.wbgt_c,
+    // Stale or synthetic station data is not shown as the county's current state.
+    isRealData: situation.data_source !== "DEMO" && situation.quality.freshness_minutes <= STATION_FRESH_MINUTES,
+    measured: series ?? [],
+    forecast: situation.forecast_series,
+  };
+}
 
 // County boundaries (real GeoJSON, loaded once)
 
@@ -119,80 +174,146 @@ function centroidAndBbox(ring: [number, number][]): { centroid: { lat: number; l
 
 // Weather (real, batched Open-Meteo)
 
-interface CountyWeather {
+export interface CountyWeather {
   tempC: number;
   rh: number;
-  rain24hMm: number;
-  soilMoisture: number;
-  trend: "rising" | "stable" | "falling";
-  hourlyCategories: { hour: string; category: string }[];
+  rainTodayMm: number | null;
+  soilMoisture: number | null;
+  trend: "rising" | "stable" | "falling" | null;
+  hours: OutlookHour[];
 }
 
-async function fetchRegionalWeather(counties: LoadedCounty[]): Promise<(CountyWeather | null)[]> {
+export interface OpenMeteoLocation {
+  current?: { temperature_2m: number | null; relative_humidity_2m: number | null };
+  hourly?: {
+    time: string[];
+    temperature_2m: (number | null)[];
+    relative_humidity_2m: (number | null)[];
+    soil_moisture_0_to_1cm?: (number | null)[];
+  };
+  daily?: { time: string[]; precipitation_sum: (number | null)[] };
+}
+
+const round1 = (n: number) => Math.round(n * 10) / 10;
+
+function emptyHour(hour: string): OutlookHour {
+  return { hour, category: null, wbgt_c: null, wbgt_source: null, temp_c: null, temp_source: null };
+}
+
+function regionalHour(hour: string, tempC: number | null, rh: number | null): OutlookHour {
+  if (tempC == null) return emptyHour(hour);
+  const wbgt = rh == null ? null : round1(shadeWbgtFromHumidity(tempC, rh));
+  return {
+    hour,
+    category: wbgt == null ? null : wbgtToRisk(wbgt),
+    wbgt_c: wbgt,
+    wbgt_source: wbgt == null ? null : "regional_forecast",
+    temp_c: round1(tempC),
+    temp_source: "regional_forecast",
+  };
+}
+
+/** One county's forecast read at `nowMs`; null without current conditions. */
+export function parseCountyWeather(loc: OpenMeteoLocation | undefined, nowMs: number): CountyWeather | null {
+  const tempC = loc?.current?.temperature_2m;
+  const rh = loc?.current?.relative_humidity_2m;
+  if (tempC == null || rh == null) return null;
+
+  const today = nairobiDate(nowMs);
+  const h = loc?.hourly;
+  const indexAt = (hhmm: string) => h?.time.indexOf(`${today}T${hhmm}`) ?? -1;
+  const hours = OUTLOOK_HOURS.map((hour) => {
+    const i = indexAt(hour);
+    return i < 0 ? emptyHour(hour) : regionalHour(hour, h!.temperature_2m[i], h!.relative_humidity_2m[i]);
+  });
+
+  // Trend: now against three hours ahead in the same local-time series.
+  const nowIdx = indexAt(`${new Date(nowMs + EAT_OFFSET_MS).toISOString().slice(11, 13)}:00`);
+  const ahead = nowIdx >= 0 ? h!.temperature_2m[nowIdx + 3] ?? null : null;
+  const delta = ahead == null ? null : ahead - tempC;
+  const trend = delta == null ? null : delta > 0.5 ? "rising" : delta < -0.5 ? "falling" : "stable";
+
+  const dayIdx = loc?.daily?.time.indexOf(today) ?? -1;
+  return {
+    tempC,
+    rh,
+    rainTodayMm: dayIdx >= 0 ? loc!.daily!.precipitation_sum[dayIdx] ?? null : null,
+    soilMoisture: nowIdx >= 0 ? h!.soil_moisture_0_to_1cm?.[nowIdx] ?? null : null,
+    trend,
+    hours,
+  };
+}
+
+async function fetchRegionalWeather(counties: LoadedCounty[], nowMs: number): Promise<(CountyWeather | null)[]> {
   const lats = counties.map((c) => c.centroid.lat).join(",");
   const lngs = counties.map((c) => c.centroid.lng).join(",");
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lngs}` +
     `&current=temperature_2m,relative_humidity_2m&hourly=temperature_2m,relative_humidity_2m,soil_moisture_0_to_1cm` +
-    `&daily=precipitation_sum&forecast_days=1&timezone=Africa%2FNairobi`;
+    `&daily=precipitation_sum&forecast_days=2&timezone=Africa%2FNairobi`;
 
   const res = await fetch(url, { signal: AbortSignal.timeout(8_000) });
   if (!res.ok) throw new Error(`Open-Meteo regional HTTP ${res.status}`);
   const json = (await res.json()) as OpenMeteoLocation[] | OpenMeteoLocation;
   const list = Array.isArray(json) ? json : [json]; // single-county requests aren't array-wrapped
+  return counties.map((_, i) => parseCountyWeather(list[i], nowMs));
+}
 
-  return list.map((loc) => {
-    if (!loc?.current || !loc.hourly || !loc.daily) return null;
-    const tempC = loc.current.temperature_2m;
-    const rh = loc.current.relative_humidity_2m;
-    const rain24hMm = loc.daily.precipitation_sum?.[loc.daily.precipitation_sum.length - 1] ?? 0;
+// The station series is 15-minute slots; a forecast step is 15 minutes too.
+const MEASURED_TOLERANCE_MS = 15 * 60_000;
+const FORECAST_TOLERANCE_MS = 8 * 60_000;
 
-    const hourlyCategories = OUTLOOK_HOURS.map((hour) => {
-      const idx = loc.hourly!.time.findIndex((t) => t.endsWith(`T${hour}`));
-      if (idx < 0) return { hour, category: wbgtToRisk(shadeWbgtFromHumidity(tempC, rh)) };
-      const t = loc.hourly!.temperature_2m[idx];
-      const h = loc.hourly!.relative_humidity_2m[idx];
-      return { hour, category: wbgtToRisk(shadeWbgtFromHumidity(t, h)) };
-    });
-
-    // Trend: compare "now" against ~3h ahead in the same local-time series.
-    const nowHour = new Date().toLocaleString("en-GB", { timeZone: "Africa/Nairobi", hour: "2-digit", hour12: false }).slice(0, 2);
-    const nowIdx = loc.hourly.time.findIndex((t) => t.endsWith(`T${nowHour}:00`));
-    let trend: CountyWeather["trend"] = "stable";
-    if (nowIdx >= 0 && nowIdx + 3 < loc.hourly.temperature_2m.length) {
-      const delta = loc.hourly.temperature_2m[nowIdx + 3] - tempC;
-      trend = delta > 0.5 ? "rising" : delta < -0.5 ? "falling" : "stable";
+function nearest<T>(items: T[], timeOf: (item: T) => number, at: number, tolerance: number): T | null {
+  let best: T | null = null;
+  let bestGap = Infinity;
+  for (const item of items) {
+    const gap = Math.abs(timeOf(item) - at);
+    if (gap <= tolerance && gap < bestGap) {
+      best = item;
+      bestGap = gap;
     }
+  }
+  return best;
+}
 
-    // Real per-county soil moisture (0-1cm layer, m³/m³) from the same
-    // batched call, falls back to a documented regional default only if
-    // Open-Meteo omits the field for this location.
-    const soilSeries = loc.hourly.soil_moisture_0_to_1cm;
-    const soilMoisture = soilSeries?.length
-      ? soilSeries[nowIdx >= 0 ? nowIdx : 0]
-      : 0.18;
+const measuredTemp = (s: StationSlot) => !s.imputed?.includes("temp_sht");
+const measuredWbgt = (s: StationSlot) =>
+  measuredTemp(s) && !s.imputed?.includes("humidity_sht") && !s.imputed?.includes("wet_bulb_temp");
 
+/** The station county's outlook hours: the station's measurement for hours
+ * already past today, its WBGT forecast for hours the forecast reaches, and the
+ * regional forecast otherwise. Air temperature ahead stays regional: the
+ * station forecasts WBGT only. */
+export function stationOutlookHours(nowMs: number, station: StationOverride, regional: OutlookHour[]): OutlookHour[] {
+  const today = nairobiDate(nowMs);
+  return OUTLOOK_HOURS.map((hour, i) => {
+    const at = nairobiTimeMs(today, hour);
+    const fallback = regional[i] ?? emptyHour(hour);
+    if (at <= nowMs) {
+      const slots = station.measured.filter(measuredTemp);
+      const slot = nearest(slots, (s) => Date.parse(s.ts), at, MEASURED_TOLERANCE_MS);
+      if (!slot) return fallback;
+      const wbgtSlot = measuredWbgt(slot) ? slot : null;
+      return {
+        hour,
+        category: wbgtSlot ? wbgtToRisk(wbgtSlot.wet_bulb_globe_temp) : fallback.category,
+        wbgt_c: wbgtSlot ? round1(wbgtSlot.wet_bulb_globe_temp) : fallback.wbgt_c,
+        wbgt_source: wbgtSlot ? "station_measured" : fallback.wbgt_source,
+        temp_c: round1(slot.temp_sht),
+        temp_source: "station_measured",
+      };
+    }
+    const point = nearest(station.forecast, (p) => Date.parse(p.time), at, FORECAST_TOLERANCE_MS);
+    if (!point) return fallback;
     return {
-      tempC,
-      rh,
-      rain24hMm,
-      soilMoisture,
-      trend,
-      hourlyCategories,
+      ...fallback,
+      category: wbgtToRisk(point.value),
+      wbgt_c: round1(point.value),
+      wbgt_source: "station_forecast",
     };
   });
 }
 
-interface OpenMeteoLocation {
-  current?: { temperature_2m: number; relative_humidity_2m: number };
-  hourly?: {
-    time: string[]; temperature_2m: number[]; relative_humidity_2m: number[];
-    soil_moisture_0_to_1cm?: number[];
-  };
-  daily?: { precipitation_sum: number[] };
-}
-
-/** Shade-only WBGT approximation (Australian Bureau of Meteorology formula). */
 // NDVI (real, per-county Copernicus Sentinel-2 statistics)
 
 const NDVI_TTL_MS = 6 * 3600_000;
@@ -235,17 +356,60 @@ async function getRegionalNdvi(counties: LoadedCounty[]): Promise<Record<string,
 
 // Assembly
 
-function round1(n: number): number {
-  return Math.round(n * 10) / 10;
+/** Indicators for one county. `meanTemp` is the mean current temperature of
+ * the counties Open-Meteo answered for. */
+export function countyProperties(
+  county: { name: string; name_sw: string },
+  w: CountyWeather | null,
+  ndvi: number | null,
+  meanTemp: number | null,
+  station: StationOverride | undefined,
+  nowMs: number,
+): CountyFeature["properties"] {
+  const isStationCounty = station?.countyName === county.name && station.isRealData;
+  const regionalHours = w?.hours ?? OUTLOOK_HOURS.map(emptyHour);
+
+  let outlookCategory: RiskLevel | null = w ? wbgtToRisk(shadeWbgtFromHumidity(w.tempC, w.rh)) : null;
+  let outlookHours = regionalHours;
+  let confidence: CountyFeature["properties"]["confidence"] = w ? "MODERATE" : "LOW";
+  let sources = w ? ["Open-Meteo"] : [];
+  if (isStationCounty) {
+    outlookCategory = wbgtToRisk(station!.wbgt);
+    outlookHours = stationOutlookHours(nowMs, station!, regionalHours);
+    confidence = "HIGH";
+    sources = ["Conduit station", ...sources];
+  }
+  if (ndvi != null) sources = [...sources, "Copernicus Sentinel-2"];
+
+  const rainToday = w?.rainTodayMm ?? null;
+  const soilMoisture = w?.soilMoisture ?? null;
+  return {
+    name: county.name,
+    name_sw: county.name_sw,
+    weather_available: !!w,
+    outlook_category: outlookCategory,
+    confidence,
+    temperature_anomaly_c: w && meanTemp != null ? round1(w.tempC - meanTemp) : null,
+    rain_today_mm: rainToday == null ? null : round1(rainToday),
+    soil_moisture: soilMoisture,
+    flood_risk: computeFloodRisk(rainToday, soilMoisture),
+    ndvi_mean: ndvi,
+    sources,
+    trend: w?.trend ?? null,
+    outlook_hours: outlookHours,
+  };
 }
 
-export async function getRegionalOutlook(stationOverride?: StationOverride): Promise<CountyCollection> {
+export async function getRegionalOutlook(
+  stationOverride?: StationOverride,
+  nowMs: number = Date.now(),
+): Promise<CountyCollection> {
   const counties = loadCountyBoundaries();
   if (!counties.length) return { type: "FeatureCollection", features: [] };
 
   const [weather, ndviByCounty] = await Promise.all([
-    fetchRegionalWeather(counties).catch((err) => {
-      console.warn("[afya] Regional weather fetch failed, using estimates:", (err as Error).message);
+    fetchRegionalWeather(counties, nowMs).catch((err) => {
+      console.warn("[afya] Regional weather fetch failed, counties marked unavailable:", (err as Error).message);
       return counties.map((): CountyWeather | null => null);
     }),
     getRegionalNdvi(counties),
@@ -254,90 +418,41 @@ export async function getRegionalOutlook(stationOverride?: StationOverride): Pro
   const knownTemps = weather.filter((w): w is CountyWeather => !!w).map((w) => w.tempC);
   const meanTemp = knownTemps.length ? knownTemps.reduce((a, b) => a + b, 0) / knownTemps.length : null;
 
-  const features: CountyFeature[] = counties.map((c, i) => {
-    const w = weather[i];
-    const isStationCounty = stationOverride?.countyName === c.name && stationOverride.isRealData;
-    const ndvi = ndviByCounty[c.name] ?? null;
-
-    let wbgtEstimate: number;
-    let confidence: CountyFeature["properties"]["confidence"];
-    let sources: string[];
-    let rain24h: number;
-    let soilMoisture: number;
-    let trend: CountyWeather["trend"];
-    let outlookHours: { hour: string; category: string }[];
-
-    if (isStationCounty) {
-      wbgtEstimate = stationOverride!.wbgt;
-      confidence = "HIGH";
-      sources = ["Conduit station", "ERA5-Land"];
-      rain24h = stationOverride!.rainObserved ? Math.max(w?.rain24hMm ?? 0, 2) : (w?.rain24hMm ?? 0);
-      soilMoisture = w?.soilMoisture ?? 0.18;
-      trend = w?.trend ?? "stable";
-      outlookHours = w?.hourlyCategories ?? OUTLOOK_HOURS.map((hour) => ({ hour, category: wbgtToRisk(wbgtEstimate) }));
-    } else if (w) {
-      wbgtEstimate = shadeWbgtFromHumidity(w.tempC, w.rh);
-      confidence = "MODERATE";
-      sources = ["Open-Meteo"];
-      rain24h = w.rain24hMm;
-      soilMoisture = w.soilMoisture;
-      trend = w.trend;
-      outlookHours = w.hourlyCategories;
-    } else {
-      wbgtEstimate = 20;
-      confidence = "LOW";
-      sources = ["estimate"];
-      rain24h = 0;
-      soilMoisture = 0.18;
-      trend = "stable";
-      outlookHours = OUTLOOK_HOURS.map((hour) => ({ hour, category: "ELEVATED" }));
-    }
-
-    if (ndvi != null) sources = [...sources, "Copernicus Sentinel-2"];
-
-    return {
-      type: "Feature",
-      properties: {
-        name: c.name,
-        name_sw: c.name_sw,
-        outlook_category: wbgtToRisk(wbgtEstimate),
-        confidence,
-        temperature_anomaly_c: w && meanTemp != null ? round1(w.tempC - meanTemp) : 0,
-        rain_24h_mm: round1(rain24h),
-        soil_moisture: soilMoisture,
-        flood_risk: computeFloodRisk(rain24h, soilMoisture),
-        ndvi_mean: ndvi,
-        lst_c: null, // never estimated, see file header
-        sources,
-        trend,
-        outlook_hours: outlookHours,
-      },
-      geometry: {
-        type: "Polygon",
-        coordinates: ringToPolygonCoords(c.geometry),
-      },
-    };
-  });
+  const features: CountyFeature[] = counties.map((c, i) => ({
+    type: "Feature",
+    properties: countyProperties(c, weather[i], ndviByCounty[c.name] ?? null, meanTemp, stationOverride, nowMs),
+    geometry: {
+      type: "Polygon",
+      coordinates: ringToPolygonCoords(c.geometry),
+    },
+  }));
 
   return { type: "FeatureCollection", features };
 }
 
+// Rain today (mm) and 0-1 cm soil moisture (m³/m³) behind the flood categories.
+// 0.28 m³/m³ lies inside the field-capacity ranges FAO-56 Table 19 gives for
+// loam (0.20 to 0.30) and silt loam (0.22 to 0.36): ground that wet sheds new
+// rain as runoff rather than absorbing it.
+const FLOOD_WET_SOIL_M3 = 0.28;
+const FLOOD_HIGH_RAIN_MM = 30;
+const FLOOD_ELEVATED_RAIN_MM = 15;
+const FLOOD_WET_SOIL_RAIN_MM = 5;
+
 /**
- * Flood-conducive-conditions indicator: real recent rainfall + real ERA5-Land
- * soil saturation, the same two signals operational flash-flood guidance
- * systems use before any terrain modelling. This is deliberately NOT a
- * flood-susceptibility map: that would require a DEM, flow-accumulation or
- * proximity-to-drainage data this project doesn't have, and faking a
- * per-location hazard zone from data that can't actually support one would
- * violate the same honesty principle applied everywhere else in the app.
- * Thresholds: soil moisture near 0.30 m³/m³ is close to field capacity for
- * medium-textured soils, and already-saturated ground sheds new rain as
- * runoff rather than absorbing it. County soils vary, so the category is
- * indicative.
+ * Flood-conducive-conditions indicator: rainfall + soil saturation, the same
+ * two signals operational flash-flood guidance systems use before any terrain
+ * modelling. This is deliberately NOT a flood-susceptibility map: that would
+ * require a DEM, flow-accumulation or proximity-to-drainage data this project
+ * doesn't have. County soils vary, so the category is indicative.
+ * Null when the answer turns on a value that is missing: missing data is not LOW.
  */
-export function computeFloodRisk(rain24hMm: number, soilMoisture: number): "LOW" | "ELEVATED" | "HIGH" {
-  if (rain24hMm >= 30 && soilMoisture >= 0.28) return "HIGH";
-  if (rain24hMm >= 15 || (soilMoisture >= 0.28 && rain24hMm >= 5)) return "ELEVATED";
+export function computeFloodRisk(rainTodayMm: number | null, soilMoisture: number | null): FloodRisk | null {
+  if (rainTodayMm == null) return null;
+  const wet = soilMoisture == null ? null : soilMoisture >= FLOOD_WET_SOIL_M3;
+  if (rainTodayMm >= FLOOD_HIGH_RAIN_MM) return wet == null ? null : wet ? "HIGH" : "ELEVATED";
+  if (rainTodayMm >= FLOOD_ELEVATED_RAIN_MM) return "ELEVATED";
+  if (rainTodayMm >= FLOOD_WET_SOIL_RAIN_MM) return wet == null ? null : wet ? "ELEVATED" : "LOW";
   return "LOW";
 }
 
