@@ -2,20 +2,23 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useForecast } from "@/lib/contexts/situation";
+import { useSituation, useStationWbgt } from "@/lib/contexts/situation";
 import { useLanguage } from "@/lib/contexts/language";
 import { horizonScores } from "@/lib/afya/forecast-engine";
 import { STATES } from "@/lib/afya/constants";
-import { fmtTime } from "@/lib/afya/format";
+import { fmtAsOf, fmtTime } from "@/lib/afya/format";
+import { exposureTrend, TREND_KEYS } from "@/lib/afya/display";
 import ForecastChart from "@/components/charts/ForecastChart";
 import { Card, CardTitle, CardMeta } from "@/components/ui/Card";
+import { ContributorList } from "@/components/ui/ContributorList";
 import { SkeletonCard } from "@/components/ui/Skeleton";
 import { ChevronRight, AlertTriangle, TrendingUp, TrendingDown, Minus } from "lucide-react";
-import { useSituation } from "@/lib/contexts/situation";
 
+// The page reads the same /api/situation as the Situation page, so its cards,
+// chart and trend describe the same reading.
 export default function ForecastPage() {
-  const { forecast, isLoading, error } = useForecast();
-  const { situation } = useSituation();
+  const { situation, isLoading, error } = useSituation();
+  const measured = useStationWbgt(situation);
   const { t, lang } = useLanguage();
   const [showTechnical, setShowTechnical] = useState(false);
   const [showState, setShowState] = useState(true);
@@ -29,7 +32,7 @@ export default function ForecastPage() {
     );
   }
 
-  if (error || !forecast) {
+  if (error || !situation) {
     return (
       <div className="max-w-2xl mx-auto mt-8">
         <Card>
@@ -45,15 +48,15 @@ export default function ForecastPage() {
     );
   }
 
-  const { forecast: horizons, forecast_series, expected_peak, quality, data_source, demo_mode } = forecast;
+  const {
+    forecast: horizons, forecast_series, expected_peak, quality, data_source, demo_mode,
+    current, contributors, state_history_24h,
+  } = situation;
   const f1h = horizons.find((h) => h.horizon === "1h");
   const f3h = horizons.find((h) => h.horizon === "3h");
   const f6h = horizons.find((h) => h.horizon === "6h");
   const f9h = horizons.find((h) => h.horizon === "9h");
-
-  const trend = f6h && situation
-    ? f6h.value > situation.current.wbgt_c + 0.5 ? "up" : f6h.value < situation.current.wbgt_c - 0.5 ? "down" : "flat"
-    : "flat";
+  const trend = exposureTrend(current.wbgt_c, horizons);
 
   return (
     <div className="max-w-5xl mx-auto space-y-5">
@@ -62,6 +65,9 @@ export default function ForecastPage() {
       <div>
         <h1 className="text-2xl font-bold text-afya-charcoal">{t("forecast_title")}</h1>
         <p className="text-sm text-afya-muted mt-0.5">{t("forecast_subtitle")}</p>
+        <p className="text-xs text-afya-muted mt-1">
+          {t("data_as_of")} {fmtAsOf(situation.generated_at, lang)}
+        </p>
       </div>
 
       {/* Quality warning */}
@@ -87,17 +93,16 @@ export default function ForecastPage() {
             </CardMeta>
           </div>
           <div className="flex items-center gap-2">
-            {trend === "up" && <TrendingUp className="w-4 h-4 text-afya-orange" strokeWidth={2} aria-hidden="true" />}
-            {trend === "down" && <TrendingDown className="w-4 h-4 text-afya-teal" strokeWidth={2} aria-hidden="true" />}
-            {trend === "flat" && <Minus className="w-4 h-4 text-afya-muted" strokeWidth={2} aria-hidden="true" />}
-            <span className="text-xs text-afya-muted">
-              {trend === "up" ? t("exposure_rising") : trend === "down" ? t("exposure_falling") : t("exposure_stable")}
-            </span>
+            {trend === "rising" && <TrendingUp className="w-4 h-4 text-afya-orange" strokeWidth={2} aria-hidden="true" />}
+            {trend === "falling" && <TrendingDown className="w-4 h-4 text-afya-teal" strokeWidth={2} aria-hidden="true" />}
+            {trend === "stable" && <Minus className="w-4 h-4 text-afya-muted" strokeWidth={2} aria-hidden="true" />}
+            <span className="text-xs text-afya-muted">{t(TREND_KEYS[trend])}</span>
           </div>
         </div>
         <ForecastChart
           forecastSeries={forecast_series}
-          stateHistory={situation?.state_history_24h ?? []}
+          measuredSeries={measured}
+          stateHistory={state_history_24h}
           height={300}
         />
       </Card>
@@ -128,8 +133,8 @@ export default function ForecastPage() {
         ) : null)}
       </div>
 
-      {/* State background band toggle */}
-      {situation && situation.state_history_24h.length > 0 && (
+      {/* State history list */}
+      {state_history_24h.length > 0 && (
         <Card padding={false}>
           <button
             className="w-full flex items-center justify-between px-5 py-4 text-left"
@@ -144,7 +149,7 @@ export default function ForecastPage() {
           </button>
           {showState && (
             <div className="px-5 pb-5 border-t border-afya-border pt-4 space-y-2">
-              {situation.state_history_24h.map((seg, i) => {
+              {state_history_24h.map((seg, i) => {
                 const meta = STATES[seg.state_id];
                 return (
                   <div key={i} className="flex items-center gap-3">
@@ -163,12 +168,7 @@ export default function ForecastPage() {
         </Card>
       )}
 
-      {/* Uncertainty by horizon, real data (upper - lower per horizon),
-          not fabricated. Replaces a previous "secondary charts" section that
-          derived temperature, humidity, IR and wind values from the WBGT
-          forecast number via arbitrary formulas, that was never real data,
-          so it's been removed rather than kept for the sake of having more
-          charts on the page. */}
+      {/* Uncertainty by horizon, from each horizon's own band */}
       <Card padding={false}>
         <button
           className="w-full flex items-center justify-between px-5 py-4 text-left"
@@ -210,8 +210,7 @@ export default function ForecastPage() {
         )}
       </Card>
 
-      {/* Explore further, points to the dedicated Climate History dashboard
-          rather than duplicating variable charts here. */}
+      {/* Explore further on the Dashboard rather than duplicating variable charts here */}
       <Link
         href="/climate"
         className="flex items-center justify-between rounded-2xl border border-afya-border bg-white px-5 py-4 hover:border-afya-green/50 transition-colors group"
@@ -223,43 +222,14 @@ export default function ForecastPage() {
         <ChevronRight className="w-4 h-4 text-afya-muted group-hover:text-afya-green transition-colors shrink-0" strokeWidth={2} aria-hidden="true" />
       </Link>
 
-      {/* Model contributors, real ranked order from the pipeline, no
-          fabricated percentage-importance numbers (those weren't computed
-          from anything; the underlying deterministic model gives an order,
-          not a magnitude). */}
-      {forecast.contributors?.length > 0 && (
+      {contributors.length > 0 && (
         <Card>
           <CardTitle>{t("contributor_title")}</CardTitle>
-          <p className="text-xs text-afya-muted mb-4">{t("contributor_note")}</p>
-          <div className="space-y-2">
-            {forecast.contributors.slice(0, 4).map((c, i) => {
-              const labels_en: Record<string, string> = {
-                temp_rising: "Temperature rising", temp_falling: "Temperature falling",
-                high_radiation: "High solar radiation", low_ventilation: "Weak ventilation (low wind speed)",
-                humidity_falling: "Humidity falling", peak_radiation: "Peak radiation period",
-              };
-              const labels_sw: Record<string, string> = {
-                temp_rising: "Joto linaongezeka", temp_falling: "Joto linapungua",
-                high_radiation: "Mionzi mikali ya jua", low_ventilation: "Uingizaji hewa mdogo (upepo mdogo)",
-                humidity_falling: "Unyevu unapungua", peak_radiation: "Kipindi cha mionzi ya juu",
-              };
-              return (
-                <div key={i} className="flex items-center gap-3 rounded-lg border border-afya-border bg-afya-canvas/50 px-3 py-2.5">
-                  <span className="w-5 h-5 rounded-full bg-afya-deep/10 text-afya-deep text-[11px] font-bold flex items-center justify-center shrink-0">
-                    {i + 1}
-                  </span>
-                  <span className="text-sm text-afya-charcoal">
-                    {lang === "sw" ? labels_sw[c.feature] ?? c.feature : labels_en[c.feature] ?? c.feature}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+          <ContributorList contributors={contributors} />
         </Card>
       )}
 
-      {/* Provenance note, reflects the real data source behind this forecast,
-          not a fixed claim regardless of what is actually live. */}
+      {/* Provenance note, following the source actually behind this forecast */}
       <p className="text-[11px] text-afya-muted/60 text-center">
         {lang === "sw"
           ? `Utabiri unatolewa kutoka mfumo wa kisayansi wa AFYA MAZINGIRA. ${
