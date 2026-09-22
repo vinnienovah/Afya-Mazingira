@@ -4,7 +4,9 @@ import { NO_DATA_COLOUR, THERMAL_STEPS, ndviColour, outlookColour, rainColour, t
 import {
   computeFloodRisk,
   countyProperties,
+  getRegionalOutlook,
   parseCountyWeather,
+  regionalWeatherAsOf,
   stationOutlookHours,
   stationOverrideFrom,
   type OpenMeteoLocation,
@@ -166,4 +168,42 @@ test("flood risk is left open when it turns on a missing value", () => {
   assert.equal(computeFloodRisk(35, 0.28), "HIGH");
   assert.equal(computeFloodRisk(35, 0.27), "ELEVATED");
   assert.equal(computeFloodRisk(35, null), null);
+});
+
+// One request covers every county, so a refusal would empty the whole map.
+test("when the county fetch is refused, the last read still fills the map", async () => {
+  const nowMs = Date.parse("2026-09-21T12:10:00+03:00");
+  const location = (temp: number) => ({
+    current: { time: eat("12:00"), temperature_2m: temp, relative_humidity_2m: 55 },
+    hourly: {
+      time: ["09:00", "12:00", "15:00", "18:00"].map((h) => `${TODAY}T${h}`),
+      temperature_2m: [temp - 3, temp, temp + 1, temp - 2],
+      relative_humidity_2m: [70, 55, 50, 65],
+      soil_moisture_0_to_1cm: [0.15, 0.15, 0.14, 0.14],
+    },
+    daily: { time: [TODAY], precipitation_sum: [1.2] },
+  });
+  const realFetch = globalThis.fetch;
+  let refuse = false;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    if (!String(input).includes("api.open-meteo.com")) return new Response("{}", { status: 200 });
+    if (refuse) return new Response("rate limited", { status: 429 });
+    const body = Array.from({ length: 20 }, (_, i) => location(24 + (i % 5)));
+    return new Response(JSON.stringify(body), { status: 200 });
+  }) as typeof fetch;
+  try {
+    const first = await getRegionalOutlook(undefined, nowMs);
+    const read = first.features.filter((f) => f.properties.outlook_hours.some((h) => h.temp_c !== null));
+    assert.ok(read.length >= 2, `first read filled ${read.length} counties`);
+    assert.equal(regionalWeatherAsOf(nowMs), null, "a fresh read is not stood in for");
+
+    refuse = true;
+    const later = nowMs + 10 * 60_000;
+    const second = await getRegionalOutlook(undefined, later);
+    const held = second.features.filter((f) => f.properties.outlook_hours.some((h) => h.temp_c !== null));
+    assert.equal(held.length, read.length, "the refusal emptied the map");
+    assert.equal(regionalWeatherAsOf(later), nowMs, "the page is not told when the values were read");
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });

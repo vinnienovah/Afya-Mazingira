@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getRegionalOutlook, stationOverrideFrom } from "@/lib/afya/map-data";
+import { getRegionalOutlook, regionalWeatherAsOf, stationOverrideFrom } from "@/lib/afya/map-data";
 import { getSatelliteAcquisitionsLive } from "@/lib/afya/sources-external";
 import { getObservationSeries } from "@/lib/afya/sources";
 import { runPipeline } from "@/lib/afya/pipeline";
@@ -23,7 +23,9 @@ export async function GET() {
     getSatelliteAcquisitionsLive(),
   ]);
   return NextResponse.json(
-    { counties, satellites },
+    // weather_as_of is set only when the county weather is an earlier read the
+    // latest refresh could not replace.
+    { counties, satellites, weather_as_of: regionalWeatherAsOf() },
     { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=1500" } },
   );
 }
