@@ -75,6 +75,10 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     what_happening: "What is happening?",
     current_exposure: "Current Exposure",
     thermal_exposure: "Thermal Exposure",
+    wbgt_now: "WBGT now",
+    horizon_3h_short: "+3 h",
+    best_window_for: "For {minutes} minutes of {activity}, the best available window is {window}.",
+    chart_past_next: "Past 12 Hours and Next 9",
     rain_signal: "Rain Signal",
     data_quality: "Data Quality",
 
@@ -648,6 +652,10 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     what_happening: "Nini kinatokea?",
     current_exposure: "Kupatwa kwa Sasa",
     thermal_exposure: "Kupatwa na Joto",
+    wbgt_now: "WBGT sasa",
+    horizon_3h_short: "+saa 3",
+    best_window_for: "Kwa dakika {minutes} za {activity}, muda bora unaopatikana ni {window}.",
+    chart_past_next: "Saa 12 Zilizopita na 9 Zijazo",
     rain_signal: "Ishara ya Mvua",
     data_quality: "Ubora wa Data",
 

@@ -2,11 +2,14 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useSituation } from "@/lib/contexts/situation";
+import { useSituation, useStationWbgt } from "@/lib/contexts/situation";
 import { useLanguage } from "@/lib/contexts/language";
 import { STATES } from "@/lib/afya/constants";
 import { horizonScores } from "@/lib/afya/forecast-engine";
-import { fmtTime, fmtWindow } from "@/lib/afya/format";
+import { fill, fmtAsOf, fmtTime, fmtWindow } from "@/lib/afya/format";
+import {
+  activityName, bandGeometry, bandScale, currentBand, exposureTrend, nextStateNote, TREND_KEYS,
+} from "@/lib/afya/display";
 import { StateChip } from "@/components/ui/StateChip";
 import { RiskChip } from "@/components/ui/RiskChip";
 import { QualityDot } from "@/components/ui/QualityDot";
@@ -14,11 +17,10 @@ import { SkeletonState, SkeletonCard } from "@/components/ui/Skeleton";
 import ForecastChart from "@/components/charts/ForecastChart";
 import StateTimeline from "@/components/charts/StateTimeline";
 import MeasurementStrip from "@/components/ui/MeasurementStrip";
+import { ContributorList } from "@/components/ui/ContributorList";
 import { Card, CardTitle, CardMeta } from "@/components/ui/Card";
 import AiPanel from "@/components/ai/AiPanel";
-import {
-  ChevronRight, Clock, AlertTriangle, TrendingUp, CheckCircle2, Printer,
-} from "lucide-react";
+import { ChevronRight, Clock, AlertTriangle, Printer } from "lucide-react";
 
 // Section header, quiet rhythm for the decision-first hierarchy
 function ActHeader({
@@ -42,6 +44,7 @@ function ActHeader({
 
 export default function SituationPage() {
   const { situation, isLoading, error } = useSituation();
+  const measured = useStationWbgt(situation);
   const { t, lang } = useLanguage();
   const [showTechnical, setShowTechnical] = useState(false);
 
@@ -81,12 +84,10 @@ export default function SituationPage() {
   const f6h = forecast.find((f) => f.horizon === "6h");
   const f9h = forecast.find((f) => f.horizon === "9h");
 
-  const exposureTrend = f3h && f3h.value > current.wbgt_c + 0.3
-    ? "rising"
-    : f3h && f3h.value < current.wbgt_c - 0.3
-    ? "falling"
-    : "stable";
-
+  const trend = exposureTrend(current.wbgt_c, forecast);
+  const nowBand = currentBand(situation);
+  const scale = bandScale(forecast);
+  const hasMeasured = measured.some((p) => p.wbgt !== null);
   const transition = state.transition_likelihood;
 
   return (
@@ -119,6 +120,9 @@ export default function SituationPage() {
               freshnessMinutes={quality.freshness_minutes}
               compact
             />
+            <span className="text-[11px] text-white/60">
+              {t("data_as_of")} {fmtAsOf(situation.generated_at, lang)}
+            </span>
             {situation.demo_mode && (
               <span className="text-[11px] text-white/50 italic">{t("demo_notice")}</span>
             )}
@@ -134,9 +138,7 @@ export default function SituationPage() {
 
           {/* Trend statement */}
           <p className="text-white/70 text-base sm:text-lg mb-6">
-            {exposureTrend === "rising" && t("exposure_rising")}
-            {exposureTrend === "falling" && t("exposure_falling")}
-            {exposureTrend === "stable" && t("exposure_stable")}
+            {t(TREND_KEYS[trend])}
             {expected_peak && (
               <> · {t("expected_peak")}: <strong className="text-white">{fmtTime(expected_peak.time)}</strong></>
             )}
@@ -144,11 +146,11 @@ export default function SituationPage() {
 
           {/* Key metrics strip */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-7">
-            {/* Exposure */}
+            {/* Exposure now: the band of the current reading, beside that reading */}
             <div className="rounded-xl bg-white/8 border border-white/10 p-3">
               <div className="text-[11px] text-white/50 mb-1">{t("thermal_exposure")}</div>
-              <RiskChip level={risk.thermal} size="sm" onDark />
-              <div className="text-xs text-white/60 mt-1.5">{current.wbgt_c.toFixed(1)}°C WBGT</div>
+              <RiskChip level={nowBand} size="sm" onDark />
+              <div className="text-xs text-white/60 mt-1.5">{t("wbgt_now")}: {current.wbgt_c.toFixed(1)}°C</div>
             </div>
             {/* Expected peak */}
             <div className="rounded-xl bg-white/8 border border-white/10 p-3">
@@ -160,19 +162,25 @@ export default function SituationPage() {
                 <div className="text-xs text-white/60">{expected_peak.wbgt_c.toFixed(1)}°C WBGT</div>
               )}
             </div>
-            {/* +3h forecast */}
+            {/* +3h forecast, with the band that forecast falls in */}
             <div className="rounded-xl bg-white/8 border border-white/10 p-3">
               <div className="text-[11px] text-white/50 mb-1">{t("horizon_3h")}</div>
               <div className="text-xl font-bold text-white">
                 {f3h ? `${f3h.value.toFixed(1)}°C` : "-"}
               </div>
               {f3h && (
-                <div className="text-xs text-white/60">
-                  {f3h.lower.toFixed(1)}–{f3h.upper.toFixed(1)}°C
-                </div>
+                <>
+                  <div className="text-xs text-white/60">
+                    {f3h.lower.toFixed(1)}–{f3h.upper.toFixed(1)}°C
+                  </div>
+                  <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-white/50">
+                    {t("horizon_3h_short")}
+                    <RiskChip level={risk.thermal} size="sm" onDark />
+                  </div>
+                </>
               )}
             </div>
-            {/* Transition */}
+            {/* Most common next state in the station record */}
             <div className="rounded-xl bg-white/8 border border-white/10 p-3">
               <div className="text-[11px] text-white/50 mb-1">{t("next_transition")}</div>
               {transition ? (
@@ -180,8 +188,8 @@ export default function SituationPage() {
                   <div className="text-sm font-bold" style={{ color: STATES[transition.state_id].color }}>
                     {lang === "sw" ? STATES[transition.state_id].name_sw : STATES[transition.state_id].name}
                   </div>
-                  <div className="text-xs text-white/60">
-                    ~{Math.round(transition.probability * 100)}%
+                  <div className="text-[11px] leading-snug text-white/60 mt-0.5">
+                    {nextStateNote(transition, lang)}
                   </div>
                 </>
               ) : "-"}
@@ -198,9 +206,11 @@ export default function SituationPage() {
               </div>
               <p className="text-white text-base font-medium leading-relaxed">
                 {best_time
-                  ? lang === "sw"
-                    ? `Kwa shughuli za nje, muda bora zaidi ni ${fmtWindow(best_time.recommended.start, best_time.recommended.end)}.`
-                    : `For a 60-minute outdoor activity, the best available window is ${fmtWindow(best_time.recommended.start, best_time.recommended.end)}.`
+                  ? fill(t("best_window_for"), {
+                      minutes: best_time.duration_minutes,
+                      activity: activityName(best_time.activity, lang),
+                      window: fmtWindow(best_time.recommended.start, best_time.recommended.end),
+                    })
                   : lang === "sw"
                   ? "Hakuna muda wa mchana uliobaki katika utabiri wa saa 9. Angalia tena baadaye usiku kwa asubuhi ya kesho."
                   : "No daylight window is left in the 9-hour forecast. Check again later tonight for tomorrow morning."}
@@ -286,8 +296,10 @@ export default function SituationPage() {
       <Card>
         <div className="flex items-start justify-between mb-4 flex-wrap gap-2">
           <div>
-            <CardTitle className="mb-0">{t("next_6h")}</CardTitle>
-            <CardMeta>WBGT (shade) · {t("measured")} + {t("predicted")} + {t("uncertainty")}</CardMeta>
+            <CardTitle className="mb-0">{hasMeasured ? t("chart_past_next") : t("next_6h")}</CardTitle>
+            <CardMeta>
+              WBGT (shade) · {hasMeasured ? `${t("measured")} + ` : ""}{t("predicted")} + {t("uncertainty")}
+            </CardMeta>
           </div>
           {expected_peak && (
             <div className="flex items-center gap-1.5 text-xs text-afya-muted">
@@ -298,6 +310,7 @@ export default function SituationPage() {
         </div>
         <ForecastChart
           forecastSeries={forecast_series}
+          measuredSeries={measured}
           stateHistory={state_history_24h}
           height={240}
         />
@@ -310,36 +323,44 @@ export default function SituationPage() {
           { f: f3h, key: "horizon_3h", horizon: "3h" },
           { f: f6h, key: "horizon_6h", horizon: "6h" },
           { f: f9h, key: "horizon_9h", horizon: "9h" },
-        ] as const).map(({ f, key, horizon }) => f ? (
-          <Card key={key}>
-            <div className="flex items-start justify-between mb-3">
-              <span className="text-sm font-semibold text-afya-charcoal">{t(key)}</span>
-              <span
-                className="text-[10px] text-afya-muted/60 border border-afya-border rounded px-1.5 py-0.5"
-                title={lang === "sw" ? "Kosa la wastani kwenye miezi ya majaribio" : "Mean error on the test months"}
-              >
-                ±{horizonScores(horizon).mae.toFixed(1)}°C
-              </span>
-            </div>
-            <div className="text-3xl font-bold text-afya-charcoal mb-1">
-              {f.value.toFixed(1)}°C
-            </div>
-            <div className="text-xs text-afya-muted mb-3">
-              {t("uncertainty")}: {f.lower.toFixed(1)}–{f.upper.toFixed(1)}°C
-            </div>
-            {/* Uncertainty bar */}
-            <div className="relative h-2 rounded-full bg-afya-canvas overflow-hidden" aria-hidden="true">
-              <div
-                className="absolute inset-y-0 rounded-full bg-afya-green/20"
-                style={{ left: "10%", right: "10%" }}
-              />
-              <div
-                className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-afya-green border-2 border-white"
-                style={{ left: "calc(50% - 5px)" }}
-              />
-            </div>
-          </Card>
-        ) : null)}
+        ] as const).map(({ f, key, horizon }) => {
+          if (!f) return null;
+          const bar = bandGeometry(f, scale);
+          return (
+            <Card key={key}>
+              <div className="flex items-start justify-between mb-3">
+                <span className="text-sm font-semibold text-afya-charcoal">{t(key)}</span>
+                <span
+                  className="text-[10px] text-afya-muted/60 border border-afya-border rounded px-1.5 py-0.5"
+                  title={lang === "sw" ? "Kosa la wastani kwenye miezi ya majaribio" : "Mean error on the test months"}
+                >
+                  ±{horizonScores(horizon).mae.toFixed(1)}°C
+                </span>
+              </div>
+              <div className="text-3xl font-bold text-afya-charcoal mb-1">
+                {f.value.toFixed(1)}°C
+              </div>
+              <div className="text-xs text-afya-muted mb-3">
+                {t("uncertainty")}: {f.lower.toFixed(1)}–{f.upper.toFixed(1)}°C
+              </div>
+              {/* The 80 % band and forecast value, on one scale shared by all four horizons */}
+              <div className="relative h-2.5 rounded-full bg-afya-canvas" aria-hidden="true">
+                <div
+                  className="absolute inset-y-0 rounded-full bg-afya-green/25"
+                  style={{ left: `${bar.left}%`, width: `${bar.width}%` }}
+                />
+                <div
+                  className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-afya-green border-2 border-white"
+                  style={{ left: `${bar.marker}%` }}
+                />
+              </div>
+              <div className="mt-1 flex justify-between text-[9px] text-afya-muted/70" aria-hidden="true">
+                <span>{scale[0]}°</span>
+                <span>{scale[1]}°</span>
+              </div>
+            </Card>
+          );
+        })}
       </div>
 
       {/* STATE HISTORY TIMELINE */}
@@ -355,46 +376,7 @@ export default function SituationPage() {
       {contributors.length > 0 && (
         <Card>
           <CardTitle>{t("contributor_title")}</CardTitle>
-          <p className="text-xs text-afya-muted mb-4">{t("contributor_note")}</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {contributors.map((c, i) => {
-              const colors: Record<string, string> = {
-                temp_rising: "#E27832",
-                temp_falling: "#247B78",
-                high_radiation: "#F2B705",
-                low_ventilation: "#3786B5",
-                humidity_falling: "#6B8F71",
-                peak_radiation: "#E27832",
-              };
-              const labels_en: Record<string, string> = {
-                temp_rising: "Temperature rising",
-                temp_falling: "Temperature falling",
-                high_radiation: "High solar radiation",
-                low_ventilation: "Weak ventilation (low wind speed)",
-                humidity_falling: "Humidity falling",
-                peak_radiation: "Peak radiation period",
-              };
-              const labels_sw: Record<string, string> = {
-                temp_rising: "Joto linaongezeka",
-                temp_falling: "Joto linapungua",
-                high_radiation: "Mionzi mikali ya jua",
-                low_ventilation: "Uingizaji hewa mdogo (upepo mdogo)",
-                humidity_falling: "Unyevu unapungua",
-                peak_radiation: "Kipindi cha mionzi ya juu",
-              };
-              return (
-                <div key={i} className="flex items-center gap-2.5 rounded-lg border border-afya-border bg-afya-canvas/50 px-3 py-2.5">
-                  {c.direction === "increasing"
-                    ? <TrendingUp className="w-4 h-4 shrink-0" style={{ color: colors[c.feature] ?? "#68756f" }} strokeWidth={2} aria-hidden="true" />
-                    : <CheckCircle2 className="w-4 h-4 shrink-0" style={{ color: colors[c.feature] ?? "#68756f" }} strokeWidth={2} aria-hidden="true" />
-                  }
-                  <span className="text-sm text-afya-charcoal">
-                    {lang === "sw" ? labels_sw[c.feature] ?? c.feature : labels_en[c.feature] ?? c.feature}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+          <ContributorList contributors={contributors} />
         </Card>
       )}
 
@@ -423,7 +405,12 @@ export default function SituationPage() {
         </button>
         {showTechnical && (
           <div id="technical-details" className="px-5 pb-5 border-t border-afya-border pt-4">
-            <MeasurementStrip obs={current} freshnessMinutes={quality.freshness_minutes} />
+            <MeasurementStrip
+              obs={current}
+              freshnessMinutes={quality.freshness_minutes}
+              dataSource={situation.data_source}
+              feed={situation.data_feed}
+            />
           </div>
         )}
       </Card>
