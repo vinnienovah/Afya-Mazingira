@@ -211,7 +211,7 @@ export function buildExplanationFacts(situation: SituationResult, plan?: PlanWin
 // output adds or drops facts instead of breaking the explanation.
 
 export interface FarmFacts {
-  /** False when the rainfall and soil data the water advice needs were not reached */
+  /** False when the rainfall and temperature records the water advice needs were not reached */
   water_available: boolean;
   crop_en: string | null;
   crop_sw: string | null;
@@ -220,6 +220,7 @@ export interface FarmFacts {
     action: string;
     depth_low_mm: number | null;
     depth_high_mm: number | null;
+    days_until_irrigation: number | null;
     reason_keys: string[];
     confidence: string | null;
   } | null;
@@ -227,6 +228,9 @@ export interface FarmFacts {
   stress: { level: string; peak_temp_c: number | null } | null;
   water: {
     etc_mm_day: number | null;
+    weekly_requirement_mm: number | null;
+    depletion_mm: number | null;
+    readily_available_mm: number | null;
     rain_7d_mm: number | null;
     rain_30d_mm: number | null;
   } | null;
@@ -339,6 +343,7 @@ export function buildFarmExplanationFacts(
           action: irrigationAction,
           depth_low_mm: range?.low ?? (single && single > 0 ? single : null),
           depth_high_mm: range && range.high !== range.low ? range.high : null,
+          days_until_irrigation: finite(irrigationIn?.days_until_irrigation),
           reason_keys: asKeys(irrigationIn?.reason_keys),
           confidence: asString(irrigationIn?.confidence),
         }
@@ -352,6 +357,9 @@ export function buildFarmExplanationFacts(
     water: waterIn
       ? {
           etc_mm_day: finite(waterIn.etc_mm_day),
+          weekly_requirement_mm: finite(waterIn.weekly_requirement_mm),
+          depletion_mm: finite(waterIn.depletion_mm),
+          readily_available_mm: finite(waterIn.readily_available_mm),
           rain_7d_mm: finite(waterIn.rain_7d_mm),
           rain_30d_mm: finite(waterIn.rain_30d_mm),
         }
@@ -729,8 +737,8 @@ function templateEn({ facts: f, farm, intent, mode }: TemplateInput): string[] {
     const i = farm?.irrigation;
     if (!farm || !farm.water_available || !i) {
       return [plain
-        ? "Watering advice is not available right now, because the rain and soil information it needs could not be fetched."
-        : "Irrigation advice is not available right now: the rainfall and soil moisture data it depends on could not be fetched."];
+        ? "Watering advice is not available right now, because the rain and temperature records it needs could not be fetched."
+        : "Irrigation advice is not available right now: the rainfall and temperature records it depends on could not be fetched."];
     }
     const depth = i.depth_low_mm !== null
       ? i.depth_high_mm !== null
@@ -740,24 +748,39 @@ function templateEn({ facts: f, farm, intent, mode }: TemplateInput): string[] {
     const action: Record<string, string> = plain
       ? {
           IRRIGATE_NOW: `Water your ${crop} now${depth}.`,
-          IRRIGATE_SOON: `Plan to water your ${crop} in the next few days${depth}.`,
-          HOLD_RAIN_EXPECTED: "Wait before watering: rain is expected soon.",
-          CHECK_SOIL: "Feel the soil first to see whether it is dry before you water.",
+          HOLD_RAIN_EXPECTED: "Wait before watering: the rain on the way covers most of what the soil needs.",
           NO_IRRIGATION: `Your ${crop} does not need watering now.`,
+          DATA_TOO_THIN: "There is not enough rain data to say how dry the soil is. Feel the soil before you water.",
         }
       : {
           IRRIGATE_NOW: `Irrigate ${crop} now${depth}.`,
-          IRRIGATE_SOON: `Plan to irrigate ${crop} in the next few days${depth}.`,
-          HOLD_RAIN_EXPECTED: `Hold off irrigating ${crop}: rain is likely soon.`,
-          CHECK_SOIL: `Check the soil by hand before irrigating ${crop}: recent rain and the soil moisture reading disagree.`,
+          HOLD_RAIN_EXPECTED: `Hold off irrigating ${crop}: rain forecast within 48 hours covers most of the refill.`,
           NO_IRRIGATION: `${capitalise(crop)} does not need irrigation now.`,
+          DATA_TOO_THIN: `The rain record is too thin to carry a root-zone balance for ${crop}.`,
         };
     const lines = [action[i.action] ?? `The irrigation advice for ${crop} is ${i.action}.`];
+    const days = i.days_until_irrigation;
+    if (days !== null && i.action === "NO_IRRIGATION") {
+      lines.push(plain
+        ? days === 1 ? "It should need water tomorrow." : `At today's use it should need water in about ${days} days.`
+        : days === 1
+          ? "At today's demand the root zone reaches the refill point tomorrow."
+          : `At today's demand the root zone reaches the refill point in about ${days} days.`);
+    }
     if (!plain) {
       if (i.reason_keys.length) lines.push(`Why: ${i.reason_keys.map((k) => lowerFirst(reasonText("en", k))).join("; ")}.`);
       const w = farm.water;
-      if (w && w.etc_mm_day !== null && w.rain_7d_mm !== null) {
-        lines.push(`The crop uses about ${w.etc_mm_day} mm of water a day, against ${n1(w.rain_7d_mm)} mm of rain in the last 7 days.`);
+      if (w && w.depletion_mm !== null && w.readily_available_mm !== null) {
+        lines.push(
+          `The root zone is ${w.depletion_mm} mm short of full, against a refill point of ${w.readily_available_mm} mm. ` +
+            "The balance counts rain, so subtract any water you have already applied.",
+        );
+      }
+      if (w && w.etc_mm_day !== null && w.weekly_requirement_mm !== null && w.rain_7d_mm !== null) {
+        lines.push(
+          `The crop uses about ${w.etc_mm_day} mm a day, ${w.weekly_requirement_mm} mm over a week, ` +
+            `against ${n1(w.rain_7d_mm)} mm of rain in the last 7 days.`,
+        );
       }
       if (i.confidence) lines.push(`Confidence: ${i.confidence.toLowerCase()}.`);
     }
@@ -1009,8 +1032,8 @@ function templateSw({ facts: f, farm, intent, mode }: TemplateInput): string[] {
     const i = farm?.irrigation;
     if (!farm || !farm.water_available || !i) {
       return [plain
-        ? "Ushauri wa kumwagilia haupatikani kwa sasa, kwa sababu taarifa za mvua na udongo zinazohitajika hazikupatikana."
-        : "Ushauri wa umwagiliaji haupatikani kwa sasa: takwimu za mvua na unyevu wa udongo unazotegemea hazikupatikana."];
+        ? "Ushauri wa kumwagilia haupatikani kwa sasa, kwa sababu rekodi za mvua na joto zinazohitajika hazikupatikana."
+        : "Ushauri wa umwagiliaji haupatikani kwa sasa: rekodi za mvua na joto unazotegemea hazikupatikana."];
     }
     const depth = i.depth_low_mm !== null
       ? i.depth_high_mm !== null
@@ -1020,24 +1043,37 @@ function templateSw({ facts: f, farm, intent, mode }: TemplateInput): string[] {
     const action: Record<string, string> = plain
       ? {
           IRRIGATE_NOW: `Mwagilia ${crop} sasa${depth}.`,
-          IRRIGATE_SOON: `Panga kumwagilia ${crop} katika siku chache zijazo${depth}.`,
-          HOLD_RAIN_EXPECTED: "Subiri kwanza kabla ya kumwagilia: mvua inatarajiwa hivi karibuni.",
-          CHECK_SOIL: "Gusa udongo kwanza uone kama ni mkavu kabla ya kumwagilia.",
+          HOLD_RAIN_EXPECTED: "Subiri kwanza kabla ya kumwagilia: mvua inayokuja inafunika sehemu kubwa ya maji yanayohitajika.",
           NO_IRRIGATION: `Hakuna haja ya kumwagilia ${crop} kwa sasa.`,
+          DATA_TOO_THIN: "Takwimu za mvua hazitoshi kujua ukavu wa udongo. Gusa udongo kwanza kabla ya kumwagilia.",
         }
       : {
           IRRIGATE_NOW: `Mwagilia ${crop} sasa${depth}.`,
-          IRRIGATE_SOON: `Panga kumwagilia ${crop} katika siku chache zijazo${depth}.`,
-          HOLD_RAIN_EXPECTED: `Subiri kabla ya kumwagilia ${crop}: mvua inatarajiwa hivi karibuni.`,
-          CHECK_SOIL: `Kagua udongo kwa mkono kabla ya kumwagilia ${crop}: mvua ya hivi karibuni na kipimo cha unyevu wa udongo havikubaliani.`,
+          HOLD_RAIN_EXPECTED: `Subiri kabla ya kumwagilia ${crop}: mvua inayotabiriwa ndani ya saa 48 inafunika sehemu kubwa ya maji yanayohitajika.`,
           NO_IRRIGATION: `Hakuna haja ya kumwagilia ${crop} kwa sasa.`,
+          DATA_TOO_THIN: `Rekodi ya mvua haitoshi kuendesha mizani ya eneo la mizizi kwa ${crop}.`,
         };
     const lines = [action[i.action] ?? `Ushauri wa umwagiliaji kwa ${crop} ni ${i.action}.`];
+    const days = i.days_until_irrigation;
+    if (days !== null && i.action === "NO_IRRIGATION") {
+      lines.push(days === 1
+        ? "Kwa mahitaji ya leo, eneo la mizizi litafikia kiwango cha kumwagilia kesho."
+        : `Kwa mahitaji ya leo, eneo la mizizi litafikia kiwango cha kumwagilia baada ya takriban siku ${days}.`);
+    }
     if (!plain) {
       if (i.reason_keys.length) lines.push(`Sababu: ${i.reason_keys.map((k) => lowerFirst(reasonText("sw", k))).join("; ")}.`);
       const w = farm.water;
-      if (w && w.etc_mm_day !== null && w.rain_7d_mm !== null) {
-        lines.push(`Zao linatumia takriban milimita ${w.etc_mm_day} za maji kwa siku, dhidi ya milimita ${n1(w.rain_7d_mm)} za mvua katika siku 7 zilizopita.`);
+      if (w && w.depletion_mm !== null && w.readily_available_mm !== null) {
+        lines.push(
+          `Eneo la mizizi lina upungufu wa milimita ${w.depletion_mm} dhidi ya kiwango cha kumwagilia cha milimita ${w.readily_available_mm}. ` +
+            "Mizani inahesabu mvua, hivyo toa maji uliyoweka tayari.",
+        );
+      }
+      if (w && w.etc_mm_day !== null && w.weekly_requirement_mm !== null && w.rain_7d_mm !== null) {
+        lines.push(
+          `Zao linatumia takriban milimita ${w.etc_mm_day} kwa siku, milimita ${w.weekly_requirement_mm} kwa wiki, ` +
+            `dhidi ya milimita ${n1(w.rain_7d_mm)} za mvua katika siku 7 zilizopita.`,
+        );
       }
       const confidence: Record<string, string> = { LOW: "mdogo", MODERATE: "wa wastani", HIGH: "mkubwa" };
       if (i.confidence) lines.push(`Uhakika: ${confidence[i.confidence] ?? i.confidence.toLowerCase()}.`);

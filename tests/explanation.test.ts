@@ -84,8 +84,24 @@ test("the model sees Nairobi clock times and the window it is asked about", () =
   assert.equal(modelFacts(plan, "en").best_window, "16:48–18:48");
 });
 
-test("farm facts prefer the depth range to the single depth", () => {
+test("farm facts carry the advised depth and the depletion it refills", () => {
   const farm = buildFarmExplanationFacts(LIVE_MAIZE_ADVISORY, { lang: "en" });
+  assert.equal(farm.flat.farm_irrigation_depth_mm, 110);
+  assert.equal(farm.flat.farm_depletion_mm, 110);
+  assert.equal(farm.flat.farm_readily_available_mm, 77);
+  assert.deepEqual(
+    { low: farm.irrigation?.depth_low_mm, high: farm.irrigation?.depth_high_mm },
+    { low: 110, high: null },
+  );
+  assert.match(String(farm.flat.farm_irrigation_reasons), /the crop starts to struggle for water/);
+  assert.equal(farm.flat.farm_field_work_window, "16:48–18:48");
+});
+
+test("a depth range from an older advisory is still preferred to the single depth", () => {
+  const farm = buildFarmExplanationFacts({
+    ...LIVE_MAIZE_ADVISORY,
+    irrigation: { ...LIVE_MAIZE_ADVISORY.irrigation, depth_mm: 65, depth_range_mm: { low: 65, high: 110 } },
+  }, { lang: "en" });
   assert.equal(farm.flat.farm_irrigation_depth_range_mm, "65–110");
   assert.ok(!("farm_irrigation_depth_mm" in farm.flat));
   assert.ok(!("farm_irrigation_litres_per_m2" in farm.flat));
@@ -93,8 +109,6 @@ test("farm facts prefer the depth range to the single depth", () => {
     { low: farm.irrigation?.depth_low_mm, high: farm.irrigation?.depth_high_mm },
     { low: 65, high: 110 },
   );
-  assert.match(String(farm.flat.farm_irrigation_reasons), /the crop used more water than the rain gave it/);
-  assert.equal(farm.flat.farm_field_work_window, "16:48–18:48");
 });
 
 test("farm facts read a changed advisory field by field", () => {
@@ -112,9 +126,10 @@ test("farm facts read a changed advisory field by field", () => {
   assert.equal(farm.flat.farm_irrigation_advice, "farm advice check");
   assert.equal(farm.irrigation?.depth_low_mm, null);
   assert.equal(farm.spray, null);
+  // An action the engine no longer has is named rather than guessed at.
   assert.match(
     templateExplanation({ facts: buildExplanationFacts(liveSituation()), farm, intent: "irrigation", mode: "standard", lang: "en" }),
-    /Check the soil by hand before irrigating beans/,
+    /The irrigation advice for beans is CHECK_SOIL/,
   );
 
   // Nothing usable at all still gives an answer.
@@ -186,9 +201,10 @@ test("a peak still ahead is not called the peak", () => {
 
 test("each intent answers its own question", () => {
   const farm = { farm: true };
-  assert.match(template("en", "irrigation", farm), /^Irrigate maize now, about 65–110 mm/);
-  assert.match(template("sw", "irrigation", farm), /^Mwagilia mahindi sasa, takriban milimita 65–110/);
-  assert.match(template("en", "irrigation", { ...farm, mode: "plain" }), /^Water your maize now: about 65 to 110 litres/);
+  assert.match(template("en", "irrigation", farm), /^Irrigate maize now, about 110 mm/);
+  assert.match(template("en", "irrigation", farm), /root zone is 110 mm short of full, against a refill point of 77 mm/);
+  assert.match(template("sw", "irrigation", farm), /^Mwagilia mahindi sasa, takriban milimita 110/);
+  assert.match(template("en", "irrigation", { ...farm, mode: "plain" }), /^Water your maize now: about 110 litres/);
   assert.match(template("en", "spray", farm), /Spraying conditions right now are marginal/);
   assert.match(template("en", "spray", farm), /16:48–18:48/);
   assert.match(template("sw", "spray", farm), /Hali ya kunyunyizia dawa kwa sasa ni ya wastani/);
