@@ -495,6 +495,12 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
             </tbody>
           </table>
         </div>
+        <p className="mt-3 text-xs text-afya-muted leading-relaxed">
+          {sw
+            ? "A04 hulinganisha WBGT ya programu dhibiti na makadirio, si kipimo: kituo hakina kipima mionzi ya jua. "
+            : "A04 compares the firmware against an estimate, not a measurement: the station has no pyranometer. "}
+          {a04.uncertainty.note}
+        </p>
       </Card>
 
       <Card>

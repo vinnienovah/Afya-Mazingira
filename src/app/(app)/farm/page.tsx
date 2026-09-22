@@ -122,7 +122,10 @@ function AppliedWater({
             ))}
           </ul>
           <p className="mt-2 text-[11px] text-afya-muted">
-            {tf(lang, "farm_applied_total", { mm: Math.round(total * 10) / 10, days: entries.length })}
+            {tf(lang, entries.length === 1 ? "farm_applied_total_one" : "farm_applied_total", {
+              mm: Math.round(total * 10) / 10,
+              days: entries.length,
+            })}
           </p>
         </>
       )}
