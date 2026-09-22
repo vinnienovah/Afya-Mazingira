@@ -1,6 +1,7 @@
 import type { DemoObservation } from "./demo-observations";
 import { nwsHeatIndex, stullWetBulb } from "./constants";
 import { EAT_OFFSET_MS, nairobiDate } from "./nairobi-day";
+import { a04Audit } from "./wbgt-audit";
 
 // Station health: quality rules applied to every measured reading, a daily
 // health score, and audits of the values the station's firmware derives.
@@ -591,8 +592,28 @@ export function audits(series: DemoObservation[]) {
       slots: fw.length,
       verdict: farBelow.length / Math.max(fw.length, 1) > 0.01 ? "non-standard" : "within tolerance",
     },
+    A04_firmware_wbgt_vs_liljegren: a04Audit(a04Rows(series)),
     A05_thermometers: thermometers,
   };
+}
+
+// A04 reads the columns the archive names, and judges only slots where every
+// input it needs was measured: an interpolated wind or humidity would other-
+// wise be compared against the firmware as though the station had reported it.
+const A04_INPUTS = ["temp_sht", "humidity_sht", "press_bmx", "wind_spd", "si1145_ir"] as const;
+
+function a04Rows(series: DemoObservation[]): Record<string, unknown>[] {
+  return series
+    .filter((o) => typeof o.firmware_wbgt === "number" && A04_INPUTS.every((f) => measured(o, f)))
+    .map((o) => ({
+      ts: o.ts,
+      temp_sht: o.temp_sht,
+      humidity_sht: o.humidity_sht,
+      press_bmx: o.press_bmx,
+      wind_spd: o.wind_spd,
+      si1145_ir: o.si1145_ir,
+      wet_bulb_globe_temp: o.firmware_wbgt,
+    }));
 }
 
 /**

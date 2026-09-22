@@ -26,6 +26,13 @@ interface Audits {
     below_pct: number | null; far_below_pct: number | null;
     far_below_night_pct: number | null; far_below_day_pct: number | null; slots: number; verdict: string;
   };
+  A04_firmware_wbgt_vs_liljegren: {
+    hours: number;
+    meanSignedC: number;
+    meanAbsC: number;
+    byHourOfDay: { hourEat: number; meanSignedC: number }[];
+    uncertainty: { note: string };
+  };
   A05_thermometers: Thermometers[];
 }
 interface DeviceCodes { reported: boolean; codes: { code: number; slots: number }[]; note: string }
@@ -318,6 +325,9 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
   const a03 = archive.audits.A03_firmware_wbgt_vs_wet_bulb;
   const a01 = archive.audits.A01_wet_bulb_vs_stull;
   const a02 = archive.audits.A02_heat_index_vs_nws;
+  const a04 = archive.audits.A04_firmware_wbgt_vs_liljegren;
+  const a04Morning = a04.byHourOfDay.find((h) => h.hourEat === 9);
+  const a04Night = a04.byHourOfDay.find((h) => h.hourEat === 0);
   const shtBmx = archive.audits.A05_thermometers.find((p) => p.pair === "temp_sht - temp_bmx");
 
   const dayUnit = sw ? "siku" : "days";
@@ -458,6 +468,19 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
                   {sw ? "chini" : "below"} {pct(a03.below_pct)}; {sw ? "zaidi ya 1.5 °C chini" : "more than 1.5 °C below"} {pct(a03.far_below_pct)}
                 </td>
                 <td className="py-2"><Verdict ok={a03.verdict !== "non-standard"} text={a03.verdict} /></td>
+              </tr>
+              <tr>
+                <th scope="row" className="py-2 pr-4 text-left font-semibold text-afya-charcoal">A04</th>
+                <td className="py-2 pr-4 text-afya-muted">
+                  {sw ? "WBGT ya programu dhibiti dhidi ya Liljegren (2008)" : "Firmware WBGT against Liljegren (2008)"}
+                </td>
+                <td className="py-2 pr-4">
+                  {sw ? "wastani" : "mean"} {signed(a04.meanSignedC)};{" "}
+                  {sw
+                    ? `${signed(a04Morning?.meanSignedC ?? 0)} saa 09:00, ${signed(a04Night?.meanSignedC ?? 0)} usiku wa manane`
+                    : `${signed(a04Morning?.meanSignedC ?? 0)} at 09:00, ${signed(a04Night?.meanSignedC ?? 0)} at midnight`}
+                </td>
+                <td className="py-2 text-xs text-afya-muted">{sw ? "taarifa tu" : "report only"}</td>
               </tr>
               {archive.audits.A05_thermometers.map((p) => (
                 <tr key={p.pair}>
