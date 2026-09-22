@@ -113,7 +113,7 @@ const STATUS_NAME: Record<Status, [string, string]> = {
 // What each rule checks, on 15-minute data. The thresholds live in sentinel.ts.
 const RULES: [string, string, string][] = [
   ["R01", "Any thermometer below -5 or above 45 °C", "Kipima joto chochote chini ya -5 au juu ya 45 °C"],
-  ["R02", "Humidity at or below 0 %", "Unyevu wa 0 % au chini"],
+  ["R02", ...both("health_rule_r02")],
   ["R03", "Pressure outside 800 to 900 hPa (station at 1,523 m)", "Shinikizo nje ya 800 hadi 900 hPa (kituo kiko mita 1,523)"],
   ["R04", "Wind above 60 m/s or gust above 75 m/s", "Upepo juu ya 60 m/s au upepo mkali juu ya 75 m/s"],
   ["R05", ...both("health_rule_r05")],
@@ -244,7 +244,7 @@ export default function StationHealthPage() {
           {live.missing_minutes > 0 && (
             <p className="mt-3 text-xs text-afya-muted flex items-center gap-1.5">
               <AlertTriangle className="w-3.5 h-3.5 text-afya-gold" strokeWidth={2} aria-hidden="true" />
-              {fill(STRINGS[sw ? "sw" : "en"].health_live_missing, { minutes: live.missing_minutes })}
+              {fill(t("health_live_missing"), { minutes: live.missing_minutes })}
             </p>
           )}
           {rainNotJudged && <p className="mt-3 text-xs text-afya-muted">{t("health_chords_rain_note")}</p>}
@@ -316,6 +316,17 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
     below: archive.battery.days_below_80_if_counted,
     days: archive.summary.days,
   };
+  // Where the battery is out of the score, the second tile is what the same
+  // days come to with it counted, so the mean never stands on its own.
+  const scoreTiles: [string, string][] = notScored
+    ? [
+        [text.health_tile_mean_score, String(archive.summary.mean_score)],
+        [text.health_tile_mean_with_battery, String(battery.mean)],
+      ]
+    : [
+        [sw ? "Alama ya wastani" : "Mean score", String(archive.summary.mean_score)],
+        [sw ? "Siku chini ya 80" : "Days below 80", String(archive.summary.days_below_80)],
+      ];
   const findings: [string, string][] = [
     [
       `The firmware WBGT is more than 1.5 °C below the wet bulb in ${pct(a03.far_below_pct)} of the record (${pct(a03.far_below_night_pct)} at night, ${pct(a03.far_below_day_pct)} by day). A WBGT below the wet bulb is not physically possible in shade, so the formula in the firmware should be checked.`,
@@ -354,10 +365,7 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-2 mb-4">
           {[
             [sw ? "Siku" : "Days", String(archive.summary.days)],
-            [notScored ? text.health_tile_mean_score : sw ? "Alama ya wastani" : "Mean score", String(archive.summary.mean_score)],
-            notScored
-              ? [text.health_tile_mean_with_battery, String(battery.mean)]
-              : [sw ? "Siku chini ya 80" : "Days below 80", String(archive.summary.days_below_80)],
+            ...scoreTiles,
             [sw ? "Mapengo zaidi ya saa 1" : "Gaps over an hour", String(archive.gaps.over_one_hour)],
             [text.health_tile_rain, `${Math.round(archive.rain.gauge1_mm).toLocaleString("en")} mm`],
             [text.health_tile_gauge2_silent, String(archive.summary.gauge2_silent_days)],
