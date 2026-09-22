@@ -14,7 +14,7 @@ import fs from "fs";
 import path from "path";
 import { FORECAST_FEATURES, STATE_FEATURES, type FeatureVector } from "../src/lib/afya/feature-engine";
 import { riskRank, wbgtToRisk } from "../src/lib/afya/constants";
-import { CLIMATOLOGY_DAYS, BLOCK_HOURS, timeOfDayBlock } from "../src/lib/afya/climatology";
+import { CLIMATOLOGY_DAYS, BLOCK_HOURS, slotOfDay, timeOfDayBlock } from "../src/lib/afya/climatology";
 import { MIN_DWELL_SLOTS, smoothStates, stateRuns } from "../src/lib/afya/state-engine";
 import type { StateId } from "../src/lib/afya/types";
 import evaluation from "../src/lib/afya/model/forecast-evaluation.json";
@@ -280,9 +280,26 @@ function fitStates(a: Archive) {
   const predictNext = (i: number) =>
     (nextState.find((r) => r.state === smoothed[i] && r.block === blockOf(i)) ??
       nextStateAnyTime.find((r) => r.state === smoothed[i])!);
+  // The hours until that change, finer: by the hour of the day within each block.
+  const hourOf = (i: number) => Math.floor(slotOfDay(a.ms[i]) / 4);
+  const typicalByHour: { state: number; hour: number; to: number; typical_hours: number; n: number }[] = [];
+  for (let state = 0; state < STATE_COUNT; state++) {
+    for (let hour = 0; hour < 24; hour++) {
+      const idx = trainKnown.filter((i) => smoothed[i] === state && hourOf(i) === hour);
+      if (!idx.length) continue;
+      const to = predictNext(idx[0]).to;
+      const hours = idx.filter((i) => next[i]!.to === to).map((i) => next[i]!.hours);
+      if (hours.length >= MIN_BLOCK_READINGS) {
+        typicalByHour.push({ state, hour, to, typical_hours: round(quantile(hours, 0.5), 1), n: hours.length });
+      }
+    }
+  }
+  const typicalHours = (i: number) =>
+    typicalByHour.find((r) => r.state === smoothed[i] && r.hour === hourOf(i) && r.to === predictNext(i).to)
+      ?.typical_hours ?? predictNext(i).typical_hours;
   const tested = known.filter((i) => !inTraining(i));
   const right = tested.filter((i) => predictNext(i).to === next[i]!.to);
-  const hoursOff = right.map((i) => Math.abs(predictNext(i).typical_hours - next[i]!.hours));
+  const hoursOff = right.map((i) => Math.abs(typicalHours(i) - next[i]!.hours));
 
   const days = (a.ms[a.ms.length - 1] - a.ms[0]) / 86_400_000;
   const changes = (l: (StateId | null)[]) => {
@@ -322,11 +339,13 @@ function fitStates(a: Archive) {
     transitions,
     next_state: nextState,
     next_state_any_time: nextStateAnyTime,
+    typical_hours_by_hour: typicalByHour,
     next_state_test: {
       from: STATES_TRAIN_UNTIL.slice(0, 10),
       n: tested.length,
       right_pct: round((right.length / tested.length) * 100, 1),
       typical_hours_median_error: round(quantile(hoursOff, 0.5), 2),
+      typical_hours_mean_error: round(hoursOff.reduce((x, y) => x + y, 0) / hoursOff.length, 2),
     },
     n_training_slots: trainIdx.length,
   };

@@ -1,6 +1,6 @@
 import type { FeatureVector } from "./feature-engine";
 import type { StateId } from "./types";
-import { timeOfDayBlock } from "./climatology";
+import { slotOfDay, timeOfDayBlock } from "./climatology";
 import model from "./model/states.json";
 
 // Climate Reflex states: k-means with four clusters on the Conduit archive's
@@ -109,16 +109,24 @@ export function stateSince(segments: { state_id: StateId; start: string; end: st
 }
 
 /**
- * The state that most often comes next after this one at this time of day in
- * the training months, how often it does, and the median hours until it did.
+ * The state that most often came next after this one in the same three-hour
+ * block of the day in the training months, how often it did, and the median
+ * hours until it did from this hour of the day.
  */
 export function getNextTransition(
   current: StateId,
   nowIso: string,
 ): { state_id: StateId; probability: number; typical_hours: number } {
-  const block = timeOfDayBlock(Date.parse(nowIso));
+  const ms = Date.parse(nowIso);
+  const block = timeOfDayBlock(ms);
+  const hour = Math.floor(slotOfDay(ms) / 4);
   const row =
     model.next_state.find((r) => r.state === current && r.block === block) ??
     model.next_state_any_time.find((r) => r.state === current)!;
-  return { state_id: row.to as StateId, probability: row.probability, typical_hours: row.typical_hours };
+  const hours = model.typical_hours_by_hour.find((r) => r.state === current && r.hour === hour && r.to === row.to);
+  return {
+    state_id: row.to as StateId,
+    probability: row.probability,
+    typical_hours: hours?.typical_hours ?? row.typical_hours,
+  };
 }

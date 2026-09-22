@@ -65,6 +65,11 @@ test("what comes next depends on the time of day", () => {
   assert.ok(night.typical_hours > 4);
 });
 
+test("the hours until a hot afternoon cools shrink as the afternoon goes on", () => {
+  const hours = ["09:00", "11:00", "13:00"].map((t) => getNextTransition(2, `2026-02-10T${t}:00Z`).typical_hours);
+  assert.ok(hours[0] > hours[1] && hours[1] > hours[2], hours.join(", "));
+});
+
 test("on the months after training, the next state by time of day is right most of the time", () => {
   const a = loadArchive();
   const labels = a.series.map((_, i) => (a.usable[i] ? classifyState(a.features[i]!) : null));
