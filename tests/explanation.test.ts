@@ -312,3 +312,13 @@ test("the explain route answers malformed JSON with 400 before any work", async 
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), { error: "invalid_json" });
 });
+
+test("a depth range whose ends are equal is stated as one depth", () => {
+  const advisory = {
+    ...LIVE_MAIZE_ADVISORY,
+    irrigation: { ...LIVE_MAIZE_ADVISORY.irrigation, depth_mm: 10, litres_per_m2: 10, depth_range_mm: { low: 10, high: 10 } },
+  };
+  const farm = buildFarmExplanationFacts(advisory, { lang: "en" });
+  assert.equal(farm.flat.farm_irrigation_depth_range_mm, 10);
+  assert.deepEqual({ low: farm.irrigation?.depth_low_mm, high: farm.irrigation?.depth_high_mm }, { low: 10, high: null });
+});

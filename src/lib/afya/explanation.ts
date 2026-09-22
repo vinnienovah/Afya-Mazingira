@@ -296,7 +296,7 @@ export function buildFarmExplanationFacts(
         if (keys.length) flat[name.replace(/_keys$/, "s")] = keys.map((k) => reasonText(lang, k)).join("; ");
       } else if (asRange(value)) {
         const range = asRange(value)!;
-        flat[name] = `${range.low}–${range.high}`;
+        flat[name] = range.low === range.high ? range.low : `${range.low}–${range.high}`;
       }
     }
   };
@@ -338,7 +338,7 @@ export function buildFarmExplanationFacts(
       ? {
           action: irrigationAction,
           depth_low_mm: range?.low ?? (single && single > 0 ? single : null),
-          depth_high_mm: range?.high ?? null,
+          depth_high_mm: range && range.high !== range.low ? range.high : null,
           reason_keys: asKeys(irrigationIn?.reason_keys),
           confidence: asString(irrigationIn?.confidence),
         }
