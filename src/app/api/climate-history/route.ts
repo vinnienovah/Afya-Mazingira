@@ -29,6 +29,7 @@ const QuerySchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
+  const limited = (await import("@/lib/rate-limit")).rateLimit(req, "climateHistory"); if (limited) return limited;
   try {
     const sp = req.nextUrl.searchParams;
     const parsed = QuerySchema.safeParse({

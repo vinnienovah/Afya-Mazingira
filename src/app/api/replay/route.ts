@@ -10,6 +10,7 @@ const ReplaySchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  const limited = (await import("@/lib/rate-limit")).rateLimit(req, "replay"); if (limited) return limited;
   try {
     const body = await req.json();
     const parsed = ReplaySchema.safeParse(body);
