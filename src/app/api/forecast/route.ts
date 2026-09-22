@@ -23,7 +23,8 @@ export async function GET() {
         risk: situation.risk,
         contributors: situation.contributors,
       },
-      { headers: { "Cache-Control": "public, max-age=60, stale-while-revalidate=840" } },
+      // Same short stale window as /api/situation, so the two never drift far apart.
+      { headers: { "Cache-Control": "public, max-age=60, stale-while-revalidate=120" } },
     );
   } catch (err) {
     console.error("Forecast API error:", err);

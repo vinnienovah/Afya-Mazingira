@@ -12,8 +12,10 @@ export const maxDuration = 30;
 export async function GET() {
   try {
     const situation = await runPipeline();
+    // The station reports every 15 minutes; a short stale window keeps the CDN
+    // from serving a reading older than the one the briefing renders.
     return NextResponse.json(situation, {
-      headers: { "Cache-Control": "public, max-age=60, stale-while-revalidate=840" },
+      headers: { "Cache-Control": "public, max-age=60, stale-while-revalidate=120" },
     });
   } catch (err) {
     console.error("Situation pipeline error:", err);
