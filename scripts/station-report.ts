@@ -93,6 +93,15 @@ function main() {
       over_one_hour: longGaps.length,
       longest: longGaps.reduce<(typeof longGaps)[number] | null>((a, b) => (!a || b.hours > a.hours ? b : a), null),
     },
+    // R14. The archive is sampled about every 15 minutes, and a skipped
+    // reading at that cadence is already a gap, so the specification's late
+    // band (a reading one whole interval behind, but not late enough to open
+    // a gap) can only fill on a feed that reports every minute.
+    cadence: {
+      gap_slots: series.filter((o) => (o.gap_minutes ?? 0) > 0).length,
+      late_slots: series.filter((o) => o.late_intervals).length,
+      late_intervals: series.reduce((s, o) => s + (o.late_intervals ?? 0), 0),
+    },
     days: days.map(({ date, score, bad, suspect, missing_minutes }) => ({ date, score, bad, suspect, missing_minutes })),
   };
 

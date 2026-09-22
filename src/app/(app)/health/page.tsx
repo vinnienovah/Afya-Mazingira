@@ -129,6 +129,7 @@ const RULES: [string, string, string][] = [
   ["R11", ...both("health_rule_r11")],
   ["R12", ...both("health_rule_r12")],
   ["R13", ...both("health_rule_r13")],
+  ["R14", ...both("health_rule_r14")],
   ["R16", "The firmware WBGT is more than 1.5 °C below the wet bulb", "WBGT ya programu dhibiti iko chini ya joto la balbu nyevu kwa zaidi ya 1.5 °C"],
 ];
 

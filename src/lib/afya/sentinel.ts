@@ -120,18 +120,23 @@ export function slotsByDay(series: DemoObservation[]): Map<string, number[]> {
   return byDay;
 }
 
+// info: recorded and reported, never counted. The specification gives some
+// rules no flag at all (R14, R15); a hit is still the only way they reach the
+// report, so they are emitted and the health score skips them.
+export type RuleFlag = "info" | "suspect" | "bad";
+
 export interface RuleHit {
   rule: string;
   channel: string;
   index: number;
-  flag: "suspect" | "bad";
+  flag: RuleFlag;
 }
 
 /** Every rule hit in a series, slot by slot. */
 export function checkReadings(series: DemoObservation[]): RuleHit[] {
   const L = SENTINEL_LIMITS;
   const hits: RuleHit[] = [];
-  const hit = (rule: string, channel: string, index: number, flag: "suspect" | "bad") =>
+  const hit = (rule: string, channel: string, index: number, flag: RuleFlag) =>
     hits.push({ rule, channel, index, flag });
 
   series.forEach((o, i) => {
@@ -170,6 +175,10 @@ export function checkReadings(series: DemoObservation[]): RuleHit[] {
     ) {
       hit("R16", "firmware_wbgt", i, "suspect");
     }
+    // R14: the station kept to its own cadence or it did not. A slot inside a
+    // silence, or holding a reading that arrived a whole interval late, says
+    // so here; the missing time itself is what the score charges for.
+    if (o.gap_minutes || o.late_intervals) hit("R14", "time", i, "info");
   });
 
   // R08: the same measured value for too long. Calm nights make zero wind

@@ -463,6 +463,12 @@ const SLOT_MS = 900_000;
 // cadence interval after the last reading, so both follow the readings' own
 // spacing rather than a fixed quarter hour.
 const GAP_GRACE_MS = 4 * 60_000;
+// A reading that arrives this many cadence intervals or more after the one
+// before it, but still too soon to open a gap, is late: R14 records it and
+// charges nothing. At the one-minute cadence of the organisers' exports that
+// is the specification's 120 to 300 s band. At a quarter-hour cadence a
+// skipped reading already opens a gap, so nothing falls in the band.
+const LATE_AFTER_INTERVALS = 2;
 
 // The gauges' running totals restart at 06:00 UTC, the start of the station's
 // rain day. They move in 0.2 mm tips.
@@ -682,13 +688,18 @@ export function gridReadings(readings: Reading[]): DemoObservation[] {
   // 2. Time between readings further apart than the feed's own cadence allows,
   //    charged to the slots it covers. Each of those slots also carries the
   //    silence it belongs to, so the report can name the readings either side.
+  //    Shorter slippage leaves the slot its late reading landed in marked.
   const expected = expectedInterval(readings);
   const gapMinutes = new Array<number>(slots).fill(0);
   const gapSpan = new Array<{ from: string; to: string } | null>(slots).fill(null);
+  const late = new Array<number>(slots).fill(0);
   for (let i = 1; i < readings.length; i++) {
     const prev = readings[i - 1].t;
     const next = readings[i].t;
-    if (next - prev <= expected + GAP_GRACE_MS) continue;
+    if (next - prev <= expected + GAP_GRACE_MS) {
+      if (next - prev >= LATE_AFTER_INTERVALS * expected) late[Math.floor(next / SLOT_MS) - bucket0]++;
+      continue;
+    }
     const span = { from: new Date(prev).toISOString(), to: new Date(next).toISOString() };
     const missingFrom = prev + expected;
     for (let b = Math.floor(missingFrom / SLOT_MS); b * SLOT_MS < next; b++) {
@@ -781,6 +792,7 @@ export function gridReadings(readings: Reading[]): DemoObservation[] {
       o.gap_minutes = gapMinutes[b];
       o.gap = gapSpan[b]!;
     }
+    if (late[b] > 0) o.late_intervals = late[b];
     if (typeof rec.wind_gust_dir === "number") o.wind_gust_dir = rec.wind_gust_dir;
     if (typeof rec.battery_v === "number") o.battery_v = rec.battery_v;
     out.push(o);

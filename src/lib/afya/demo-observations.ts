@@ -49,6 +49,10 @@ export interface DemoObservation {
   // The readings either side of that silence, so it can be reported at the
   // times it really ran between rather than at the slot boundaries.
   gap?: { from: string; to: string };
+  // Readings in this slot that arrived a whole cadence interval or more after
+  // the one before, without leaving a gap behind them (Sentinel R14, "late").
+  // Absent when none did.
+  late_intervals?: number;
   // The gust-direction column, read only to check whether the export copies
   // the gust speed into it (Sentinel R13). Never used as a direction.
   wind_gust_dir?: number | null;

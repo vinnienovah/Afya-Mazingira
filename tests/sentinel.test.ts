@@ -414,6 +414,42 @@ test("A01 holds at a 0.1 °C mean difference from Stull", () => {
   assert.equal(audits(off(0.101)).A01_wet_bulb_vs_stull.verdict, "does not match Stull");
 });
 
+test("R14 records a late reading and a silence, and neither moves the score", () => {
+  // One reading a minute for four hours, with `drop` of them missing at 02:00.
+  const minutes = (drop: number) =>
+    Array.from({ length: 240 }, (_, i) => i).filter((i) => i < 120 || i >= 120 + drop).map((i) => raw(i));
+  const r14 = (drop: number) => ruleAt(minutes(drop), "R14");
+
+  // Five minutes between readings at a one-minute cadence: late, no gap.
+  assert.equal(r14(3).length, 1);
+  assert.deepEqual(r14(4).map((h) => [h.channel, h.flag]), [["time", "info"]]);
+  const late = cleanAndGrid(minutes(4));
+  assert.equal(late.reduce((s, o) => s + (o.gap_minutes ?? 0), 0), 0);
+  assert.equal(late.reduce((s, o) => s + (o.late_intervals ?? 0), 0), 1);
+  // A minute late is the cadence itself, not a late reading.
+  assert.equal(r14(0).length, 0);
+
+  // Past the gap threshold it is a silence, which R14 also records.
+  const outage = cleanAndGrid(minutes(60));
+  assert.ok(outage.some((o) => (o.gap_minutes ?? 0) > 0));
+  assert.ok(!outage.some((o) => o.late_intervals));
+  assert.ok(checkReadings(outage).filter((h) => h.rule === "R14").length > 1);
+
+  // The score with R14 in hand is the score without it, on both series.
+  for (const series of [late, outage]) {
+    const hits = checkReadings(series);
+    assert.ok(hits.some((h) => h.rule === "R14"));
+    const before = dailyHealth(series, hits.filter((h) => h.rule !== "R14"));
+    const after = dailyHealth(series, hits);
+    assert.deepEqual(after.map((d) => d.score), before.map((d) => d.score));
+    assert.deepEqual(after.map((d) => [d.bad, d.suspect]), before.map((d) => [d.bad, d.suspect]));
+    // Only the rule list changes, which is the point of emitting it.
+    assert.ok(after.every((d) => d.rules.includes("R14")));
+    assert.ok(before.every((d) => !d.rules.includes("R14")));
+    assert.ok(!groupStatus(series, hits, { exportGroups: true }).some((g) => g.rules.includes("R14")));
+  }
+});
+
 test("a gap opens four minutes past the cadence the readings themselves keep", () => {
   // One reading a minute for four hours, with `drop` of them missing at 02:00.
   const minutes = (drop: number) =>
