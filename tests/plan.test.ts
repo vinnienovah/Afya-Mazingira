@@ -28,12 +28,13 @@ function station(from: number): ForecastPoint[] {
   });
 }
 
-// The regional model: hourly from 03:00 EAT today for three days, as Open-Meteo gives it.
+// The regional model: hourly from 03:00 EAT today for three days, as Open-Meteo
+// gives it, with times written without seconds ("2026-09-22T00:00Z").
 function regional(): { time: string; wbgt_like: number }[] {
   return Array.from({ length: 72 }, (_, i) => {
     const t = eat("03:00") + i * HOUR;
     const hour = (new Date(t + 3 * HOUR).getUTCHours());
-    return { time: iso(t), wbgt_like: Math.round((21 - Math.abs(hour - 14) * 0.7) * 10) / 10 };
+    return { time: `${iso(t).slice(0, 16)}Z`, wbgt_like: Math.round((21 - Math.abs(hour - 14) * 0.7) * 10) / 10 };
   });
 }
 
@@ -85,6 +86,8 @@ test("the station forecast answers what it covers; tomorrow goes to the regional
   // The regional model is not the station: no data-quality reason, no rain claim.
   assert.ok(!tomorrow.result.recommended.reasons.includes("reason_quality_good"));
   assert.ok(!tomorrow.result.recommended.reasons.includes("reason_low_rain"));
+  // And a plan saved with it passes the saved-result check.
+  assert.ok(SavedResultSchema.safeParse(JSON.parse(JSON.stringify(tomorrow.result))).success);
 });
 
 test("the regional fallback never offers the hours of today that have passed", () => {

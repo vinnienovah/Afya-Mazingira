@@ -156,11 +156,12 @@ export function checkPlanWindow(req: RecommendationRequest, nowMs: number): Plan
 /**
  * The regional model as a forecast series. Its band is ±2 °C, wider than the
  * station model's, because a grid-cell estimate stands in for the station
- * here. The width is a judgement, not fitted.
+ * here. The width is a judgement, not fitted. Open-Meteo gives times without
+ * seconds, which are written out in full so a saved result validates.
  */
 export function regionalSeries(points: { time: string; wbgt_like: number }[], nowMs: number): ForecastPoint[] {
   return points.map((p) => ({
-    time: p.time,
+    time: iso(Date.parse(p.time)),
     value: p.wbgt_like,
     lower: p.wbgt_like - 2,
     upper: p.wbgt_like + 2,

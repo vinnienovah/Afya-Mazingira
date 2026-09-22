@@ -241,7 +241,7 @@ export function findBestTime(
     coverage: {
       points: best.points.length,
       step_minutes: Math.round(stepMs / 60_000),
-      forecast_from: series[0].time,
+      forecast_from: iso(Date.parse(series[0].time)),
       forecast_to: iso(lastPoint + stepMs),
     },
   };
