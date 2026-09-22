@@ -269,6 +269,8 @@ export function chordsWindowUrl(
 const CHORDS_WINDOW_MS = 3 * 3600 * 1000;
 const CHORDS_SLOT_MS = 15 * 60 * 1000;
 const CHORDS_CONCURRENCY = 8;
+// More failures than this means the portal is down, not slow.
+const CHORDS_RETRY_MAX = 4;
 const CHORDS_OPEN_WINDOW_TTL_MS = 5 * 60 * 1000;
 const CHORDS_CACHE_MAX = 2000;
 
@@ -345,14 +347,21 @@ async function cachedChordsWindow(start: number, instrument: number): Promise<Ch
 
 /**
  * CHORDS points for [fromMs, toMs], one row per quarter hour, fetched a
- * three-hour window at a time with a few requests in flight. Throws when the
- * portal returned nothing at all.
+ * three-hour window at a time with a few requests in flight; a window that
+ * times out is asked for once more. A point covers the quarter hour after its
+ * timestamp, so one starting at toMs is left out. Throws when the portal
+ * returned nothing at all.
  */
 export async function fetchChordsRows(fromMs: number, toMs: number, instrument = CONDUIT_INSTRUMENT_ID): Promise<ChordsRows> {
   const starts: number[] = [];
-  for (let s = Math.floor(fromMs / CHORDS_WINDOW_MS) * CHORDS_WINDOW_MS; s <= toMs; s += CHORDS_WINDOW_MS) starts.push(s);
+  for (let s = Math.floor(fromMs / CHORDS_WINDOW_MS) * CHORDS_WINDOW_MS; s < toMs; s += CHORDS_WINDOW_MS) starts.push(s);
 
   const results = await mapLimit(starts, CHORDS_CONCURRENCY, (s) => cachedChordsWindow(s, instrument));
+  const failed = starts.filter((_, i) => !results[i]);
+  if (failed.length && failed.length <= CHORDS_RETRY_MAX) {
+    const retried = await mapLimit(failed, CHORDS_CONCURRENCY, (s) => cachedChordsWindow(s, instrument));
+    failed.forEach((s, i) => (results[starts.indexOf(s)] = retried[i]));
+  }
   const rows: Record<string, unknown>[] = [];
   const channels = new Set<string>();
   for (const r of results) {
@@ -360,7 +369,7 @@ export async function fetchChordsRows(fromMs: number, toMs: number, instrument =
     r.channels.forEach((c) => channels.add(c));
     for (const row of r.rows) {
       const t = Date.parse(String(row.ts));
-      if (t + CHORDS_SLOT_MS > fromMs && t <= toMs) rows.push(row);
+      if (t + CHORDS_SLOT_MS > fromMs && t < toMs) rows.push(row);
     }
   }
   if (!rows.length) throw new Error("CHORDS returned no observations");

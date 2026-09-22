@@ -98,9 +98,10 @@ export async function buildStationHistory(
   if (!(endMs <= archiveEnd)) {
     const liveFrom = Number.isFinite(archiveEnd) ? Math.max(startMs, archiveEnd + 1) : startMs;
     if (feeds.hasConduit()) apiRows = await feeds.conduit(liveFrom, endMs).catch(() => []);
-    const apiEnd = apiRows.reduce((m, r) => Math.max(m, parseUtc(r.ts)), -Infinity);
-    if (!(apiEnd > endMs - TOP_UP_AFTER_MS)) {
-      const from = Number.isFinite(apiEnd) ? Math.max(liveFrom, apiEnd + 1) : liveFrom;
+    const lastReading = Math.max(archiveRows.length ? archiveEnd : -Infinity, ...apiRows.map((r) => parseUtc(r.ts)));
+    if (!(lastReading > endMs - TOP_UP_AFTER_MS)) {
+      // CHORDS points cover whole quarter hours: start at the first one after the last reading.
+      const from = Number.isFinite(lastReading) ? Math.max(startMs, Math.floor(lastReading / SLOT_MS + 1) * SLOT_MS) : startMs;
       chordsRows = await feeds.chords(from, endMs).catch(() => []);
     }
   }

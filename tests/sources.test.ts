@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cleanAndGrid, cleanAndGridWithStats, counterRain, parseUtc } from "../src/lib/afya/sources";
+import { cleanAndGrid, cleanAndGridWithStats, counterRain, fetchChordsRows, parseUtc } from "../src/lib/afya/sources";
 
 const T0 = Date.UTC(2026, 8, 1, 9, 0);
 const at = (minutes: number) => new Date(T0 + minutes * 60_000).toISOString();
@@ -183,4 +183,30 @@ test("an impossible reading is dropped, filled like a gap and listed, with what 
   assert.ok(series[1].imputed?.includes("temp_sht"));
   assert.ok(series[1].imputed?.includes("wet_bulb_temp"));
   assert.equal(series[0].rejected, undefined);
+});
+
+test("CHORDS points are fetched in whole three-hour windows, a slow window is asked for again, and rain is the tips they cover", async () => {
+  const from = Date.parse("2026-09-14T00:00:00Z");
+  const to = Date.parse("2026-09-14T06:00:00Z");
+  const asked: string[] = [];
+  let timeouts = 1;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = new URL(String(input));
+    const start = Number(url.searchParams.get("start"));
+    asked.push(new Date(start).toISOString());
+    if (start === from + 3 * 3600_000 && timeouts-- > 0) throw new Error("The operation was aborted due to timeout");
+    // Twelve quarter-hour means, and 0.2 mm tipped once in the second quarter hour.
+    const bins = Array.from({ length: 12 }, (_, i) => start + i * 900_000);
+    return new Response(JSON.stringify({
+      multivariable_names: ["st1", "rg", "rg2", "bv", "wgd"],
+      multivariable_points: { st1: bins.map((t) => [t, 18]), rg: [[bins[1], 0.2 / 15]] },
+    }));
+  }) as typeof fetch;
+
+  const { rows, channels } = await fetchChordsRows(from + 10 * 60_000, to);
+  assert.deepEqual(asked, ["2026-09-14T00:00:00.000Z", "2026-09-14T03:00:00.000Z", "2026-09-14T03:00:00.000Z"]);
+  assert.deepEqual(channels, ["temp_sht", "rg1", "rg2", "battery_v", "wind_gust_dir"]);
+  assert.equal(rows.length, 24, "the quarter hour starting at the end of the range is not in it");
+  const rain = rows.filter((r) => typeof r.rg1 === "number").map((r) => [r.ts, Math.round((r.rg1 as number) * 1000) / 1000]);
+  assert.deepEqual(rain, [["2026-09-14T00:15:00.000Z", 0.2], ["2026-09-14T03:15:00.000Z", 0.2]]);
 });

@@ -94,7 +94,7 @@ test("where the Conduit API runs behind, CHORDS fills in after its last row", as
   const history = await buildStationHistory(start, t(125), f);
   assert.ok(history);
   assert.equal(history.feed, "chords");
-  assert.ok(chordsFrom > t(33), iso(chordsFrom));
+  assert.equal(chordsFrom, t(45), "from the first whole quarter hour after the API's last reading");
   assert.equal(history.to, iso(t(120)));
   assert.equal(Math.round(history.series.reduce((s, o) => s + (slotRain(o) ?? 0), 0) * 10) / 10, 0.6);
 });
