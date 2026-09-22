@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { runPipeline } from "../src/lib/afya/pipeline";
 import { STRINGS } from "../src/lib/afya/i18n";
+import { wbgtToRisk } from "../src/lib/afya/constants";
 import type { SituationResult } from "../src/lib/afya/types";
 
 // Replay times inside the archive; nothing here may reach the network.
@@ -61,4 +62,24 @@ test("at 15:00 on a hot afternoon the next state shown is Cooling, not Rapid War
   const s = await situationAt("2026-02-10T12:00:00Z");
   assert.equal(s.state.state_id, 2);
   assert.equal(s.state.transition_likelihood!.state_id, 3);
+});
+
+test("the situation gives the heat band now beside the band forecast for +3 h", async () => {
+  for (const anchorIso of ["2026-02-10T12:00:00Z", "2026-07-15T06:00:00Z", "2025-11-03T15:00:00Z"]) {
+    const s = await situationAt(anchorIso);
+    const f3h = s.forecast.find((f) => f.horizon === "3h")!;
+    assert.equal(s.risk.thermal_now, wbgtToRisk(s.current.wbgt_c), anchorIso);
+    assert.equal(s.risk.thermal, wbgtToRisk(f3h.value), anchorIso);
+  }
+  // 15:00 on a hot day, cooling by 18:00
+  const hot = await situationAt("2026-02-10T12:00:00Z");
+  assert.notEqual(hot.risk.thermal_now, hot.risk.thermal);
+});
+
+test("the current reading lists the fields that were filled in rather than measured", async () => {
+  // The station sent the missing-value code for the gust in this reading.
+  const gustMissing = await situationAt("2025-10-14T03:48:04Z");
+  assert.deepEqual(gustMissing.current.imputed, ["wind_gust"]);
+  const complete = await situationAt("2026-07-15T06:00:00Z");
+  assert.deepEqual(complete.current.imputed, []);
 });

@@ -48,6 +48,8 @@ export interface CurrentObservation {
   wet_bulb_c: number;
   wbgt_c: number;
   rain_observed: boolean;
+  // Fields of this reading that were filled in rather than measured.
+  imputed?: string[];
 }
 
 export interface EnvironmentalState {
@@ -72,7 +74,9 @@ export interface DataQuality {
 }
 
 export interface RiskAssessment {
-  thermal: RiskLevel;
+  thermal: RiskLevel; // band of the +3 h forecast
+  // Band of the shade WBGT measured now.
+  thermal_now?: RiskLevel;
   rain_probability: number; // 0–1
   uncertainty: UncertaintyCategory;
   data_quality: QualityStatus;

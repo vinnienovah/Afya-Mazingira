@@ -149,6 +149,7 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
   const uncertainty = computeUncertainty(f3h.lower, f3h.upper);
   const risk: RiskAssessment = {
     thermal: thermalRisk,
+    thermal_now: computeThermalRisk(round1(currentObs.wet_bulb_globe_temp), 0),
     rain_probability: rainProbability,
     uncertainty,
     data_quality: quality.status,
@@ -188,6 +189,7 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
     wet_bulb_c: round1(currentObs.wet_bulb_temp),
     wbgt_c: round1(currentObs.wet_bulb_globe_temp),
     rain_observed: currentObs.rg1 > 0 || currentObs.rg2 > 0,
+    imputed: currentObs.imputed ?? [],
   };
 
   return {
