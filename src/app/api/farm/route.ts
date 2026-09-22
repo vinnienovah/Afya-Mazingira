@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { runPipeline } from "@/lib/afya/pipeline";
-import { buildFarmAdvisory, CROP_KEYS, findCropProfile } from "@/lib/afya/farm-engine";
+import { BALANCE_DAYS, buildFarmAdvisory, CROP_KEYS, findCropProfile } from "@/lib/afya/farm-engine";
+import { MAX_ENTRY_MM } from "@/lib/afya/irrigation-log";
 import { loadFarmInputs } from "@/lib/afya/farm-inputs";
 
 // Safety net for the (usually much faster) station and Open-Meteo fetches,
@@ -11,6 +12,12 @@ export const maxDuration = 30;
 const FarmSchema = z.object({
   crop: z.string().default("maize"),
   stage: z.enum(["establishment", "vegetative", "flowering", "maturity"]).default("vegetative"),
+  // Irrigation the farmer recorded on their own device. The engine normalises
+  // it; the cap is only here to bound the request.
+  applied: z
+    .array(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), mm: z.number().positive().max(MAX_ENTRY_MM) }))
+    .max(BALANCE_DAYS)
+    .default([]),
 });
 
 export const dynamic = "force-dynamic";
@@ -39,7 +46,7 @@ export async function POST(req: NextRequest) {
     if (!inputs) {
       return NextResponse.json({ error: "farm_inputs_unavailable" }, { status: 503 });
     }
-    const advisory = buildFarmAdvisory(situation, crop, stage, inputs);
+    const advisory = buildFarmAdvisory(situation, crop, stage, { ...inputs, applied: parsed.data.applied });
 
     return NextResponse.json({
       advisory,

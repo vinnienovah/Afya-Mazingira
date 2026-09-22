@@ -16,6 +16,7 @@
 
 import type { SituationResult } from "./types";
 import type { RegionalSoilMoisture } from "./sources-external";
+import { appliedByDate, normaliseLog, totalAppliedMm, type IrrigationEntry } from "./irrigation-log";
 import { JKUAT_COORDS } from "./constants";
 import { datesEnding, dayOfYear, nairobiDate } from "./nairobi-time";
 
@@ -360,6 +361,8 @@ export interface FarmInputs {
   /** Rain in the regional forecast for the next 48 hours */
   forecast_rain_48h_mm: number | null;
   soil: RegionalSoilMoisture | null;
+  /** Irrigation the farmer recorded, normalised to the balance window */
+  applied?: IrrigationEntry[];
 }
 
 export interface WaterBalance {
@@ -396,8 +399,12 @@ export interface WaterBalance {
   /** Where that reading sits in its own last 365 days */
   soil_percentile: number | null;
   soil_date: string | null;
-  /** Root-zone depletion Dr (mm) today. Rain only: irrigation already applied is not in it. */
+  /** Root-zone depletion Dr (mm) today, after rain and any recorded irrigation */
   depletion_mm: number;
+  /** Irrigation the farmer recorded inside the balance window, mm */
+  irrigation_applied_mm: number;
+  /** Days of the window carrying a recorded pass */
+  irrigation_days: number;
   /** Dr as a share of what the root zone holds */
   depletion_pct: number;
   /** Days the balance ran over, and how many of them the rain gauge reported */
@@ -442,24 +449,29 @@ export interface RootZoneRun {
 }
 
 /**
- * The daily root-zone balance of FAO-56 eq. 85, rain and crop demand only:
- * Dr grows by ETc, shrinks by effective rain, and is held inside [0, TAW].
- * Holding it at TAW is what stops a storm banking water the zone never held;
- * holding it at 0 is a zone at field capacity, the rest having drained past
- * the roots.
+ * The daily root-zone balance of FAO-56 eq. 85: Dr grows by ETc, shrinks by
+ * effective rain and by any irrigation the farmer recorded, and is held inside
+ * [0, TAW]. Holding it at TAW is what stops a storm banking water the zone
+ * never held; holding it at 0 is a zone at field capacity, the rest having
+ * drained past the roots.
+ *
+ * Recorded irrigation counts in full where rain counts at the effective share:
+ * a pass is put on the root zone deliberately, so what it loses is the surplus
+ * past field capacity, which the clamp at 0 already drains.
  */
 export function runRootZoneBalance(
   dates: string[],
   etcOn: (date: string) => number,
   rainOn: (date: string) => number | null,
   tawMm: number,
+  appliedOn: (date: string) => number = () => 0,
 ): RootZoneRun {
   let dr = 0;
   let daysWithRain = 0;
   for (const date of dates) {
     const mm = rainOn(date);
     if (mm != null) daysWithRain++;
-    dr = Math.min(tawMm, Math.max(0, dr + etcOn(date) - effectiveRainMm(mm ?? 0)));
+    dr = Math.min(tawMm, Math.max(0, dr + etcOn(date) - effectiveRainMm(mm ?? 0) - appliedOn(date)));
   }
   return {
     depletion_mm: round1(dr),
@@ -520,7 +532,15 @@ export function computeWaterBalance(inputs: FarmInputs, crop: CropProfile, stage
   // across days with no gauge at all.
   const firstReported = inputs.rain.days.find((d) => d.mm != null)?.date;
   const window = datesEnding(inputs.today, BALANCE_DAYS).filter((date) => firstReported != null && date >= firstReported);
-  const run = runRootZoneBalance(window, (date) => kc * et0On(date), (date) => rainByDate.get(date) ?? null, taw);
+  const applied = normaliseLog(inputs.applied ?? [], inputs.today, BALANCE_DAYS).filter((e) => window.includes(e.date));
+  const appliedMm = appliedByDate(applied);
+  const run = runRootZoneBalance(
+    window,
+    (date) => kc * et0On(date),
+    (date) => rainByDate.get(date) ?? null,
+    taw,
+    (date) => appliedMm.get(date) ?? 0,
+  );
 
   return {
     et0_mm_day: et0,
@@ -550,6 +570,8 @@ export function computeWaterBalance(inputs: FarmInputs, crop: CropProfile, stage
     soil_date: soil?.date ?? null,
     depletion_mm: run.depletion_mm,
     depletion_pct: taw > 0 ? Math.round((run.depletion_mm / taw) * 1000) / 10 : 0,
+    irrigation_applied_mm: totalAppliedMm(applied),
+    irrigation_days: applied.length,
     balance_days: run.days,
     balance_days_with_rain: run.days_with_rain,
     balance_available: run.available,

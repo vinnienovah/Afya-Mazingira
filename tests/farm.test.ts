@@ -697,3 +697,58 @@ test("a pass within the readily available water is given whole", () => {
   assert.equal(advice.remaining_mm, 0);
   assert.ok(!advice.reason_keys.includes("farm_reason_split_passes"));
 });
+
+// Irrigation the farmer records
+
+const maizeWithApplied = (days: number, applied: { date: string; mm: number }[]) =>
+  computeWaterBalance({ ...filledDaysAgo(days, { et0: 5, forecast48h: 0 }), applied }, maize, "vegetative");
+
+test("water the farmer records comes off the depletion", () => {
+  const without = maizeBalance(20, 0);
+  const with30 = maizeWithApplied(20, [{ date: ago(5), mm: 30 }]);
+  assert.equal(with30.depletion_mm, without.depletion_mm - 30);
+  assert.equal(with30.irrigation_applied_mm, 30);
+  assert.equal(with30.irrigation_days, 1);
+});
+
+test("a recorded pass counts in full where rain counts at its effective share", () => {
+  // Filled 20 days back, so neither run reaches the full-zone ceiling, where
+  // the two would be indistinguishable.
+  const rained = computeWaterBalance(
+    inputs({ et0: 5, rain: { [ago(20)]: 400, [ago(5)]: 20 }, forecast48h: 0 }),
+    maize,
+    "vegetative",
+  );
+  const watered = computeWaterBalance(
+    { ...inputs({ et0: 5, rain: { [ago(20)]: 400 }, forecast48h: 0 }), applied: [{ date: ago(5), mm: 20 }] },
+    maize,
+    "vegetative",
+  );
+  // A day of 20 mm of rain reaches the root zone as 0.8 x 20 = 16 mm; 20 mm
+  // applied reaches it as 20.
+  assert.ok(rained.depletion_mm < rained.taw_mm, "the rained run must stay off the ceiling");
+  assert.equal(rained.depletion_mm - watered.depletion_mm, 4);
+});
+
+test("recording yesterday's watering stops the advice repeating today", () => {
+  const due = maizeBalance(16, 0);
+  assert.equal(computeIrrigationAdvice(due, maize, "vegetative").action, "IRRIGATE_NOW");
+
+  const depth = computeIrrigationAdvice(due, maize, "vegetative").depth_mm;
+  const after = maizeWithApplied(16, [{ date: ago(1), mm: depth }]);
+  const advice = computeIrrigationAdvice(after, maize, "vegetative");
+  assert.equal(advice.action, "NO_IRRIGATION");
+  assert.ok(advice.days_until_irrigation != null && advice.days_until_irrigation > 0);
+});
+
+test("water poured past field capacity is not banked", () => {
+  const drowned = maizeWithApplied(20, [{ date: ago(10), mm: 150 }]);
+  assert.equal(drowned.depletion_mm, 40);
+  assert.equal(drowned.irrigation_applied_mm, 150);
+});
+
+test("a record outside the balance window changes nothing", () => {
+  const outside = maizeWithApplied(20, [{ date: ago(BALANCE_DAYS + 5), mm: 40 }]);
+  assert.equal(outside.depletion_mm, maizeBalance(20, 0).depletion_mm);
+  assert.equal(outside.irrigation_days, 0);
+});

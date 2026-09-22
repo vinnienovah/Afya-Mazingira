@@ -1,12 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useSyncExternalStore } from "react";
 import { useLanguage } from "@/lib/contexts/language";
 import {
   BALANCE_DAYS, CROP_PROFILES, type Et0Source, type FarmAdvisory, type GrowthStage, type IrrigationAction,
   type MmRange, type RainSource,
 } from "@/lib/afya/farm-engine";
 import { tf } from "@/lib/afya/i18n";
+import type { Lang } from "@/lib/afya/types";
+import { MAX_ENTRY_MM, normaliseLog, type IrrigationEntry } from "@/lib/afya/irrigation-log";
+import { readLog, readServerLog, subscribe, writeLog } from "@/lib/afya/irrigation-store";
+import { nairobiDate } from "@/lib/afya/nairobi-time";
 import { fill, fmtWindow } from "@/lib/afya/format";
 import { Card, CardTitle, CardMeta } from "@/components/ui/Card";
 import { Skeleton, SkeletonCard } from "@/components/ui/Skeleton";
@@ -15,8 +19,10 @@ import AiPanel from "@/components/ai/AiPanel";
 import { cn } from "@/lib/utils";
 import {
   Droplets, Sprout, SprayCan, Sun, CloudRain, Thermometer,
-  AlertTriangle, CheckCircle2, Clock, RefreshCw, Leaf, Info, TrendingDown,
+  AlertTriangle, CheckCircle2, Clock, RefreshCw, Leaf, Info, TrendingDown, X,
 } from "lucide-react";
+
+const nairobiToday = () => nairobiDate(Date.now());
 
 const STAGES: { key: GrowthStage; en: string; sw: string }[] = [
   { key: "establishment", en: "Establishment", sw: "Kuota" },
@@ -71,22 +77,121 @@ function fmtDay(date: string, lang: string): string {
   });
 }
 
+/**
+ * The record of what the farmer actually put on the field. It is held on this
+ * device only, so the wording never implies an account has it.
+ */
+function AppliedWater({
+  entries, onAdd, onForget, t, lang,
+}: {
+  entries: IrrigationEntry[];
+  onAdd: (entry: IrrigationEntry) => void;
+  onForget: (date: string) => void;
+  t: (key: string) => string;
+  lang: Lang;
+}) {
+  const today = nairobiToday();
+  const [date, setDate] = useState(today);
+  const [mm, setMm] = useState("");
+  const depth = Number(mm);
+  const valid = Number.isFinite(depth) && depth > 0 && depth <= MAX_ENTRY_MM && date <= today;
+  const total = entries.reduce((sum, e) => sum + e.mm, 0);
+
+  return (
+    <div className="mt-4 rounded-xl border border-afya-border bg-afya-canvas/40 p-3">
+      <div className="flex items-baseline justify-between gap-2 flex-wrap">
+        <p className="text-xs font-semibold text-afya-charcoal">{t("farm_applied_title")}</p>
+        <p className="text-[11px] text-afya-muted">{t("farm_applied_device_note")}</p>
+      </div>
+
+      {entries.length > 0 && (
+        <>
+          <ul className="mt-2 flex flex-wrap gap-1.5">
+            {entries.map((e) => (
+              <li key={e.date}>
+                <button
+                  type="button"
+                  onClick={() => onForget(e.date)}
+                  aria-label={`${t("farm_applied_forget")}: ${fmtDay(e.date, lang)}, ${e.mm} mm`}
+                  className="flex items-center gap-1.5 rounded-lg border border-afya-border bg-white px-2 py-1 text-[11px] text-afya-charcoal hover:border-afya-orange hover:text-afya-orange"
+                >
+                  <span className="tabular-nums">{fmtDay(e.date, lang)} · {e.mm} mm</span>
+                  <X className="w-3 h-3" strokeWidth={2} aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-[11px] text-afya-muted">
+            {tf(lang, "farm_applied_total", { mm: Math.round(total * 10) / 10, days: entries.length })}
+          </p>
+        </>
+      )}
+
+      <form
+        className="mt-2.5 flex flex-wrap items-end gap-2"
+        onSubmit={(ev) => {
+          ev.preventDefault();
+          if (!valid) return;
+          onAdd({ date, mm: depth });
+          setMm("");
+          setDate(today);
+        }}
+      >
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] text-afya-muted">{t("farm_applied_depth")}</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            min={1}
+            max={MAX_ENTRY_MM}
+            step="any"
+            value={mm}
+            onChange={(ev) => setMm(ev.target.value)}
+            className="w-24 rounded-lg border border-afya-border bg-white px-2 py-1.5 text-sm tabular-nums"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] text-afya-muted">{t("farm_applied_date")}</span>
+          <input
+            type="date"
+            max={today}
+            value={date}
+            onChange={(ev) => setDate(ev.target.value)}
+            className="rounded-lg border border-afya-border bg-white px-2 py-1.5 text-sm"
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={!valid}
+          className="rounded-lg bg-afya-green px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+        >
+          {t("farm_applied_add")}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 export default function FarmPage() {
   const { t, lang } = useLanguage();
   const [crop, setCrop] = useState("maize");
   const [stage, setStage] = useState<GrowthStage>("vegetative");
+  const stored = useSyncExternalStore(subscribe, readLog, readServerLog);
+  const today = nairobiToday();
+  const log = useMemo(() => normaliseLog(stored, today, BALANCE_DAYS), [stored, today]);
   // One result, tagged with the crop and stage it answers, so a slow reply
   // for an earlier choice never shows under a later one.
   const [result, setResult] = useState<{ key: string; data: FarmResponse | null; unavailable: boolean } | null>(null);
-  const key = `${crop}|${stage}`;
+  const logKey = log.map((e) => `${e.date}:${e.mm}`).join(",");
+  const key = `${crop}|${stage}|${logKey}`;
 
   useEffect(() => {
     let active = true;
-    const answering = `${crop}|${stage}`;
+    const answering = `${crop}|${stage}|${logKey}`;
     fetch("/api/farm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ crop, stage }),
+      body: JSON.stringify({ crop, stage, applied: log }),
     })
       .then(async (res) => ({
         data: res.ok ? ((await res.json()) as FarmResponse) : null,
@@ -99,7 +204,13 @@ export default function FarmPage() {
     return () => {
       active = false;
     };
-  }, [crop, stage]);
+    // log is carried by logKey, which is what the answer is tagged with
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [crop, stage, logKey]);
+
+  const record = (entry: IrrigationEntry) => writeLog(normaliseLog([...log, entry], today, BALANCE_DAYS));
+
+  const forget = (date: string) => writeLog(log.filter((e) => e.date !== date));
 
   const loading = result?.key !== key;
   const data = loading ? null : result.data;
@@ -282,7 +393,9 @@ export default function FarmPage() {
                 <div className="mt-4 flex items-start gap-2" role="note">
                   <Droplets className="w-3.5 h-3.5 text-afya-muted shrink-0 mt-0.5" strokeWidth={1.8} aria-hidden="true" />
                   <p className="text-xs text-afya-muted leading-relaxed">
-                    {tf(lang, "farm_rain_only_note", { dr: wb.depletion_mm })}
+                    {wb.irrigation_days > 0
+                      ? tf(lang, "farm_applied_counted_note", { mm: wb.irrigation_applied_mm, days: wb.irrigation_days, dr: wb.depletion_mm })
+                      : tf(lang, "farm_rain_only_note", { dr: wb.depletion_mm })}
                   </p>
                 </div>
               )}
@@ -356,6 +469,7 @@ export default function FarmPage() {
                     {tf(lang, "farm_balance_short_window", { days: wb.balance_days, full: BALANCE_DAYS })}
                   </p>
                 )}
+                <AppliedWater entries={log} onAdd={record} onForget={forget} t={t} lang={lang} />
               </>
             ) : (
               <div className="rounded-xl border border-afya-border bg-afya-canvas/50 p-4">
