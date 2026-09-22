@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
+import { setPreferredActivity } from "@/lib/preferred-activity";
 
 export interface AuthUser {
   id: number;
@@ -62,6 +63,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     await fetch("/api/auth/sign-out", { method: "POST", credentials: "include" });
+    // The default activity belongs to the account, not to this browser.
+    setPreferredActivity(null);
     setUser(null);
   };
 

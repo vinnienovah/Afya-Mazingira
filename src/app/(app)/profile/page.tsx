@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useLanguage } from "@/lib/contexts/language";
 import { useAuth } from "@/lib/contexts/auth";
 import { ACTIVITY_PROFILES } from "@/lib/afya/constants";
+import { parseActivityKey, setPreferredActivity } from "@/lib/preferred-activity";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
 import { CheckCircle2, RefreshCw, LogOut, Globe } from "lucide-react";
@@ -13,22 +14,20 @@ export default function ProfilePage() {
   const { t, lang, setLang } = useLanguage();
   const { user, loading: authLoading, signOut } = useAuth();
   const router = useRouter();
-  const [prefs, setPrefs] = useState<{
-    language: string; units: string; preferred_activities: string[]; notification_prefs: Record<string, boolean>;
-  } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [units, setUnits] = useState("C");
-  const [activities, setActivities] = useState<string[]>(["general"]);
+  const [activity, setActivity] = useState("general");
 
   useEffect(() => {
     if (!user) return;
     fetch("/api/preferences", { credentials: "include" }).then(async (res) => {
       if (res.ok) {
         const data = await res.json();
-        setPrefs(data.preferences);
-        setUnits(data.preferences?.units ?? "C");
-        setActivities(data.preferences?.preferred_activities ?? ["general"]);
+        // The first saved activity is the default; the others are from the
+        // older multi-choice form and are not used.
+        const stored = parseActivityKey(data.preferences?.preferred_activities?.[0]) ?? "general";
+        setActivity(stored);
+        setPreferredActivity(stored);
         if (data.language === "en" || data.language === "sw") setLang(data.language);
       }
     });
@@ -38,14 +37,17 @@ export default function ProfilePage() {
   async function savePrefs() {
     setSaving(true);
     try {
-      await fetch("/api/preferences", {
+      const res = await fetch("/api/preferences", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ language: lang, units, preferred_activities: activities }),
+        body: JSON.stringify({ language: lang, preferred_activities: [activity] }),
         credentials: "include",
       });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
+      if (res.ok) {
+        setPreferredActivity(activity);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
+      }
     } finally {
       setSaving(false);
     }
@@ -125,44 +127,22 @@ export default function ProfilePage() {
         </div>
       </Card>
 
-      {/* Units */}
+      {/* Default activity */}
       <Card>
-        <CardTitle>{t("units")}</CardTitle>
-        <div className="flex gap-2">
-          {["C", "F"].map((u) => (
-            <button
-              key={u}
-              onClick={() => setUnits(u)}
-              aria-pressed={units === u}
-              className={cn(
-                "flex-1 rounded-xl border px-4 py-3 text-sm font-semibold transition-all",
-                units === u
-                  ? "border-afya-green bg-afya-green text-white"
-                  : "border-afya-border text-afya-charcoal hover:border-afya-green/50",
-              )}
-            >
-              {u === "C" ? t("celsius") : t("fahrenheit")}
-            </button>
-          ))}
-        </div>
-      </Card>
-
-      {/* Preferred activities */}
-      <Card>
-        <CardTitle>{t("preferred_activities")}</CardTitle>
-        <div className="grid grid-cols-2 gap-2">
+        <CardTitle className="mb-1">{t("default_activity")}</CardTitle>
+        <p className="text-xs text-afya-muted mb-3">{t("default_activity_note")}</p>
+        <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label={t("default_activity")}>
           {ACTIVITY_PROFILES.map((p) => {
-            const active = activities.includes(p.key);
+            const chosen = activity === p.key;
             return (
               <button
                 key={p.key}
-                onClick={() =>
-                  setActivities((a) => active ? a.filter((x) => x !== p.key) : [...a, p.key])
-                }
-                aria-pressed={active}
+                onClick={() => setActivity(p.key)}
+                role="radio"
+                aria-checked={chosen}
                 className={cn(
                   "rounded-xl border px-3 py-2.5 text-xs font-medium text-left transition-all",
-                  active
+                  chosen
                     ? "border-afya-green bg-afya-green/8 text-afya-green"
                     : "border-afya-border text-afya-charcoal hover:border-afya-green/50",
                 )}
@@ -186,7 +166,7 @@ export default function ProfilePage() {
             ? <CheckCircle2 className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
             : null
         }
-        {saved ? t("plan_saved") : t("save")}
+        {saved ? t("prefs_saved") : t("save")}
       </button>
 
       {/* Sign out */}
