@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@/db";
+import { db, hasDatabase } from "@/db";
 import { notificationRules } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { getSessionFromCookies } from "@/lib/auth/logic";
+import { databaseUnavailable, readJsonBody } from "@/lib/http";
 
 const CreateRuleSchema = z.object({
   name: z.string().min(1).max(200),
@@ -13,6 +14,7 @@ const CreateRuleSchema = z.object({
 });
 
 export async function GET() {
+  if (!hasDatabase()) return databaseUnavailable();
   const user = await getSessionFromCookies();
   if (!user) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   const rules = await db
@@ -24,16 +26,16 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  if (!hasDatabase()) return databaseUnavailable();
   const user = await getSessionFromCookies();
   if (!user) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
-  const body = await req.json();
-  const parsed = CreateRuleSchema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: "invalid_input" }, { status: 400 });
+  const body = await readJsonBody(req, CreateRuleSchema);
+  if ("response" in body) return body.response;
 
   const [rule] = await db
     .insert(notificationRules)
-    .values({ ...parsed.data, user_id: user.id })
+    .values({ ...body.data, user_id: user.id })
     .returning();
   return NextResponse.json(rule, { status: 201 });
 }

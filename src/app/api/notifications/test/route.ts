@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
-import { db } from "@/db";
+import { db, hasDatabase } from "@/db";
 import { notificationRules } from "@/db/schema";
 import { getSessionFromCookies } from "@/lib/auth/logic";
 import { runPipeline } from "@/lib/afya/pipeline";
 import { evaluateRule, pickSubject, pickLines } from "@/lib/afya/alert-engine";
 import { sendAlertEmail, hasResendConfigured } from "@/lib/afya/alert-email";
 import type { Lang } from "@/lib/afya/types";
+import { databaseUnavailable } from "@/lib/http";
 
 // Manual "send now" for the signed-in user's own rules, bypasses the
 // cooldown the daily cron respects, so a demo or a curious user doesn't have
@@ -16,6 +17,7 @@ import type { Lang } from "@/lib/afya/types";
 export const maxDuration = 30;
 
 export async function POST() {
+  if (!hasDatabase()) return databaseUnavailable();
   const user = await getSessionFromCookies();
   if (!user) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
