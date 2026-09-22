@@ -7,7 +7,7 @@ import {
   type MmRange, type RainSource,
 } from "@/lib/afya/farm-engine";
 import { tf } from "@/lib/afya/i18n";
-import { fmtWindow } from "@/lib/afya/format";
+import { fill, fmtWindow } from "@/lib/afya/format";
 import { Card, CardTitle, CardMeta } from "@/components/ui/Card";
 import { Skeleton, SkeletonCard } from "@/components/ui/Skeleton";
 import { QualityDot } from "@/components/ui/QualityDot";
@@ -234,6 +234,11 @@ export default function FarmPage() {
                   {t("farm_apply")}{" "}
                   <strong className="text-xl tabular-nums">{irr.depth_mm} mm</strong>
                   <span className="text-afya-muted"> · {irr.depth_mm} {t("farm_litres_m2")}</span>
+                  {irr.remaining_mm > 0 && (
+                    <span className="block text-sm text-afya-muted mt-1">
+                      {fill(t("farm_still_wanted"), { mm: irr.remaining_mm })}
+                    </span>
+                  )}
                 </p>
               ) : irr.action === "HOLD_RAIN_EXPECTED" ? (
                 <p className="text-afya-charcoal text-base mb-4">

@@ -335,14 +335,17 @@ test("at the refill point the advice is the depletion, rounded down to 5 mm", ()
   assert.ok(advice.reason_keys.includes("farm_reason_zone_at_raw"));
 });
 
-test("a zone empty for weeks is refilled once, never beyond what it holds", () => {
-  // 40 days at 4 mm/day would be 160 mm; the zone holds 104.
+test("a zone empty for weeks is refilled over several passes, never beyond what it holds", () => {
+  // 40 days at 4 mm/day would be 160 mm; the zone holds 104, and a single
+  // pass is held to the 61.4 mm the crop can take up readily.
   const wb = maizeBalance(40);
   assert.equal(wb.depletion_mm, wb.taw_mm);
   assert.equal(wb.depletion_pct, 100);
   const advice = computeIrrigationAdvice(wb, maize, "vegetative");
-  assert.equal(advice.depth_mm, 100);
-  assert.ok(advice.depth_mm <= wb.taw_mm);
+  assert.equal(advice.depth_mm, 60);
+  assert.equal(advice.remaining_mm, 40);
+  assert.ok(advice.reason_keys.includes("farm_reason_split_passes"));
+  assert.ok(advice.depth_mm + advice.remaining_mm <= wb.taw_mm);
 });
 
 test("a storm larger than the root zone does not suppress irrigation for weeks", () => {
@@ -684,4 +687,13 @@ test("a year of the archive keeps the advice near what the crop actually used", 
     applied > 0.8 * demand && applied < 1.1 * demand,
     `applied ${applied.toFixed(0)} mm against ${demand.toFixed(0)} mm of demand`,
   );
+});
+
+test("a pass within the readily available water is given whole", () => {
+  const due = maizeBalance(16, 0);
+  const advice = computeIrrigationAdvice(due, maize, "vegetative");
+  assert.equal(advice.action, "IRRIGATE_NOW");
+  assert.ok(advice.depth_mm > 0 && advice.depth_mm <= floorToFiveMm(due.readily_available_mm));
+  assert.equal(advice.remaining_mm, 0);
+  assert.ok(!advice.reason_keys.includes("farm_reason_split_passes"));
 });

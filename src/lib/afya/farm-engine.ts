@@ -570,6 +570,8 @@ export interface IrrigationAdvice {
   litres_per_m2: number;
   /** Whole days at today's demand before the zone reaches RAW, when that is what is being waited for */
   days_until_irrigation: number | null;
+  /** Net depth the zone still wants after this one, mm; 0 when this pass refills it */
+  remaining_mm: number;
   reason_keys: string[];
   confidence: Confidence;
 }
@@ -617,7 +619,7 @@ function daysUntilRaw(wb: WaterBalance): number | null {
  */
 export function computeIrrigationAdvice(wb: WaterBalance, crop: CropProfile, stage: GrowthStage): IrrigationAdvice {
   const confidence = adviceConfidence(wb);
-  const none = { depth_mm: 0, litres_per_m2: 0, days_until_irrigation: null };
+  const none = { depth_mm: 0, litres_per_m2: 0, days_until_irrigation: null, remaining_mm: 0 };
 
   if (!wb.balance_available) {
     return {
@@ -664,15 +666,21 @@ export function computeIrrigationAdvice(wb: WaterBalance, crop: CropProfile, sta
     return { action: "NO_IRRIGATION", ...none, reason_keys: ["farm_reason_small_shortfall"], confidence };
   }
 
+  // A pass deeper than the readily available water runs off clay or drains
+  // past the roots, and few fields here are watered by more than a hose or a
+  // furrow, so a dry zone is refilled over several passes rather than one.
+  const pass = Math.min(depth, floorToFiveMm(wb.readily_available_mm));
   const reasons = ["farm_reason_zone_at_raw"];
+  if (pass < depth) reasons.push("farm_reason_split_passes");
   if (covered > 0) reasons.push("farm_reason_forecast_part_covered");
   if (wb.etc_mm_day > HIGH_ETC_MM) reasons.push("farm_reason_high_et");
   if (forecast == null) reasons.push("farm_reason_forecast_unavailable");
   return {
     action: "IRRIGATE_NOW",
-    depth_mm: depth,
-    litres_per_m2: depth,
+    depth_mm: pass,
+    litres_per_m2: pass,
     days_until_irrigation: null,
+    remaining_mm: depth - pass,
     reason_keys: reasons,
     confidence: forecast == null ? capAtModerate(confidence) : confidence,
   };
