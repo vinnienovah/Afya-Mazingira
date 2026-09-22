@@ -4,6 +4,7 @@ import { useState, useEffect, useSyncExternalStore } from "react";
 import { useLanguage } from "@/lib/contexts/language";
 import { useAuth } from "@/lib/contexts/auth";
 import { ACTIVITY_PROFILES, RISK_META } from "@/lib/afya/constants";
+import { usePreferredActivity } from "@/lib/contexts/situation";
 import { fmtDate, fmtTime, fmtWindow } from "@/lib/afya/format";
 import { tf } from "@/lib/afya/i18n";
 import { Card, CardTitle } from "@/components/ui/Card";
@@ -75,8 +76,12 @@ export default function PlanPage() {
   const { user } = useAuth();
   const nowHour = useEatHour();
 
-  // Form state. Day and start hour follow the clock until they are chosen.
-  const [activity, setActivity] = useState("outdoor_work");
+  // Form state. Day and start hour follow the clock until they are chosen;
+  // the activity starts from the default saved on the Profile page.
+  const preferred = usePreferredActivity();
+  const [pickedActivity, setActivity] = useState<string | null>(null);
+  const activity = pickedActivity
+    ?? (preferred && ACTIVITY_PROFILES.some((p) => p.key === preferred) ? preferred : "outdoor_work");
   const [duration, setDuration] = useState(90);
   const [chosenStart, setChosenStart] = useState<number | null>(null);
   const [endHour, setEndHour] = useState(18);
