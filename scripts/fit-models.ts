@@ -4,42 +4,146 @@
 //
 //   npx tsx scripts/fit-models.ts
 //
-// The archive is split by time. The forecast is fitted on the training months,
-// its uncertainty band is set from errors on the calibration months, and every
-// score it reports comes from the test months, which it never saw.
+// The forecast is the candidate scripts/evaluate-forecast.ts chose (run that
+// first when the archive changes). It is fitted on everything before the test
+// months, its bands come from the errors it made on months held out of each
+// fit before the test months, and every score it reports comes from the test
+// months, which neither the fit nor the bands saw.
 
 import fs from "fs";
 import path from "path";
-import { getCsvCoverage, getCsvRange } from "../src/lib/afya/csv-source";
-import {
-  buildFeatureSeries,
-  FORECAST_FEATURES,
-  STATE_FEATURES,
-  type FeatureVector,
-} from "../src/lib/afya/feature-engine";
+import { FORECAST_FEATURES, STATE_FEATURES, type FeatureVector } from "../src/lib/afya/feature-engine";
 import { riskRank, wbgtToRisk } from "../src/lib/afya/constants";
-import { featureScale, fitRidge, forecastOrigins, mean, round, usableOrigins } from "./ridge";
+import { CLIMATOLOGY_DAYS, BLOCK_HOURS } from "../src/lib/afya/climatology";
+import evaluation from "../src/lib/afya/model/forecast-evaluation.json";
+import { featureScale, mean, round } from "./ridge";
+import {
+  bandsByBlock,
+  fitStep,
+  hasUsual,
+  loadArchive,
+  MAX_STEP,
+  MODEL_KINDS,
+  MODEL_NAMES,
+  observed,
+  quantile,
+  rollingForecasts,
+  scaleBefore,
+  targetBlock,
+  type Archive,
+  type ModelKind,
+} from "./forecast-models";
 
-const CALIBRATION_FROM = "2026-04-01T00:00:00Z";
-const TEST_FROM = "2026-06-01T00:00:00Z";
-const STEPS = 36; // 15-minute steps out to nine hours
+const TEST_FROM = "2026-06-01";
+const BAND_FROM = "2025-08";
+const BAND_SHARE = 0.8;
+const STATES_TRAIN_UNTIL = "2026-04-01T00:00:00Z";
 const STATE_COUNT = 4;
 const OUT_DIR = path.join(process.cwd(), "src", "lib", "afya", "model");
 
-type Period = "train" | "calibration" | "test";
+const METHODS: Record<ModelKind, string> = {
+  no_change: "WBGT stays at its latest value",
+  seasonal:
+    "The usual WBGT for the target's 15-minute time of day (its mean over the 30 days before the forecast), " +
+    "plus the current departure from usual times a factor fitted for each 15-minute step ahead",
+  ridge: "Ridge regression, one model for each 15-minute step ahead",
+  ridge_seasonal:
+    "Ridge regression with the usual WBGT now and at the target time and the current departure as extra " +
+    "inputs, one model for each 15-minute step ahead",
+};
 
-function periodOf(ts: string): Period {
-  if (ts < CALIBRATION_FROM) return "train";
-  if (ts < TEST_FROM) return "calibration";
-  return "test";
+const monthOf = (d: Date) => d.toISOString().slice(0, 7);
+
+function monthRange(first: string, last: string): string[] {
+  const months: string[] = [];
+  const d = new Date(`${first}-01T00:00:00Z`);
+  while (monthOf(d) <= last) {
+    months.push(monthOf(d));
+    d.setUTCMonth(d.getUTCMonth() + 1);
+  }
+  return months;
 }
 
-function quantile(values: number[], q: number): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const pos = (sorted.length - 1) * q;
-  const lo = Math.floor(pos);
-  const hi = Math.ceil(pos);
-  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+const dayBefore = (isoDay: string) => new Date(Date.parse(`${isoDay}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+
+function fitForecast(a: Archive, kind: ModelKind) {
+  const testFromMs = Date.parse(`${TEST_FROM}T00:00:00Z`);
+  const testMonth = TEST_FROM.slice(0, 7);
+  const isRidge = kind === "ridge" || kind === "ridge_seasonal";
+  const scale = isRidge ? scaleBefore(a, testMonth) : null;
+  const heldOutMonths = monthRange(BAND_FROM, monthOf(new Date(testFromMs - 86_400_000)));
+
+  const steps = [];
+  for (let step = 1; step <= MAX_STEP; step++) {
+    const origins = a.origins[step];
+    const train = origins.filter((i) => a.ms[i + step] < testFromMs);
+    const test = origins.filter((i) => a.ms[i] >= testFromMs);
+    if (kind !== "no_change" && kind !== "ridge" && test.some((i) => !hasUsual(a, i, step))) {
+      throw new Error(`test origins without usual values at step ${step}`);
+    }
+    const fitted = fitStep(a, kind, step, train, scale);
+
+    // Bands from errors on months the fit had not seen: each month before the
+    // test months forecast by the same candidate fitted on the months before it.
+    const held = rollingForecasts(a, kind, step, heldOutMonths);
+    const heldErrors = held.flatMap((f) => f.idx.map((i, k) => Math.abs(observed(a, i + step) - f.pred[k])));
+    const heldBlocks = held.flatMap((f) => f.idx.map((i) => targetBlock(a, i, step)));
+    const bands = bandsByBlock(heldErrors, heldBlocks, BAND_SHARE);
+    const noChangeErrors = held.flatMap((f) => f.idx.map((i) => Math.abs(observed(a, i + step) - observed(a, i))));
+
+    const errors = test.map((i) => observed(a, i + step) - fitted.predict(i));
+    const covered = test.filter((i, k) => Math.abs(errors[k]) <= bands[targetBlock(a, i, step)]).length;
+    // The risk band is what people act on, so it is scored too: how often the
+    // forecast band matches the one observed, and how often it is lower.
+    const bandGap = test.map((i) => riskRank(wbgtToRisk(fitted.predict(i))) - riskRank(wbgtToRisk(observed(a, i + step))));
+    const bandShare = (keep: (d: number) => boolean) => round((bandGap.filter(keep).length / bandGap.length) * 100, 1);
+
+    const params = Object.fromEntries(
+      Object.entries(fitted.params).map(([k, v]) => [k, Array.isArray(v) ? v.map((x) => round(x, 5)) : round(v, 5)]),
+    );
+    steps.push({
+      step,
+      ...params,
+      band80: round(quantile(heldErrors, BAND_SHARE), 3),
+      band80_by_block: bands.map((b) => round(b, 3)),
+      persistence_band80: round(quantile(noChangeErrors, BAND_SHARE), 3),
+      test_mae: round(mean(errors.map(Math.abs)), 3),
+      test_rmse: round(Math.sqrt(mean(errors.map((e) => e * e))), 3),
+      persistence_mae: round(mean(test.map((i) => Math.abs(observed(a, i + step) - observed(a, i)))), 3),
+      coverage80: round(covered / test.length, 3),
+      band_same_pct: bandShare((d) => d === 0),
+      band_lower_pct: bandShare((d) => d < 0),
+      band_higher_pct: bandShare((d) => d > 0),
+      n_train: fitted.nTrain,
+      n_calibration: heldErrors.length,
+      n_test: test.length,
+    });
+  }
+
+  const first = a.series[0].ts.slice(0, 10);
+  const last = a.series[a.series.length - 1].ts.slice(0, 10);
+  return {
+    fitted_on: "data/conduit_master_2025_2026.csv",
+    kind,
+    name: MODEL_NAMES[kind],
+    method: METHODS[kind],
+    target: "WBGT in shade, 0.7 x wet bulb + 0.3 x air temperature",
+    periods: {
+      train: [first, dayBefore(TEST_FROM)],
+      calibration: [`${BAND_FROM}-01`, dayBefore(TEST_FROM)],
+      test: [TEST_FROM, last],
+    },
+    climatology_days: CLIMATOLOGY_DAYS,
+    band_block_hours: BLOCK_HOURS,
+    ...(scale
+      ? {
+          features: FORECAST_FEATURES,
+          feature_mean: scale.mu.map((v) => round(v, 5)),
+          feature_std: scale.sd.map((v) => round(v, 5)),
+        }
+      : {}),
+    steps,
+  };
 }
 
 /** Deterministic pseudo-random numbers, so a refit gives the same clusters. */
@@ -85,91 +189,18 @@ function kMeans(points: number[][], k: number, seed: number, iterations = 100) {
   return { centres, labels, inertia };
 }
 
-function main() {
-  const coverage = getCsvCoverage();
-  if (!coverage) throw new Error("no Conduit archive found under data/");
-  const series = getCsvRange(coverage.minIso, coverage.maxIso);
-  const features = buildFeatureSeries(series);
-  console.log(`archive ${coverage.minIso} to ${coverage.maxIso}, ${series.length} slots`);
-
-  const usable = usableOrigins(series, features);
+function fitStates(a: Archive) {
+  const { series, features, usable } = a;
   const row = (fv: FeatureVector, names: (keyof FeatureVector)[]) => names.map((n) => fv[n]);
-
-  // Feature scaling from the training months only.
-  const trainIdx = series.map((o, i) => i).filter((i) => usable[i] && periodOf(series[i].ts) === "train");
-  const scale = (names: (keyof FeatureVector)[]) => featureScale(features, trainIdx, names);
-  const fScale = scale(FORECAST_FEATURES);
-  const z = (fv: FeatureVector) =>
-    row(fv, FORECAST_FEATURES).map((v, j) => (v - fScale.mu[j]) / fScale.sd[j]);
-
-  const steps = [];
-  for (let step = 1; step <= STEPS; step++) {
-    const samples: Record<Period, { x: number[]; y: number; now: number }[]> = {
-      train: [], calibration: [], test: [],
-    };
-    for (const i of forecastOrigins(series, usable, step)) {
-      samples[periodOf(series[i].ts)].push({
-        x: z(features[i]!),
-        y: series[i + step].wet_bulb_globe_temp,
-        now: series[i].wet_bulb_globe_temp,
-      });
-    }
-
-    const { intercept: yMean, coef, predict } = fitRidge(samples.train);
-
-    const calErrors = samples.calibration.map((s) => Math.abs(s.y - predict(s.x)));
-    const band80 = quantile(calErrors, 0.8);
-    const band95 = quantile(calErrors, 0.95);
-    const testErrors = samples.test.map((s) => Math.abs(s.y - predict(s.x)));
-    // The risk band is what people act on, so it is scored too: how often the
-    // forecast band matches the one observed, and how often it is lower.
-    const bandGap = samples.test.map((s) => riskRank(wbgtToRisk(predict(s.x))) - riskRank(wbgtToRisk(s.y)));
-    const bandShare = (keep: (d: number) => boolean) =>
-      round((bandGap.filter(keep).length / bandGap.length) * 100, 1);
-    const persistenceErrors = samples.test.map((s) => Math.abs(s.y - s.now));
-
-    steps.push({
-      step,
-      intercept: round(yMean),
-      coef: coef.map((c) => round(c, 5)),
-      band80: round(band80, 3),
-      band95: round(band95, 3),
-      test_mae: round(mean(testErrors), 3),
-      persistence_mae: round(mean(persistenceErrors), 3),
-      coverage80: round(testErrors.filter((e) => e <= band80).length / testErrors.length, 3),
-      band_same_pct: bandShare((d) => d === 0),
-      band_lower_pct: bandShare((d) => d < 0),
-      band_higher_pct: bandShare((d) => d > 0),
-      n_train: samples.train.length,
-      n_calibration: samples.calibration.length,
-      n_test: samples.test.length,
-    });
-  }
-
-  const first = series[0].ts.slice(0, 10);
-  const last = series[series.length - 1].ts.slice(0, 10);
-  const forecast = {
-    fitted_on: "data/conduit_master_2025_2026.csv",
-    method: "Ridge regression, one model for each 15-minute step ahead",
-    target: "WBGT in shade, 0.7 x wet bulb + 0.3 x air temperature",
-    periods: {
-      train: [first, "2026-03-31"],
-      calibration: ["2026-04-01", "2026-05-31"],
-      test: ["2026-06-01", last],
-    },
-    features: FORECAST_FEATURES,
-    feature_mean: fScale.mu.map((v) => round(v, 5)),
-    feature_std: fScale.sd.map((v) => round(v, 5)),
-    steps,
-  };
+  const trainIdx = series.map((_, i) => i).filter((i) => usable[i] && series[i].ts < STATES_TRAIN_UNTIL);
 
   // States: k-means on the training months, then named by what each cluster is.
-  const sScale = scale(STATE_FEATURES);
+  const sScale = featureScale(features, trainIdx, STATE_FEATURES);
   const zs = (fv: FeatureVector) =>
     row(fv, STATE_FEATURES).map((v, j) => (v - sScale.mu[j]) / sScale.sd[j]);
   const points = trainIdx.map((i) => zs(features[i]!));
   const fits = [11, 23, 37].map((seed) => kMeans(points, STATE_COUNT, seed));
-  const best = fits.reduce((a, b) => (b.inertia < a.inertia ? b : a));
+  const best = fits.reduce((x, y) => (y.inertia < x.inertia ? y : x));
 
   const col = (name: keyof FeatureVector) => STATE_FEATURES.indexOf(name);
   const raw = (c: number[], name: keyof FeatureVector) =>
@@ -177,7 +208,7 @@ function main() {
   // Coolest centre: cool and humid; warmest: hot. Of the other two, the one
   // warming faster is the morning rise and the other is the evening cooling.
   const clusters = best.centres.map((c, k) => ({ k, c }));
-  const byTemp = [...clusters].sort((a, b) => raw(a.c, "temp_sht") - raw(b.c, "temp_sht"));
+  const byTemp = [...clusters].sort((x, y) => raw(x.c, "temp_sht") - raw(y.c, "temp_sht"));
   const cool = byTemp[0];
   const hot = byTemp[byTemp.length - 1];
   const [p1, p2] = byTemp.slice(1, -1);
@@ -211,7 +242,7 @@ function main() {
     prev = l;
   }
   const transitions = moves.map((counts, from) => {
-    const total = counts.reduce((a, b) => a + b, 0);
+    const total = counts.reduce((x, y) => x + y, 0);
     const to = counts.indexOf(Math.max(...counts));
     return { from, to, probability: total ? round(counts[to] / total, 2) : 0, changes: total };
   });
@@ -231,10 +262,10 @@ function main() {
     };
   });
 
-  const states = {
+  return {
     fitted_on: "data/conduit_master_2025_2026.csv",
     method: "k-means, 4 clusters, on the training months; named by their centres",
-    periods: { train: [first, "2026-03-31"] },
+    periods: { train: [series[0].ts.slice(0, 10), dayBefore(STATES_TRAIN_UNTIL.slice(0, 10))] },
     features: STATE_FEATURES,
     feature_mean: sScale.mu.map((v) => round(v, 5)),
     feature_std: sScale.sd.map((v) => round(v, 5)),
@@ -246,20 +277,31 @@ function main() {
     transitions,
     n_training_slots: trainIdx.length,
   };
+}
+
+function main() {
+  const chosen = evaluation.chosen as ModelKind;
+  if (!MODEL_KINDS.includes(chosen)) throw new Error(`unknown model in forecast-evaluation.json: ${chosen}`);
+  const a = loadArchive();
+  console.log(`archive ${a.coverage.minIso} to ${a.coverage.maxIso}, ${a.series.length} slots`);
+
+  const forecast = fitForecast(a, chosen);
+  const states = fitStates(a);
 
   fs.mkdirSync(OUT_DIR, { recursive: true });
   fs.writeFileSync(path.join(OUT_DIR, "wbgt-forecast.json"), JSON.stringify(forecast, null, 1) + "\n");
   fs.writeFileSync(path.join(OUT_DIR, "states.json"), JSON.stringify(states, null, 1) + "\n");
 
-  for (const s of steps.filter((s) => [4, 12, 24, 36].includes(s.step))) {
+  console.log(`forecast: ${forecast.name}`);
+  for (const s of forecast.steps.filter((s) => [4, 12, 24, 36].includes(s.step))) {
     console.log(
-      `+${s.step * 15} min  MAE ${s.test_mae} degC (no-change ${s.persistence_mae})  ` +
-        `band80 ±${s.band80}  covered ${Math.round(s.coverage80 * 100)}%  same band ${s.band_same_pct}%  ` +
-        `lower ${s.band_lower_pct}%  test n=${s.n_test}`,
+      `+${s.step * 15} min  MAE ${s.test_mae} degC  RMSE ${s.test_rmse}  (no-change ${s.persistence_mae})  ` +
+        `band80 ±${s.band80_by_block.join("/")}  covered ${Math.round(s.coverage80 * 1000) / 10}%  ` +
+        `same band ${s.band_same_pct}%  lower ${s.band_lower_pct}%  test n=${s.n_test}`,
     );
   }
-  console.log("states", JSON.stringify(summary));
-  console.log("transitions", JSON.stringify(transitions));
+  console.log("states", JSON.stringify(states.summary));
+  console.log("transitions", JSON.stringify(states.transitions));
 }
 
 main();

@@ -58,6 +58,14 @@ export const FEATURE_SOURCE_FIELDS = [
   "temp_sht", "humidity_sht", "press_bmx", "wind_spd", "si1145_vis", "si1145_ir", "wet_bulb_temp",
 ];
 
+/** Station fields shade WBGT is computed from. */
+export const WBGT_SOURCE_FIELDS = ["temp_sht", "wet_bulb_temp"];
+
+/** True when none of the fields was filled in for this slot. */
+export function isMeasured(o: DemoObservation, fields: readonly string[]): boolean {
+  return !fields.some((f) => o.imputed?.includes(f));
+}
+
 /** Compute a full feature vector from an observation series ending at `atIndex`. */
 export function computeFeatures(
   series: DemoObservation[],

@@ -54,3 +54,26 @@ test("risk band shares are percentages", () => {
     assert.ok(e.band_same_pct + e.band_lower_pct <= 100.1);
   }
 });
+
+test("every candidate is scored on the same forecasts, and its seasons pool exactly its months", () => {
+  const { hot } = evaluation.seasons;
+  for (const [kind, model] of Object.entries(evaluation.models)) {
+    assert.deepEqual(model.by_month.map((m) => m.month), evaluation.months, kind);
+    model.by_month.forEach((m, k) => {
+      for (const h of HORIZONS) assert.equal(m.horizons[h].n, evaluation.by_month[k].horizons[h].n, `${kind} ${m.month} ${h}`);
+    });
+    for (const h of HORIZONS) {
+      const n = model.by_month.filter((m) => hot.months.includes(m.month)).reduce((sum, m) => sum + m.horizons[h].n, 0);
+      assert.equal(model.seasons.hot[h].n, n, `${kind} ${h}`);
+      assert.equal(model.overall[h].n, model.by_month.reduce((sum, m) => sum + m.horizons[h].n, 0), `${kind} ${h}`);
+    }
+  }
+});
+
+test("the shipped model's month-by-month figures are the chosen candidate's", () => {
+  const chosen = evaluation.models[evaluation.chosen as keyof typeof evaluation.models];
+  evaluation.by_month.forEach((m, k) => {
+    for (const h of HORIZONS) assert.equal(m.horizons[h].mae, chosen.by_month[k].horizons[h].mae, `${m.month} ${h}`);
+  });
+  for (const h of HORIZONS) assert.equal(evaluation.seasons.hot.horizons[h].mae, chosen.seasons.hot[h].mae, h);
+});

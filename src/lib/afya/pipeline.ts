@@ -8,8 +8,11 @@ import { getEra5ContextLive, getSentinelContextLive, getRainfallContext, getRegi
 import { computeFeatures } from "./feature-engine";
 import { classifyState, buildStateHistory, stateSince, getNextTransition } from "./state-engine";
 import {
-  predictHorizon, buildForecastSeries, findExpectedPeak, horizonScores, FORECAST_METHOD, FORECAST_PERIODS,
+  predictHorizon, buildForecastSeries, findExpectedPeak, horizonScores,
+  FORECAST_METHOD, FORECAST_MODEL_NAME, FORECAST_PERIODS, type ForecastInputs,
 } from "./forecast-engine";
+import { getClimatology } from "./climatology-source";
+import evaluation from "./model/forecast-evaluation.json";
 import { computeThermalRisk, computeRainProbability, computeUncertainty } from "./risk-engine";
 import { findBestWindowFromNow } from "./best-time-engine";
 import { evaluateQuality } from "./data-quality";
@@ -50,6 +53,8 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
   // is reported from the real clock; for a deliberate historical replay or synthetic
   // demo it is the (possibly simulated) anchor itself.
   const effectiveNow = bundle.realtime ? new Date().toISOString() : anchor;
+  // The usual WBGT by time of day, from observations before the latest one.
+  const climatology = getClimatology(series[series.length - 1].ts);
 
   // Step 2: Quality control
   const quality: DataQuality = evaluateQuality(series, effectiveNow);
@@ -98,11 +103,13 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
   const transition = getNextTransition(stateId);
 
   // Step 5: Forecast (+ uncertainty widening when degraded)
-  const raw1h = predictHorizon(fv, "1h");
-  const raw3h = predictHorizon(fv, "3h");
-  const raw6h = predictHorizon(fv, "6h");
-  const raw9h = predictHorizon(fv, "9h");
-  let forecast_series = buildForecastSeries(fv, anchor);
+  const inputs: ForecastInputs = { fv, nowIso: currentObs.ts, climatology: await climatology };
+  if (!inputs.climatology) quality.flags.push("forecast_fell_back_to_no_change");
+  const raw1h = predictHorizon(inputs, "1h");
+  const raw3h = predictHorizon(inputs, "3h");
+  const raw6h = predictHorizon(inputs, "6h");
+  const raw9h = predictHorizon(inputs, "9h");
+  let forecast_series = buildForecastSeries(inputs);
 
   const degraded = quality.status === "DEGRADED";
   const widen = (v: number, lo: number, hi: number) => ({
@@ -259,8 +266,10 @@ export async function runHistoricalReplay(dateStr: string): Promise<ReplayStep[]
 // Model metadata
 
 export function getModelRegistry() {
+  const rolling = evaluation.models[evaluation.chosen as keyof typeof evaluation.models].overall;
   return (["1h", "3h", "6h", "9h"] as const).map((horizon) => ({
     name: `wbgt_forecast_${horizon}`,
+    model: FORECAST_MODEL_NAME,
     algorithm: FORECAST_METHOD,
     target: "shade WBGT",
     horizon,
@@ -268,5 +277,6 @@ export function getModelRegistry() {
     training: FORECAST_PERIODS.train,
     calibration: FORECAST_PERIODS.calibration,
     test: FORECAST_PERIODS.test,
+    month_by_month: { months: evaluation.months, ...rolling[horizon] },
   }));
 }
