@@ -395,8 +395,8 @@ export default function Landing() {
                 <div className="text-2xl font-bold text-afya-charcoal sm:text-3xl">Rapid Warming</div>
                 <p className="mt-1 text-sm text-afya-muted">
                   {lang === "sw"
-                    ? "Inaendelea kuelekea hali ya joto na mionzi mikali."
-                    : "Transitioning toward hot, high-radiation exposure."}
+                    ? "Inaendelea kuelekea hali ya joto kali ya mchana."
+                    : "Transitioning toward the afternoon's peak heat."}
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-3">

@@ -2,40 +2,36 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import forecastModel from "../src/lib/afya/model/wbgt-forecast.json";
 import stateModel from "../src/lib/afya/model/states.json";
-import { FORECAST_FEATURES, STATE_FEATURES, type FeatureVector } from "../src/lib/afya/feature-engine";
-import { buildForecastSeries, horizonScores, predictHorizon } from "../src/lib/afya/forecast-engine";
+import evaluation from "../src/lib/afya/model/forecast-evaluation.json";
+import { STATE_FEATURES, type FeatureVector } from "../src/lib/afya/feature-engine";
+import { HORIZON_STEPS, horizonScores, type Horizon } from "../src/lib/afya/forecast-engine";
 import { classifyState } from "../src/lib/afya/state-engine";
+import { STATES } from "../src/lib/afya/constants";
+import { STRINGS } from "../src/lib/afya/i18n";
 
-function meanVector(): FeatureVector {
-  const fv = {} as FeatureVector;
-  forecastModel.features.forEach((name, j) => {
-    (fv as unknown as Record<string, number>)[name] = forecastModel.feature_mean[j];
-  });
-  return fv;
-}
+const HORIZONS = Object.keys(HORIZON_STEPS) as Horizon[];
 
-test("the fitted forecast matches the features the app computes", () => {
-  assert.deepEqual(forecastModel.features, FORECAST_FEATURES);
+test("the app ships the forecast the month-by-month test chose, for every step to nine hours", () => {
+  assert.equal(forecastModel.kind, evaluation.chosen);
   assert.equal(forecastModel.steps.length, 36);
-  for (const s of forecastModel.steps) assert.equal(s.coef.length, FORECAST_FEATURES.length);
+  forecastModel.steps.forEach((s, k) => {
+    assert.equal(s.step, k + 1);
+    assert.equal(s.band80_by_block.length, 8);
+  });
 });
 
-test("beyond the first hour the forecast beats assuming no change, on months it never saw", () => {
-  for (const h of ["3h", "6h", "9h"] as const) {
+test("the forecast beats assuming no change at every horizon, on months it never saw", () => {
+  for (const h of HORIZONS) {
     const s = horizonScores(h);
     assert.ok(s.mae < s.persistence_mae, `${h}: ${s.mae} vs ${s.persistence_mae}`);
   }
 });
 
-test("each horizon's band is the fitted 80 % band", () => {
-  const f = predictHorizon(meanVector(), "3h");
-  assert.ok(Math.abs(f.upper - f.value - horizonScores("3h").band80) < 0.06);
-});
-
-test("the series runs every 15 minutes out to nine hours", () => {
-  const points = buildForecastSeries(meanVector(), "2026-09-01T09:00:00.000Z");
-  assert.equal(points.length, 37);
-  assert.equal(points.at(-1)!.horizon_minutes, 540);
+test("on the test months the 80 % band holds close to 80 % of the errors", () => {
+  for (const h of HORIZONS) {
+    const s = horizonScores(h);
+    assert.ok(s.coverage80 >= 0.76 && s.coverage80 <= 0.86, `${h}: ${s.coverage80}`);
+  }
 });
 
 test("each state's own centre is classified as that state", () => {
@@ -48,4 +44,13 @@ test("each state's own centre is classified as that state", () => {
     });
     assert.equal(classifyState(fv), state);
   });
+});
+
+test("the hot state is named for its heat: its light readings are below the warming state's", () => {
+  const [, warming, hot] = stateModel.summary;
+  assert.ok(hot.mean_temp_c > warming.mean_temp_c);
+  assert.ok(hot.mean_ir_counts < warming.mean_ir_counts);
+  assert.doesNotMatch(STATES[2].name, /radiation/i);
+  assert.equal(STATES[2].name, STRINGS.en.state_2);
+  assert.equal(STATES[2].name_sw, STRINGS.sw.state_2);
 });

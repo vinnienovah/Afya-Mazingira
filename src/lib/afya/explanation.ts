@@ -40,6 +40,7 @@ export interface ExplanationFacts {
   transition_next_en: string | null;
   transition_next_sw: string | null;
   transition_probability: number | null;
+  transition_typical_hours: number | null;
   era5_temp_anomaly: number;
   era5_humidity_anomaly: number;
   chirps_7d_mm: number;
@@ -84,6 +85,8 @@ export function buildExplanationFacts(situation: SituationResult): ExplanationFa
         low_ventilation: { en: "ventilation is relatively weak", sw: "uingizaji hewa ni mdogo" },
         humidity_falling: { en: "relative humidity is falling", sw: "unyevu wa hewa unapungua" },
         peak_radiation: { en: "the environment is near its peak-radiation period", sw: "mazingira yako karibu na kipindi cha mionzi ya juu" },
+        usual_daily_change: { en: "the usual change at this time of day", sw: "mabadiliko ya kawaida ya wakati huu wa siku" },
+        departure_from_usual: { en: "a return toward the usual level", sw: "kurudi kwenye kiwango cha kawaida" },
       };
       const label = labels[c.feature] ?? {
         en: c.feature.replace(/_/g, " "),
@@ -105,6 +108,7 @@ export function buildExplanationFacts(situation: SituationResult): ExplanationFa
       ? STATES[f.state.transition_likelihood.state_id].name_sw
       : null,
     transition_probability: f.state.transition_likelihood?.probability ?? null,
+    transition_typical_hours: f.state.transition_likelihood?.typical_hours ?? null,
     era5_temp_anomaly: f.era5.local_temp_anomaly_c,
     era5_humidity_anomaly: f.era5.local_humidity_anomaly,
     chirps_7d_mm: f.chirps.chirps_7d_mm,
@@ -194,8 +198,11 @@ export function buildFarmExplanationFacts(advisory: {
 export function deterministicExplanationEn(facts: ExplanationFacts): string {
   const stateDesc = getStateDescriptionEn(facts.state_id);
   const riskDesc = getRiskDescriptionEn(facts.thermal_risk_level);
+  const hours = Math.max(1, Math.round(facts.transition_typical_hours ?? 0));
   const transitionPart = facts.transition_next_en
-    ? ` The environment is likely to transition to ${facts.transition_next_en} within the next few hours.`
+    ? facts.transition_typical_hours !== null
+      ? ` The environment is likely to change to ${facts.transition_next_en} in about ${hours} hour${hours === 1 ? "" : "s"}.`
+      : ` The environment is likely to change to ${facts.transition_next_en} next.`
     : "";
   const peakPart = facts.peak_time && facts.peak_wbgt
     ? ` The expected peak exposure is ${facts.peak_wbgt.toFixed(1)}°C at around ${fmtTime(facts.peak_time)}.`
@@ -229,8 +236,11 @@ export function deterministicExplanationEn(facts: ExplanationFacts): string {
 
 export function deterministicExplanationSw(facts: ExplanationFacts): string {
   const stateDesc = getStateDescriptionSw(facts.state_id);
+  const hours = Math.max(1, Math.round(facts.transition_typical_hours ?? 0));
   const transitionPart = facts.transition_next_sw
-    ? ` Mazingira yana uwezekano wa kubadilika kuwa ${facts.transition_next_sw} ndani ya masaa machache yanayokuja.`
+    ? facts.transition_typical_hours !== null
+      ? ` Mazingira yana uwezekano wa kubadilika kuwa ${facts.transition_next_sw} baada ya takriban saa ${hours}.`
+      : ` Mazingira yana uwezekano wa kubadilika kuwa ${facts.transition_next_sw} baadaye.`
     : "";
   const peakPart = facts.peak_time && facts.peak_wbgt
     ? ` Kilele cha kupatwa kinatarajiwa kuwa ${facts.peak_wbgt.toFixed(1)}°C katika karibu ${fmtTime(facts.peak_time)}.`
@@ -267,7 +277,7 @@ function getStateDescriptionEn(stateId: number): string {
     case 1:
       return "Temperature is rising rapidly while humidity falls and radiation increases.";
     case 2:
-      return "The environment is at its thermal peak with high radiation and elevated WBGT.";
+      return "It is the hottest, driest part of the day: temperature has levelled off near its peak while sunlight eases.";
     case 3:
       return "Temperature is declining, humidity is recovering, and radiation is falling.";
     default:
@@ -282,7 +292,7 @@ function getStateDescriptionSw(stateId: number): string {
     case 1:
       return "Joto linaongezeka haraka wakati unyevu unapungua na mionzi inaongezeka.";
     case 2:
-      return "Mazingira yako kwenye kilele cha joto chenye mionzi mikali na WBGT iliyoinuliwa.";
+      return "Huu ni wakati wa joto kali na ukavu zaidi wa siku: joto limetulia karibu na kilele chake huku mwanga wa jua ukipungua.";
     case 3:
       return "Joto linapungua, unyevu unarejea, na mionzi inapungua.";
     default:

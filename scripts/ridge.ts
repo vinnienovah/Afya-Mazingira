@@ -3,16 +3,19 @@
 // score the same origins with the same model.
 
 import type { DemoObservation } from "../src/lib/afya/demo-observations";
-import { FEATURE_SOURCE_FIELDS, type FeatureVector } from "../src/lib/afya/feature-engine";
+import {
+  FEATURE_SOURCE_FIELDS,
+  WBGT_SOURCE_FIELDS,
+  isMeasured,
+  type FeatureVector,
+} from "../src/lib/afya/feature-engine";
 
 export const RIDGE_LAMBDA = 1.0;
 
 /** Station fields WBGT is computed from; a target filled in for either is left out. */
-export const TARGET_SOURCE_FIELDS = ["temp_sht", "wet_bulb_temp"];
+export const TARGET_SOURCE_FIELDS = WBGT_SOURCE_FIELDS;
 
-export function measured(o: DemoObservation, fields: readonly string[]): boolean {
-  return !fields.some((f) => o.imputed?.includes(f));
-}
+export const measured = isMeasured;
 
 export function round(v: number, digits = 4): number {
   const f = 10 ** digits;
