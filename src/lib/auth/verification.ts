@@ -6,11 +6,16 @@
 import crypto from "crypto";
 import { db } from "@/db";
 import { emailVerificationTokens, users } from "@/db/schema";
-import { eq, and, isNull, desc } from "drizzle-orm";
+import { eq, and, isNull, isNotNull, desc, gte, count } from "drizzle-orm";
 import type { Lang } from "@/lib/afya/types";
 
 const TOKEN_TTL_MS = 24 * 3600 * 1000; // 24 hours
 const RESEND_COOLDOWN_MS = 60 * 1000; // 1 minute between resends
+
+// Sign-up and resend both send mail to an address someone typed in. Counted
+// from the tokens table, so the caps hold across server instances.
+export const MAX_EMAILS_PER_ADDRESS_PER_HOUR = 3;
+export const MAX_EMAILS_PER_HOUR = 30;
 
 export function hasResendConfigured(): boolean {
   return !!process.env.RESEND_API_KEY;
@@ -41,6 +46,43 @@ export async function lastTokenAgeMs(userId: number): Promise<number | null> {
 
 export function withinResendCooldown(ageMs: number | null): boolean {
   return ageMs !== null && ageMs < RESEND_COOLDOWN_MS;
+}
+
+export type EmailCap = "ok" | "address" | "global";
+
+/** Which cap, if any, stops one more verification email. */
+export function emailCap(counts: { addressLastHour: number; allLastHour: number }): EmailCap {
+  if (counts.allLastHour >= MAX_EMAILS_PER_HOUR) return "global";
+  if (counts.addressLastHour >= MAX_EMAILS_PER_ADDRESS_PER_HOUR) return "address";
+  return "ok";
+}
+
+/** The cap for a new email to this user (null for an account not created yet). */
+export async function verificationEmailCap(userId: number | null): Promise<EmailCap> {
+  const since = new Date(Date.now() - 3600 * 1000);
+  const [all] = await db
+    .select({ n: count() })
+    .from(emailVerificationTokens)
+    .where(gte(emailVerificationTokens.created_at, since));
+  let addressLastHour = 0;
+  if (userId !== null) {
+    const [mine] = await db
+      .select({ n: count() })
+      .from(emailVerificationTokens)
+      .where(and(eq(emailVerificationTokens.user_id, userId), gte(emailVerificationTokens.created_at, since)));
+    addressLastHour = Number(mine?.n ?? 0);
+  }
+  return emailCap({ addressLastHour, allLastHour: Number(all?.n ?? 0) });
+}
+
+/** Whether the user once followed one of our verification links. */
+export async function hasProvenEmail(userId: number): Promise<boolean> {
+  const [row] = await db
+    .select({ id: emailVerificationTokens.id })
+    .from(emailVerificationTokens)
+    .where(and(eq(emailVerificationTokens.user_id, userId), isNotNull(emailVerificationTokens.consumed_at)))
+    .limit(1);
+  return !!row;
 }
 
 export async function consumeVerificationToken(token: string): Promise<{ userId: number } | null> {
@@ -97,8 +139,25 @@ export async function sendVerificationEmail(
   }
 }
 
-function renderVerificationEmailHtml(name: string, link: string, lang: Lang): string {
-  const greeting = lang === "sw" ? `Habari ${name},` : `Hi ${name},`;
+const HTML_ESCAPES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+
+/** Text made safe to place in HTML, both between tags and inside attribute quotes. */
+export function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (ch) => HTML_ESCAPES[ch]);
+}
+
+// The name is whatever was typed at sign-up, and the email goes to whatever
+// address was typed with it, so it is escaped: otherwise anyone could send
+// their own HTML from our address to anyone.
+export function renderVerificationEmailHtml(name: string, link: string, lang: Lang): string {
+  const safeName = escapeHtml(name.replace(/\s+/g, " ").trim());
+  const greeting = lang === "sw" ? `Habari ${safeName},` : `Hi ${safeName},`;
   const body = lang === "sw"
     ? "Bofya kitufe hapa chini kuthibitisha barua pepe yako na kuwezesha akaunti yako ya AFYA MAZINGIRA. Kiungo hiki kitaisha baada ya saa 24."
     : "Click the button below to verify your email and activate your AFYA MAZINGIRA account. This link expires in 24 hours.";
@@ -120,7 +179,7 @@ function renderVerificationEmailHtml(name: string, link: string, lang: Lang): st
           <p style="font-size:15px;color:#1a1a1a;margin:0 0 12px;">${greeting}</p>
           <p style="font-size:14px;color:#4a4a4a;line-height:1.6;margin:0 0 24px;">${body}</p>
           <table cellpadding="0" cellspacing="0"><tr><td style="border-radius:12px;background:#1F8A57;">
-            <a href="${link}" style="display:inline-block;padding:14px 28px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;">${cta}</a>
+            <a href="${escapeHtml(link)}" style="display:inline-block;padding:14px 28px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;">${cta}</a>
           </td></tr></table>
           <p style="font-size:12px;color:#9a9a9a;line-height:1.5;margin:24px 0 0;">${ignore}</p>
         </td></tr>
