@@ -64,7 +64,7 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
   // that fails them lowers data quality, so a faulty sensor cannot feed the
   // forecast quietly. Rain is left out: the heat pipeline does not use it, and
   // the CHORDS feed does not carry it.
-  const failing = groupStatus(series.slice(-96)).filter((g) => g.status === "bad" && g.group !== "rain");
+  const failing = groupStatus(series.slice(-96)).filter((g) => g.status === "bad" && !g.group.startsWith("rain_gauge"));
   for (const g of failing) quality.flags.push(`station_health_bad:${g.group}`);
   if (failing.length && quality.status === "GOOD") quality.status = "DEGRADED";
   // If the +9h forecast horizon has fully elapsed, the situation is too stale

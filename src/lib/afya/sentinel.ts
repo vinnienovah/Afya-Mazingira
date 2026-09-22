@@ -12,17 +12,19 @@ import { EAT_OFFSET_MS, nairobiDate } from "./nairobi-day";
 
 export const SENTINEL_LIMITS = {
   temperature_c: [-5, 45], // R01
+  humidity_pct: [0, 100], // R02, the reading itself, before any clamp
   pressure_hpa: [800, 900], // R03, station pressure at 1,523 m
   wind_speed_ms: [0, 60], // R04
   wind_gust_ms: [0, 75], // R04
+  rain_mm: [0, 10], // R05, a single reading of one gauge
   light_dark_floor_counts: 240, // R06: the sensor never reads lower in the dark
   max_step_c: 5, // R07: change between two 15-minute slots
-  flat_slots: { temp_sht: 8, humidity_sht: 8, press_bmx: 12, wind_spd: 12 }, // R08: two and three hours unchanged
+  // R08: two and three hours unchanged
+  flat_slots: { temp_sht: 8, temp_bmx: 8, temp_mcp: 8, humidity_sht: 8, press_bmx: 12, wind_spd: 12 },
   stuck_other_thermometer_c: 0.5, // R08: a flat thermometer counts as stuck only while another moves more than this
   max_thermometer_spread_c: 2, // R09
   rain_disagreement_mm: 0.4, // R11: one gauge this much in a day, the other nothing
-  gust_direction_copy_share: 0.99, // R13: share of a day's readings where gust direction equals gust speed
-  gust_direction_min_slots: 4, // R13: readings a day needs before it is judged
+  gust_direction_copy_share: 0.99, // R13: share of a day's gusts where the gust direction equals the gust speed
   wbgt_below_wet_bulb_margin_c: 1.5, // R16 and A03
   flagged_share: 0.05, // health score: share of a day's slots flagged before a group counts
   bad_group_penalty: 10,
@@ -31,13 +33,16 @@ export const SENTINEL_LIMITS = {
   stull_max_mae_c: 0.1, // A01
 } as const;
 
+// The specification's channel groups, less the ones this feed does not carry
+// (comms) and the firmware's own derived values, which audit A03 judges.
 export const CHANNEL_GROUPS = {
   temperature: ["temp_sht", "temp_bmx", "temp_mcp"],
   humidity: ["humidity_sht"],
   pressure: ["press_bmx"],
   wind: ["wind_spd", "wind_gust", "wind_dir"],
   light: ["si1145_vis", "si1145_ir"],
-  rain: ["rg1", "rg2"],
+  rain_gauge_1: ["rg1"],
+  rain_gauge_2: ["rg2"],
 } as const;
 
 // Channels the engines never read, reported beside the sensor groups: the
@@ -59,16 +64,26 @@ type Channel = (typeof CHANNEL_GROUPS)[Group][number];
 
 const GROUPS = Object.keys(CHANNEL_GROUPS) as Group[];
 const THERMOMETERS = CHANNEL_GROUPS.temperature;
+const RAIN_GROUPS: readonly Group[] = ["rain_gauge_1", "rain_gauge_2"];
+const GAUGE_GROUP = { rg1: "rain_gauge_1", rg2: "rain_gauge_2" } as const;
 const HARD_LIMIT_RULES: Record<string, string> = {
   temp_sht: "R01", temp_bmx: "R01", temp_mcp: "R01",
   humidity_sht: "R02", press_bmx: "R03", wind_spd: "R04", wind_gust: "R04",
+  rg1: "R05", rg2: "R05",
 };
+// A slot's rain is the sum of its readings, so only a reading can break R05's
+// per-reading range; the ingest step reports those (see sources.ts). The rest
+// are checked again on the slot itself.
+const SLOT_LIMIT_CHANNELS = Object.keys(HARD_LIMIT_RULES).filter((f) => f !== "rg1" && f !== "rg2");
+// Rules the cleaning step would hide, reported against the raw reading.
+const RAW_FAULT_RULES: Record<string, string> = { wind_gust: "R10" };
 
 const measured = (o: DemoObservation, f: string) => !o.imputed?.includes(f);
 const value = (o: DemoObservation, f: Channel) => o[f as keyof DemoObservation] as number;
 const hasGustDirection = (o: DemoObservation) => typeof o.wind_gust_dir === "number";
+const isThermometer = (f: string) => (THERMOMETERS as readonly string[]).includes(f);
 
-/** The hard-limit rule (R01 to R04) a reading breaks, or null. */
+/** The hard-limit rule (R01 to R05) a reading breaks, or null. */
 export function hardLimitRule(channel: string, v: number): string | null {
   const L = SENTINEL_LIMITS;
   const outside = (range: readonly [number, number]) => v < range[0] || v > range[1];
@@ -78,13 +93,16 @@ export function hardLimitRule(channel: string, v: number): string | null {
     case "temp_mcp":
       return outside(L.temperature_c) ? "R01" : null;
     case "humidity_sht":
-      return v <= 0 ? "R02" : null;
+      return v <= L.humidity_pct[0] || v > L.humidity_pct[1] ? "R02" : null;
     case "press_bmx":
       return outside(L.pressure_hpa) ? "R03" : null;
     case "wind_spd":
       return outside(L.wind_speed_ms) ? "R04" : null;
     case "wind_gust":
       return outside(L.wind_gust_ms) ? "R04" : null;
+    case "rg1":
+    case "rg2":
+      return outside(L.rain_mm) ? "R05" : null;
     default:
       return null;
   }
@@ -116,9 +134,11 @@ export function checkReadings(series: DemoObservation[]): RuleHit[] {
     hits.push({ rule, channel, index, flag });
 
   series.forEach((o, i) => {
-    // Readings the cleaning step dropped for breaking a hard limit.
+    // Readings the cleaning step dropped for breaking a hard limit, and faults
+    // it would otherwise have repaired out of sight (R10).
     for (const f of o.rejected ?? []) if (HARD_LIMIT_RULES[f]) hit(HARD_LIMIT_RULES[f], f, i, "bad");
-    for (const f of Object.keys(HARD_LIMIT_RULES)) {
+    for (const f of o.raw_faults ?? []) if (RAW_FAULT_RULES[f]) hit(RAW_FAULT_RULES[f], f, i, "suspect");
+    for (const f of SLOT_LIMIT_CHANNELS) {
       const rule = measured(o, f) ? hardLimitRule(f, value(o, f as Channel)) : null;
       if (rule) hit(rule, f, i, "bad");
     }
@@ -126,8 +146,17 @@ export function checkReadings(series: DemoObservation[]): RuleHit[] {
       if (measured(o, f) && value(o, f) < L.light_dark_floor_counts) hit("R06", f, i, "suspect");
     }
     const prev = series[i - 1];
-    if (prev && measured(o, "temp_sht") && measured(prev, "temp_sht") && Math.abs(o.temp_sht - prev.temp_sht) > L.max_step_c) {
-      hit("R07", "temp_sht", i, "suspect");
+    for (const f of THERMOMETERS) {
+      if (prev && measured(o, f) && measured(prev, f) && Math.abs(value(o, f) - value(prev, f)) > L.max_step_c) {
+        hit("R07", f, i, "suspect");
+      }
+    }
+    // R10: a gust cannot be slower than the wind it gusts above.
+    if (
+      !o.raw_faults?.includes("wind_gust") &&
+      measured(o, "wind_gust") && measured(o, "wind_spd") && o.wind_gust < o.wind_spd
+    ) {
+      hit("R10", "wind_gust", i, "suspect");
     }
     const temps = THERMOMETERS.filter((f) => measured(o, f)).map((f) => value(o, f));
     if (temps.length >= 2 && Math.max(...temps) - Math.min(...temps) > L.max_thermometer_spread_c) {
@@ -145,9 +174,9 @@ export function checkReadings(series: DemoObservation[]): RuleHit[] {
   // R08: the same measured value for too long. Calm nights make zero wind
   // real, so only a non-zero wind reading can be stuck. Calm nights also keep
   // air temperature steady to a tenth of a degree for hours, so a flat
-  // thermometer counts only while another thermometer moves.
-  const otherMoved = (from: number, to: number) =>
-    THERMOMETERS.filter((f) => f !== "temp_sht").some((f) => {
+  // thermometer counts only while one of the other two moves.
+  const otherMoved = (self: string, from: number, to: number) =>
+    THERMOMETERS.filter((f) => f !== self).some((f) => {
       const values = series.slice(from, to).filter((o) => measured(o, f)).map((o) => value(o, f));
       return values.length > 1 && Math.max(...values) - Math.min(...values) > L.stuck_other_thermometer_c;
     });
@@ -161,7 +190,7 @@ export function checkReadings(series: DemoObservation[]): RuleHit[] {
         value(series[i], f as Channel) === value(series[i - 1], f as Channel) &&
         !(f === "wind_spd" && series[i].wind_spd === 0);
       if (!same) {
-        if (i - start >= run && (f !== "temp_sht" || otherMoved(start, i))) {
+        if (i - start >= run && (!isThermometer(f) || otherMoved(f, start, i))) {
           for (let k = start; k < i; k++) hit("R08", f, k, "suspect");
         }
         start = i;
@@ -170,13 +199,18 @@ export function checkReadings(series: DemoObservation[]): RuleHit[] {
   }
 
   // R13: on a day when the gust-direction column equals the gust speed in
-  // almost every reading, it is a copy, not a direction.
+  // almost every reading, it is a copy, not a direction. Only slots with a
+  // gust can say so: where the gust is zero the column matches a real due
+  // north by arithmetic alone, and a day too calm to hold gusts in more than
+  // one slot in twenty is not judged at all. The verdict is about the column,
+  // so it marks every slot of the day that carries one.
   for (const idx of slotsByDay(series).values()) {
-    const both = idx.filter((i) => hasGustDirection(series[i]) && measured(series[i], "wind_gust"));
-    if (both.length < L.gust_direction_min_slots) continue;
-    const copies = both.filter((i) => Math.abs(series[i].wind_gust_dir! - series[i].wind_gust) < 0.05).length;
-    if (copies / both.length >= L.gust_direction_copy_share) {
-      for (const i of both) hit("R13", "wind_gust_dir", i, "bad");
+    const reported = idx.filter((i) => hasGustDirection(series[i]));
+    const gusty = reported.filter((i) => measured(series[i], "wind_gust") && series[i].wind_gust > 0);
+    if (gusty.length <= L.flagged_share * idx.length) continue;
+    const copies = gusty.filter((i) => Math.abs(series[i].wind_gust_dir! - series[i].wind_gust) < 0.05).length;
+    if (copies / gusty.length >= L.gust_direction_copy_share) {
+      for (const i of reported) hit("R13", "wind_gust_dir", i, "bad");
     }
   }
   return hits;
@@ -224,11 +258,17 @@ export function rainDayTotals(series: DemoObservation[]): Map<string, [number | 
   return out;
 }
 
-/** R11: one gauge measured rain in a rain day while the other measured none. */
-function gaugesDisagree([r1, r2]: [number | null, number | null]): boolean {
+/**
+ * R11: the group of the gauge that measured nothing through a rain day in
+ * which the other measured rain, or null when they agree. The spec flags the
+ * silent gauge's channels, not both gauges'.
+ */
+export function silentGauge([r1, r2]: [number | null, number | null]): Group | null {
   const L = SENTINEL_LIMITS;
-  return (r1 !== null && r2 !== null) &&
-    ((r1 >= L.rain_disagreement_mm && r2 === 0) || (r2 >= L.rain_disagreement_mm && r1 === 0));
+  if (r1 === null || r2 === null) return null;
+  if (r1 >= L.rain_disagreement_mm && r2 === 0) return GAUGE_GROUP.rg2;
+  if (r2 >= L.rain_disagreement_mm && r1 === 0) return GAUGE_GROUP.rg1;
+  return null;
 }
 
 /** On the CHORDS feed a silent gauge proves nothing, so rain is judged only once a gauge reports some. */
@@ -257,10 +297,12 @@ function groupOf(channel: string): Group | ExportGroup | null {
 
 /**
  * Health score for each Nairobi day: 100, less 10 for each channel group that
- * is bad (a channel empty all day, more than 5 % of slots flagged bad, or the
- * gust-direction column a copy), less 2 for each suspect group (more than 5 %
- * flagged suspect, or the rain gauges disagreeing), less 1 for every 14.4
- * minutes inside gaps between readings. Battery telemetry is not scored.
+ * is bad (a channel empty all day, a channel flagged suspect in every slot of
+ * the day, more than 5 % of slots flagged bad, or the gust-direction column a
+ * copy), less 2 for each suspect group (more than 5 % flagged suspect, or the
+ * rain gauges disagreeing), less 1 for every 14.4 minutes inside gaps between
+ * readings. Battery telemetry is scored only where `batteryListed` says the
+ * export carries the channel.
  */
 export function dailyHealth(
   series: DemoObservation[],
@@ -284,17 +326,23 @@ export function dailyHealth(
     dayHits.forEach((h) => rules.add(h.rule));
     const flagged = (flag: string, g: string) =>
       new Set(dayHits.filter((h) => h.flag === flag && groupOf(h.channel) === g).map((h) => h.index)).size / idx.length;
+    // A channel flagged in every slot of the day carried nothing usable all
+    // day, which is what R12 says of a channel that reports nothing at all, so
+    // its group is bad rather than merely suspect.
+    const flaggedAllDay = (flag: string, channels: readonly string[]) =>
+      channels.some((f) =>
+        new Set(dayHits.filter((h) => h.flag === flag && h.channel === f).map((h) => h.index)).size === idx.length);
 
     const rainJudgedToday = rainJudged(feed, series, idx);
     for (const g of GROUPS) {
-      if (g === "rain" && !rainJudgedToday) continue;
+      if (RAIN_GROUPS.includes(g) && !rainJudgedToday) continue;
       const channels = CHANNEL_GROUPS[g] as readonly string[];
       if (channels.some((f) => idx.every((i) => !isRead(series[i], f)))) {
         bad.add(g);
         rules.add("R12");
         continue;
       }
-      if (flagged("bad", g) > L.flagged_share) bad.add(g);
+      if (flagged("bad", g) > L.flagged_share || flaggedAllDay("suspect", channels)) bad.add(g);
       else if (flagged("suspect", g) > L.flagged_share) suspect.add(g);
     }
     if (gustDirection) {
@@ -310,11 +358,13 @@ export function dailyHealth(
       rules.add("R12");
     }
 
-    // R11 is judged on the rain day that starts at 09:00 on this date.
+    // R11 is judged on the rain day that starts at 09:00 on this date, which
+    // is the day the station's own gauge totals cover.
     const rain = rainDays.get(date);
-    if (rainJudgedToday && rain && gaugesDisagree(rain)) {
+    const quiet = rainJudgedToday && rain ? silentGauge(rain) : null;
+    if (quiet) {
       rules.add("R11");
-      if (!bad.has("rain")) suspect.add("rain");
+      if (!bad.has(quiet)) suspect.add(quiet);
     }
 
     const missing = idx.reduce((s, i) => s + (series[i].gap_minutes ?? 0), 0);
@@ -359,12 +409,15 @@ export function groupStatus(
     const share = (flag: string) =>
       new Set(groupHits.filter((h) => h.flag === flag).map((h) => h.index)).size / Math.max(series.length, 1);
     const empty = channels.filter((f) => series.every((o) => !isMeasured(o, f)));
+    const stuck = series.length > 0 && channels.some((f) =>
+      new Set(groupHits.filter((h) => h.flag === "suspect" && h.channel === f).map((h) => h.index)).size === series.length);
     const measuredShare = series.length
       ? series.filter((o) => channels.every((f) => isMeasured(o, f))).length / series.length
       : 0;
     return {
       share,
       empty,
+      stuck,
       rules: [...new Set([...groupHits.map((h) => h.rule), ...(empty.length ? ["R12"] : [])])].sort(),
       measured_share: Math.round(measuredShare * 1000) / 1000,
     };
@@ -372,15 +425,15 @@ export function groupStatus(
 
   const out: GroupReport[] = GROUPS.map((g) => {
     const r = report(g, CHANNEL_GROUPS[g], isRead);
-    let status: GroupStatus = r.empty.length || r.share("bad") > L.flagged_share
+    let status: GroupStatus = r.empty.length || r.stuck || r.share("bad") > L.flagged_share
       ? "bad"
       : r.share("suspect") > L.flagged_share ? "suspect" : "good";
     const rules = [...r.rules];
-    if (g === "rain") {
+    if (RAIN_GROUPS.includes(g)) {
       if (!rainJudged(feed, series, all)) {
         return { group: g, status: "not_judged", rules: [], empty_channels: [], measured_share: r.measured_share };
       }
-      if (status === "good" && [...rainDayTotals(series).values()].some(gaugesDisagree)) {
+      if (status === "good" && [...rainDayTotals(series).values()].some((t) => silentGauge(t) === g)) {
         status = "suspect";
         rules.push("R11");
       }
@@ -463,29 +516,17 @@ export function audits(series: DemoObservation[]) {
 }
 
 /**
- * Times the station sent nothing for more than an hour: runs of slots inside
- * gaps between readings, from the last reading before to the first after.
+ * Times the station sent nothing for more than an hour, timed by the readings
+ * either side of the silence rather than by the slots they fall in: a slot is
+ * a quarter-hour box, and rounding the silence out to its edges would report
+ * times the station never went quiet at.
  */
 export function gaps(series: DemoObservation[]) {
-  const runs: { from: string; to: string; hours: number }[] = [];
-  let start: number | null = null;
-  let minutes = 0;
-  series.forEach((o, i) => {
-    const inGap = (o.gap_minutes ?? 0) > 0;
-    if (inGap) {
-      if (start === null) start = i;
-      minutes += o.gap_minutes!;
-    }
-    if ((!inGap || i === series.length - 1) && start !== null) {
-      const end = inGap ? i : i - 1;
-      // The missing time starts 15 minutes after the last reading.
-      const hours = Math.round(((minutes + 15) / 60) * 10) / 10;
-      if (hours > 1) {
-        runs.push({ from: series[start].ts, to: new Date(Date.parse(series[end].ts) + 900_000).toISOString(), hours });
-      }
-      start = null;
-      minutes = 0;
-    }
-  });
-  return runs;
+  const runs = new Map<string, { from: string; to: string; hours: number }>();
+  for (const o of series) {
+    if (!o.gap || runs.has(o.gap.from)) continue;
+    const hours = (Date.parse(o.gap.to) - Date.parse(o.gap.from)) / 3600_000;
+    if (hours > 1) runs.set(o.gap.from, { ...o.gap, hours: Math.round(hours * 10) / 10 });
+  }
+  return [...runs.values()];
 }

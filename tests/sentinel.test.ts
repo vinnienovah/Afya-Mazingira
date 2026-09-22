@@ -78,9 +78,9 @@ test("a gauge silent through a rain day in which the other measured rain is susp
   assert.deepEqual(rainDayTotals(series).get("2026-01-10"), [1.2, 0]);
   const [first, second] = dailyHealth(series);
   assert.ok(first.rules.includes("R11"));
-  assert.ok(first.suspect.includes("rain"));
+  assert.ok(first.suspect.includes("rain_gauge_2"));
   assert.ok(!second.rules.includes("R11"));
-  assert.equal(groupStatus(series).find((g) => g.group === "rain")!.status, "suspect");
+  assert.equal(groupStatus(series).find((g) => g.group === "rain_gauge_2")!.status, "suspect");
 
   // Both gauges reporting their share is not a disagreement.
   const agreeing = days(2, (o, i) => (i >= 36 + 96 ? { rg1tp: 1.2, rg2tp: 1.0 } : {}));
@@ -97,7 +97,7 @@ test("a gauge whose running total is not exported still counts as reporting thro
 test("on the CHORDS feed silent gauges are not judged, while rain that falls is", () => {
   const dry = day();
   const rain = (feed: "chords" | null, series = dry) =>
-    groupStatus(series, checkReadings(series), { feed }).find((g) => g.group === "rain")!;
+    groupStatus(series, checkReadings(series), { feed }).find((g) => g.group === "rain_gauge_2")!;
   assert.equal(rain("chords").status, "not_judged");
   assert.equal(rain(null).status, "good");
   assert.equal(dailyHealth(dry, checkReadings(dry), { feed: "chords" })[0].score, 100);
@@ -107,11 +107,13 @@ test("on the CHORDS feed silent gauges are not judged, while rain that falls is"
 });
 
 test("missing time comes from gaps between readings, not from empty slots", () => {
-  const series = day((o, i) => (i >= 10 && i < 14 ? { gap_minutes: 15 } : {}));
+  const silence = { from: "2026-01-09T23:22:00.000Z", to: "2026-01-10T00:37:00.000Z" };
+  const series = day((o, i) => (i >= 10 && i < 14 ? { gap_minutes: 15, gap: silence } : {}));
   const [health] = dailyHealth(series);
   assert.equal(health.missing_minutes, 60);
   assert.ok(Math.abs(health.score - (100 - 60 / 14.4)) < 0.06);
-  assert.deepEqual(gaps(series), [{ from: series[10].ts, to: series[14].ts, hours: 1.3 }]);
+  // Reported between the readings either side, not between the slots they fall in.
+  assert.deepEqual(gaps(series), [{ ...silence, hours: 1.3 }]);
 });
 
 test("the station's 906-second cadence costs nothing, a real outage does", () => {
