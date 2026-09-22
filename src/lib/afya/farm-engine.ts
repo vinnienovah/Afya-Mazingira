@@ -1,20 +1,26 @@
 // AFYA MAZINGIRA · Farm Advisory Engine
 // Deterministic agronomic decision layer built on the validated pipeline.
 //
-// Scientific basis:
-//   · Reference evapotranspiration (ET₀), Hargreaves–Samani (1985)
-//   · Crop water requirement (ETc), FAO-56 single crop coefficient (ETc = Kc × ET₀)
-//   · Soil water balance, recent rainfall (CHIRPS) + soil moisture (ERA5-Land) − ETc
+// Scientific basis, FAO-56 (Allen et al. 1998) throughout:
+//   · Reference evapotranspiration (ET₀), Hargreaves and Samani (1985) as FAO-56
+//     eq. 52, from a measured daily Tmax and Tmin, with extraterrestrial
+//     radiation for the station's latitude and the date (eq. 21)
+//   · Crop water requirement (ETc), single crop coefficient (ETc = Kc × ET₀)
+//   · Irrigation need, a 7-day budget of crop demand against effective rain
 //   · Spray suitability, wind drift + evaporation + wash-off risk windows
 //
 // This produces AGRONOMIC DECISION SUPPORT ONLY. It does not predict yield,
 // diagnose plant disease, or replace extension-officer judgement.
 
 import type { SituationResult } from "./types";
+import type { RegionalSoilMoisture } from "./sources-external";
+import { JKUAT_COORDS } from "./constants";
+import { datesEnding, dayOfYear, nairobiDate } from "./nairobi-time";
 
 export type GrowthStage = "establishment" | "vegetative" | "flowering" | "maturity";
-export type IrrigationAction = "IRRIGATE_NOW" | "IRRIGATE_SOON" | "HOLD_RAIN_EXPECTED" | "CHECK_SOIL" | "NO_IRRIGATION";
+export type IrrigationAction = "IRRIGATE_NOW" | "HOLD_RAIN_EXPECTED" | "NO_IRRIGATION";
 export type WindowQuality = "GOOD" | "MARGINAL" | "AVOID";
+export type Confidence = "LOW" | "MODERATE" | "HIGH";
 
 export interface CropProfile {
   key: string;
@@ -22,7 +28,7 @@ export interface CropProfile {
   label_sw: string;
   /** FAO-56 single crop coefficients by stage */
   kc: Record<GrowthStage, number>;
-  /** Root zone depth (m), drives soil water holding capacity */
+  /** Root zone depth (m) once fully grown; see rootDepthM for the stages before */
   root_depth_m: number;
   /** Fraction of available water depleted before stress (FAO-56 p-value) */
   depletion_fraction: number;
@@ -72,137 +78,359 @@ export const CROP_PROFILES: CropProfile[] = [
   },
 ];
 
-export function getCropProfile(key: string): CropProfile {
-  return CROP_PROFILES.find((c) => c.key === key) ?? CROP_PROFILES[0];
+export const CROP_KEYS = CROP_PROFILES.map((c) => c.key);
+
+/** The profile for a crop key, or null for a crop the advisory does not cover. */
+export function findCropProfile(key: string): CropProfile | null {
+  return CROP_PROFILES.find((c) => c.key === key) ?? null;
 }
 
-// Reference evapotranspiration (Hargreaves–Samani)
-// ET₀ = 0.0023 × (Tmean + 17.8) × √(Tmax − Tmin) × Ra
-// Ra at the equator ≈ 36.2 MJ/m²/day ≈ 14.8 mm/day water equivalent.
+const round1 = (v: number) => Math.round(v * 10) / 10;
 
-const RA_EQUATOR_MM = 14.8;
+// Roots start shallow and reach the crop's full depth by flowering, the way
+// FAO-56 grows the root zone through the season. Establishment takes 30 % of
+// the full depth, never less than 0.2 m; the vegetative stage is halfway.
+const ESTABLISHMENT_ROOT_SHARE = 0.3;
+const MIN_ROOT_DEPTH_M = 0.2;
 
-export function computeEt0(tmaxC: number, tminC: number): number {
+/** Effective root depth (m) at a growth stage. */
+export function rootDepthM(crop: CropProfile, stage: GrowthStage): number {
+  const initial = Math.max(MIN_ROOT_DEPTH_M, ESTABLISHMENT_ROOT_SHARE * crop.root_depth_m);
+  const depth =
+    stage === "establishment" ? initial
+    : stage === "vegetative" ? (initial + crop.root_depth_m) / 2
+    : crop.root_depth_m;
+  return Math.round(depth * 100) / 100;
+}
+
+// Reference evapotranspiration
+
+/** Extraterrestrial radiation Ra for a day of the year and a latitude (FAO-56
+ * eqs. 21 and 23 to 25), as its evaporation equivalent in mm/day. */
+export function extraterrestrialRadiationMm(doy: number, latitudeDeg: number = JKUAT_COORDS.lat): number {
+  const phi = (latitudeDeg * Math.PI) / 180;
+  const angle = (2 * Math.PI * doy) / 365;
+  const dr = 1 + 0.033 * Math.cos(angle);
+  const declination = 0.409 * Math.sin(angle - 1.39);
+  const sunsetAngle = Math.acos(-Math.tan(phi) * Math.tan(declination));
+  const raMj =
+    ((24 * 60) / Math.PI) * 0.082 * dr *
+    (sunsetAngle * Math.sin(phi) * Math.sin(declination) +
+      Math.cos(phi) * Math.cos(declination) * Math.sin(sunsetAngle));
+  return 0.408 * raMj;
+}
+
+/** Hargreaves reference evapotranspiration (FAO-56 eq. 52), mm/day. */
+export function computeEt0(tmaxC: number, tminC: number, doy: number, latitudeDeg?: number): number {
   const tmean = (tmaxC + tminC) / 2;
-  const range = Math.max(0.5, tmaxC - tminC);
-  const et0 = 0.0023 * (tmean + 17.8) * Math.sqrt(range) * RA_EQUATOR_MM;
+  const range = Math.max(0, tmaxC - tminC);
+  const et0 = 0.0023 * (tmean + 17.8) * Math.sqrt(range) * extraterrestrialRadiationMm(doy, latitudeDeg);
   return Math.max(0, Math.round(et0 * 100) / 100);
 }
 
-// Soil water balance
+export interface TempSlot {
+  ts: string;
+  temp_sht: number;
+  imputed?: string[];
+}
+
+export interface TempRange {
+  tmax_c: number;
+  tmin_c: number;
+  /** Clock hours with at least one measured reading */
+  measured_hours: number;
+}
+
+// Tmax and Tmin need most of the day: with hours missing the range shrinks,
+// and ET₀ with it.
+export const MIN_MEASURED_HOURS = 20;
+
+const isMeasured = (o: TempSlot) => Number.isFinite(o.temp_sht) && !o.imputed?.includes("temp_sht");
+
+/** Measured Tmax and Tmin over the `hours` up to `endIso`. Slots whose
+ * temperature was interpolated or carried forward do not count. */
+export function measuredTempRange(series: TempSlot[], endIso: string, hours = 24): TempRange | null {
+  const end = Date.parse(endIso);
+  const start = end - hours * 3600_000;
+  let tmax = -Infinity;
+  let tmin = Infinity;
+  const hoursSeen = new Set<number>();
+  for (const o of series) {
+    const t = Date.parse(o.ts);
+    if (t <= start || t > end || !isMeasured(o)) continue;
+    tmax = Math.max(tmax, o.temp_sht);
+    tmin = Math.min(tmin, o.temp_sht);
+    hoursSeen.add(Math.ceil((t - start) / 3600_000));
+  }
+  if (!hoursSeen.size) return null;
+  return { tmax_c: round1(tmax), tmin_c: round1(tmin), measured_hours: hoursSeen.size };
+}
+
+/** Measured Tmax and Tmin for each Nairobi calendar day in the series. */
+export function measuredDailyRanges(series: TempSlot[]): Map<string, TempRange> {
+  const byDay = new Map<string, { tmax: number; tmin: number; hours: Set<number> }>();
+  for (const o of series) {
+    if (!isMeasured(o)) continue;
+    const t = Date.parse(o.ts);
+    const date = nairobiDate(t);
+    const day = byDay.get(date) ?? { tmax: -Infinity, tmin: Infinity, hours: new Set<number>() };
+    day.tmax = Math.max(day.tmax, o.temp_sht);
+    day.tmin = Math.min(day.tmin, o.temp_sht);
+    day.hours.add(Math.floor(t / 3600_000));
+    byDay.set(date, day);
+  }
+  const out = new Map<string, TempRange>();
+  for (const [date, d] of byDay) {
+    out.set(date, { tmax_c: round1(d.tmax), tmin_c: round1(d.tmin), measured_hours: d.hours.size });
+  }
+  return out;
+}
+
+export type Et0Source = "station" | "regional_forecast";
+
+export interface Et0Estimate {
+  et0_mm_day: number;
+  tmax_c: number;
+  tmin_c: number;
+  source: Et0Source;
+  /** Hours of the last 24 the station measured, whichever source was used */
+  station_hours: number;
+  ra_mm_day: number;
+}
+
+/** Today's ET₀ from the station's measured last 24 hours when at least 20 of
+ * them were measured, otherwise from the regional forecast's Tmax and Tmin. */
+export function estimateEt0(
+  today: string,
+  station: TempRange | null,
+  regional: { tmax_c: number | null; tmin_c: number | null } | null,
+): Et0Estimate | null {
+  const doy = dayOfYear(today);
+  const ra = Math.round(extraterrestrialRadiationMm(doy) * 100) / 100;
+  const stationHours = station?.measured_hours ?? 0;
+  if (station && stationHours >= MIN_MEASURED_HOURS) {
+    return {
+      et0_mm_day: computeEt0(station.tmax_c, station.tmin_c, doy),
+      tmax_c: station.tmax_c,
+      tmin_c: station.tmin_c,
+      source: "station",
+      station_hours: stationHours,
+      ra_mm_day: ra,
+    };
+  }
+  if (regional?.tmax_c != null && regional.tmin_c != null) {
+    return {
+      et0_mm_day: computeEt0(regional.tmax_c, regional.tmin_c, doy),
+      tmax_c: regional.tmax_c,
+      tmin_c: regional.tmin_c,
+      source: "regional_forecast",
+      station_hours: stationHours,
+      ra_mm_day: ra,
+    };
+  }
+  return null;
+}
+
+/** ET₀ on a day before today, and where its Tmax and Tmin came from. */
+export interface DayEt0 {
+  et0_mm: number;
+  source: "station" | "regional_model";
+}
+
+// Rain
+
+export type RainSource = "station_gauge" | "regional_model";
+
+export interface RainDay {
+  date: string;
+  mm: number | null;
+}
+
+export interface RainRecord {
+  source: RainSource;
+  /** Nairobi days, oldest first; the last one is today so far */
+  days: RainDay[];
+}
+
+// The station gauge is used when it reported on at least 6 of the last 7 days.
+export const MIN_GAUGE_DAYS_OF_7 = 6;
+
+export function chooseRainRecord(station: RainDay[] | null, regional: RainDay[] | null): RainRecord | null {
+  const reported = station?.slice(-7).filter((d) => d.mm != null).length ?? 0;
+  if (station && reported >= MIN_GAUGE_DAYS_OF_7) return { source: "station_gauge", days: station };
+  if (regional?.some((d) => d.mm != null)) return { source: "regional_model", days: regional };
+  return null;
+}
+
+// Effective rain by the fixed-percentage method: 80 % of a day's rain counts
+// once the day passes 2 mm. Lighter showers mostly wet the leaves and the
+// topsoil and evaporate before they reach the roots.
+const EFFECTIVE_RAIN_SHARE = 0.8;
+const EFFECTIVE_RAIN_MIN_MM = 2;
+
+export function effectiveRainMm(dayMm: number): number {
+  return dayMm > EFFECTIVE_RAIN_MIN_MM ? EFFECTIVE_RAIN_SHARE * dayMm : 0;
+}
+
+// A day under 1 mm counts as dry, the ETCCDI convention for dry and wet spells.
+export const DRY_DAY_MM = 1;
+
+/** Days in a row up to the latest day with a reading that were wet (or dry).
+ * A day without a reading ends the run. */
+export function spellLength(days: (number | null)[], wet: boolean): number {
+  let i = days.length - 1;
+  while (i >= 0 && days[i] == null) i--;
+  let n = 0;
+  for (; i >= 0; i--) {
+    const mm = days[i];
+    if (mm == null || (mm >= DRY_DAY_MM) !== wet) break;
+    n++;
+  }
+  return n;
+}
+
+// Water balance
 
 export interface MmRange {
   low: number;
   high: number;
 }
 
+export interface FarmInputs {
+  /** Today in Nairobi, YYYY-MM-DD */
+  today: string;
+  et0: Et0Estimate;
+  /** ET₀ on the days before today, by date */
+  past_et0: Record<string, DayEt0>;
+  rain: RainRecord;
+  /** Open-Meteo's FAO-56 Penman-Monteith ET₀ for today, shown beside the station value */
+  regional_et0_mm_day: number | null;
+  /** Rain in the regional forecast for the next 48 hours */
+  forecast_rain_48h_mm: number | null;
+  soil: RegionalSoilMoisture | null;
+}
+
 export interface WaterBalance {
+  /** Today's Hargreaves ET₀ */
   et0_mm_day: number;
+  et0_source: Et0Source;
+  et0_tmax_c: number;
+  et0_tmin_c: number;
+  et0_station_hours: number;
+  ra_mm_day: number;
+  regional_et0_mm_day: number | null;
   etc_mm_day: number;
   kc: number;
+  root_depth_m: number;
+  rain_source: RainSource;
+  /** The 7 and 30 days ending today, today so far included */
   rain_7d_mm: number;
+  rain_7d_days_with_data: number;
+  effective_rain_7d_mm: number;
   rain_30d_mm: number;
+  rain_30d_days_with_data: number;
   demand_7d_mm: number;
+  /** Days of the 7 whose ET₀ came from the station's own Tmax and Tmin */
+  demand_7d_station_days: number;
+  /** Effective rain minus crop demand; negative is a shortfall */
   balance_7d_mm: number;
+  /** Crop demand not met by effective rain, never below 0 */
+  net_irrigation_7d_mm: number;
   demand_30d_mm: number;
   balance_30d_mm: number;
-  soil_moisture_pct: number;
+  forecast_rain_48h_mm: number | null;
+  /** Regional soil moisture (ERA5-Land, 7 to 28 cm) as a %, context only */
+  soil_moisture_pct: number | null;
+  /** Where that reading sits in its own last 365 days */
+  soil_percentile: number | null;
+  soil_date: string | null;
+  /** The 7-day shortfall as a share of what the root zone holds, if it was full a week ago */
   depletion_pct: number;
-  /** Depletion implied by the ERA5-Land soil moisture reading alone */
-  soil_depletion_pct: number;
   readily_available_mm: number;
   /** Readily available water at the low and high clay available-water bounds */
   readily_available_range_mm: MmRange;
+  /** Total available water the root zone holds, same bounds */
+  total_available_range_mm: MmRange;
 }
 
 // Soil at the JKUAT site is taken as clay: SoilGrids gives about 43 % clay at
-// 0 to 5 cm. Water limits for clay from FAO-56 Table 19 (Allen et al. 1998), m³/m³.
-const CLAY_FIELD_CAPACITY = { low: 0.32, high: 0.40 };
-const CLAY_WILTING_POINT = { low: 0.20, high: 0.24 };
-const CLAY_AVAILABLE_WATER = { low: 0.12, high: 0.20 };
+// 0 to 5 cm, and FAO-56 Table 19 gives clay 0.12 to 0.20 m³/m³ of available
+// water. The field's own figure is unknown, so holding capacities span that range.
+const CLAY_AVAILABLE_WATER = { low: 0.12, high: 0.2 };
+const CLAY_AVAILABLE_WATER_MID = (CLAY_AVAILABLE_WATER.low + CLAY_AVAILABLE_WATER.high) / 2;
 
-// One depletion figure needs one soil, so it is read against the middle of
-// each range; irrigation depths are then given across the whole
-// available-water range, since the field's own holding capacity is unknown.
-const FIELD_CAPACITY_VOL = (CLAY_FIELD_CAPACITY.low + CLAY_FIELD_CAPACITY.high) / 2;
-const WILTING_POINT_VOL = (CLAY_WILTING_POINT.low + CLAY_WILTING_POINT.high) / 2;
-
-function readilyAvailableMm(availableWaterVol: number, crop: CropProfile): number {
-  return Math.round(availableWaterVol * 1000 * crop.root_depth_m * crop.depletion_fraction * 10) / 10;
-}
-
-/** Share of the root zone's available water already used (0 to 100 %), from a
- * volumetric soil moisture reading against the clay limits above. */
-export function soilDepletionPct(soilVol: number): number {
-  const availableFraction = Math.max(
-    0,
-    Math.min(1, (soilVol - WILTING_POINT_VOL) / (FIELD_CAPACITY_VOL - WILTING_POINT_VOL)),
-  );
-  return Math.round((1 - availableFraction) * 1000) / 10;
-}
-
-export function computeWaterBalance(
-  situation: SituationResult,
-  crop: CropProfile,
-  stage: GrowthStage,
-  tmaxC: number,
-  tminC: number,
-): WaterBalance {
-  const et0 = computeEt0(tmaxC, tminC);
+export function computeWaterBalance(inputs: FarmInputs, crop: CropProfile, stage: GrowthStage): WaterBalance {
   const kc = crop.kc[stage];
+  const et0 = inputs.et0.et0_mm_day;
   const etc = Math.round(et0 * kc * 100) / 100;
 
-  const rain7 = situation.chirps.chirps_7d_mm;
-  const rain30 = situation.chirps.chirps_30d_mm;
-  const demand7 = Math.round(etc * 7 * 10) / 10;
-  const balance7 = Math.round((rain7 - demand7) * 10) / 10;
-  // A 7-day rain deficit that looks fine can still mask a longer dry stretch,
-  // check the 30-day balance too rather than deciding on one short window alone.
-  const demand30 = Math.round(etc * 30 * 10) / 10;
-  const balance30 = Math.round((rain30 - demand30) * 10) / 10;
+  // A day with neither a station nor a regional reading takes today's ET₀.
+  const et0On = (date: string) => (date === inputs.today ? et0 : inputs.past_et0[date]?.et0_mm ?? et0);
+  const fromStation = (date: string) =>
+    date === inputs.today ? inputs.et0.source === "station" : inputs.past_et0[date]?.source === "station";
+  const demandOver = (dates: string[]) => round1(dates.reduce((sum, d) => sum + kc * et0On(d), 0));
 
-  // ERA5-Land volumetric soil water (m³/m³) → percentage
-  const soilVol = situation.era5.era5_soil_moisture;
-  const soilPct = Math.round(soilVol * 1000) / 10;
-
-  const raw = readilyAvailableMm(FIELD_CAPACITY_VOL - WILTING_POINT_VOL, crop);
-  const rawRange = {
-    low: readilyAvailableMm(CLAY_AVAILABLE_WATER.low, crop),
-    high: readilyAvailableMm(CLAY_AVAILABLE_WATER.high, crop),
+  const rainByDate = new Map(inputs.rain.days.map((d) => [d.date, d.mm]));
+  const rainOver = (dates: string[]) => {
+    let total = 0;
+    let effective = 0;
+    let reported = 0;
+    for (const date of dates) {
+      const mm = rainByDate.get(date);
+      if (mm == null) continue;
+      total += mm;
+      effective += effectiveRainMm(mm);
+      reported++;
+    }
+    return { total: round1(total), effective: round1(effective), reported };
   };
 
-  // Depletion from the rain-vs-demand accounting, for both windows.
-  const deficit7 = Math.max(0, -balance7);
-  const depletion7Pct = Math.min(100, Math.round((deficit7 / Math.max(1, raw)) * 1000) / 10);
-  const deficit30 = Math.max(0, -balance30);
-  const depletion30Pct = Math.min(100, Math.round((deficit30 / Math.max(1, raw)) * 1000) / 10);
+  const week = datesEnding(inputs.today, 7);
+  const month = datesEnding(inputs.today, 30);
+  const demand7 = demandOver(week);
+  const demand30 = demandOver(month);
+  const rain7 = rainOver(week);
+  const rain30 = rainOver(month);
 
-  // Depletion from the real ERA5 soil moisture reading directly, a much more
-  // direct signal of actual root-zone water status than rainfall accounting
-  // alone, since it also reflects drainage, prior irrigation and evaporation
-  // that a simple rain-minus-demand tally can't see.
-  const soilDepletion = soilDepletionPct(soilVol);
-
-  // The most severe of the three signals wins, irrigation decisions should
-  // never be reassured by a short calm window while soil moisture or the
-  // longer trend already shows real stress.
-  const depletionPct = Math.max(depletion7Pct, depletion30Pct, soilDepletion);
+  const zr = rootDepthM(crop, stage);
+  const holding = (availableWater: number) => round1(availableWater * 1000 * zr);
+  const taw = { low: holding(CLAY_AVAILABLE_WATER.low), high: holding(CLAY_AVAILABLE_WATER.high) };
+  const tawMid = CLAY_AVAILABLE_WATER_MID * 1000 * zr;
+  const readily = (total: number) => round1(total * crop.depletion_fraction);
+  const net7 = round1(Math.max(0, demand7 - rain7.effective));
+  const soil = inputs.soil;
 
   return {
     et0_mm_day: et0,
+    et0_source: inputs.et0.source,
+    et0_tmax_c: inputs.et0.tmax_c,
+    et0_tmin_c: inputs.et0.tmin_c,
+    et0_station_hours: inputs.et0.station_hours,
+    ra_mm_day: inputs.et0.ra_mm_day,
+    regional_et0_mm_day: inputs.regional_et0_mm_day,
     etc_mm_day: etc,
     kc,
-    rain_7d_mm: rain7,
-    rain_30d_mm: rain30,
+    root_depth_m: zr,
+    rain_source: inputs.rain.source,
+    rain_7d_mm: rain7.total,
+    rain_7d_days_with_data: rain7.reported,
+    effective_rain_7d_mm: rain7.effective,
+    rain_30d_mm: rain30.total,
+    rain_30d_days_with_data: rain30.reported,
     demand_7d_mm: demand7,
-    balance_7d_mm: balance7,
+    demand_7d_station_days: week.filter(fromStation).length,
+    balance_7d_mm: round1(rain7.effective - demand7),
+    net_irrigation_7d_mm: net7,
     demand_30d_mm: demand30,
-    balance_30d_mm: balance30,
-    soil_moisture_pct: soilPct,
-    depletion_pct: depletionPct,
-    soil_depletion_pct: soilDepletion,
-    readily_available_mm: raw,
-    readily_available_range_mm: rawRange,
+    balance_30d_mm: round1(rain30.effective - demand30),
+    forecast_rain_48h_mm: inputs.forecast_rain_48h_mm,
+    soil_moisture_pct: soil ? round1(soil.value_m3 * 100) : null,
+    soil_percentile: soil?.percentile ?? null,
+    soil_date: soil?.date ?? null,
+    depletion_pct: Math.min(100, Math.round((net7 / tawMid) * 1000) / 10),
+    readily_available_mm: readily(tawMid),
+    readily_available_range_mm: { low: readily(taw.low), high: readily(taw.high) },
+    total_available_range_mm: taw,
   };
 }
 
@@ -214,118 +442,83 @@ export interface IrrigationAdvice {
   depth_mm: number;
   /** Litres per m² == mm; provided for smallholder framing */
   litres_per_m2: number;
-  /** Suggested depth across the clay available-water range, to the nearest
-   * 5 mm (null when no irrigation is advised) */
+  /** Suggested depth to the nearest 5 mm, a range when the root zone cannot
+   * hold the whole shortfall (null when no irrigation is advised) */
   depth_range_mm: MmRange | null;
   reason_keys: string[];
-  confidence: "LOW" | "MODERATE" | "HIGH";
+  confidence: Confidence;
 }
 
-const HEAVY_DEPLETION_PCT = 70;
-const MODERATE_DEPLETION_PCT = 40;
+// A shortfall under 5 mm is within the rounding of the inputs.
+export const MIN_IRRIGATION_MM = 5;
+// Hold off when the regional forecast has at least this much rain within 48 hours.
+export const HOLD_FORECAST_RAIN_MM = 10;
+const HIGH_ETC_MM = 4.5;
 
-/** The inputs are a regional layer and a typical soil, so a depth finer than
- * 5 mm would claim more precision than they carry. */
+/** The inputs carry a regional model and a typical soil, so a depth finer
+ * than 5 mm would claim more precision than they have. */
 export function roundToFiveMm(mm: number): number {
   return Math.round(mm / 5) * 5;
 }
 
-/** A fraction of the readily available water, at both available-water bounds */
-export function irrigationDepthRange(readilyAvailable: MmRange, fraction: number): MmRange {
+/** The shortfall to the nearest 5 mm, but no more than the root zone holds at
+ * either end of the clay range: water beyond that drains past the roots. */
+export function irrigationDepthRange(shortfallMm: number, holding: MmRange): MmRange {
   return {
-    low: roundToFiveMm(readilyAvailable.low * fraction),
-    high: roundToFiveMm(readilyAvailable.high * fraction),
+    low: roundToFiveMm(Math.min(shortfallMm, holding.low)),
+    high: roundToFiveMm(Math.min(shortfallMm, holding.high)),
   };
 }
 
-export function computeIrrigationAdvice(
-  wb: WaterBalance,
-  situation: SituationResult,
-): IrrigationAdvice {
-  const reasons: string[] = [];
-  const rainProb = situation.risk.rain_probability;
+/** HIGH when both the rain and every day's ET₀ come from the station, MODERATE
+ * when one of them does, LOW when both come from the regional model. */
+export function adviceConfidence(wb: WaterBalance): Confidence {
+  const stationRain = wb.rain_source === "station_gauge";
+  const stationEt0 = wb.et0_source === "station";
+  if (stationRain && stationEt0 && wb.rain_7d_days_with_data === 7 && wb.demand_7d_station_days === 7) return "HIGH";
+  if (stationRain || stationEt0) return "MODERATE";
+  return "LOW";
+}
 
-  // Rain expected soon → hold, avoid wasting water
-  if (rainProb >= 0.45 && wb.depletion_pct < 85) {
-    reasons.push("farm_reason_rain_expected");
-    if (wb.balance_7d_mm < 0) reasons.push("farm_reason_deficit_but_rain");
+const capAtModerate = (c: Confidence): Confidence => (c === "HIGH" ? "MODERATE" : c);
+
+export function computeIrrigationAdvice(wb: WaterBalance): IrrigationAdvice {
+  const confidence = adviceConfidence(wb);
+  const none = { depth_mm: 0, litres_per_m2: 0, depth_range_mm: null };
+
+  if (wb.net_irrigation_7d_mm < MIN_IRRIGATION_MM) {
+    return {
+      action: "NO_IRRIGATION",
+      ...none,
+      reason_keys: [
+        wb.effective_rain_7d_mm >= wb.demand_7d_mm ? "farm_reason_rain_meets_demand" : "farm_reason_small_shortfall",
+      ],
+      confidence,
+    };
+  }
+
+  // The forecast is a regional model, so a hold is never more than moderately sure.
+  if (wb.forecast_rain_48h_mm != null && wb.forecast_rain_48h_mm >= HOLD_FORECAST_RAIN_MM) {
     return {
       action: "HOLD_RAIN_EXPECTED",
-      depth_mm: 0,
-      litres_per_m2: 0,
-      depth_range_mm: null,
-      reason_keys: reasons,
-      confidence: situation.quality.status === "GOOD" ? "MODERATE" : "LOW",
+      ...none,
+      reason_keys: ["farm_reason_demand_exceeds_rain", "farm_reason_rain_expected"],
+      confidence: capAtModerate(confidence),
     };
   }
 
-  // Rain over the last 7 days covered the crop's demand, yet the soil reading
-  // says the root zone is heavily depleted. That reading is a coarse regional
-  // model layer, not the field, so rather than size a large depth on it, ask
-  // for the soil to be checked.
-  if (wb.rain_7d_mm >= wb.demand_7d_mm && wb.soil_depletion_pct >= HEAVY_DEPLETION_PCT) {
-    return {
-      action: "CHECK_SOIL",
-      depth_mm: 0,
-      litres_per_m2: 0,
-      depth_range_mm: null,
-      reason_keys: ["farm_reason_rain_meets_demand", "farm_reason_low_soil_moisture"],
-      confidence: "LOW",
-    };
-  }
-
-  // Severe depletion → irrigate now.
-  // Depth is sized off the depletion fraction itself (not just the 7-day rain
-  // deficit) so it stays sensible even when soil moisture, not the recent
-  // rain balance, is what's driving the decision.
-  if (wb.depletion_pct >= HEAVY_DEPLETION_PCT) {
-    const range = irrigationDepthRange(wb.readily_available_range_mm, wb.depletion_pct / 100);
-    reasons.push("farm_reason_high_depletion");
-    if (wb.balance_7d_mm < 0) reasons.push("farm_reason_demand_exceeds_rain");
-    if (wb.soil_depletion_pct >= HEAVY_DEPLETION_PCT) reasons.push("farm_reason_low_soil_moisture");
-    if (wb.etc_mm_day > 4.5) reasons.push("farm_reason_high_et");
-    return {
-      action: "IRRIGATE_NOW",
-      depth_mm: range.low,
-      litres_per_m2: range.low,
-      depth_range_mm: range,
-      reason_keys: reasons,
-      confidence: situation.quality.status === "GOOD" ? "HIGH" : "MODERATE",
-    };
-  }
-
-  // Moderate depletion → irrigate soon
-  if (wb.depletion_pct >= MODERATE_DEPLETION_PCT) {
-    const range = irrigationDepthRange(wb.readily_available_range_mm, 0.5);
-    reasons.push("farm_reason_moderate_depletion");
-    if (wb.rain_7d_mm < 10) reasons.push("farm_reason_low_recent_rain");
-    if (wb.soil_depletion_pct >= MODERATE_DEPLETION_PCT) reasons.push("farm_reason_low_soil_moisture");
-    return {
-      action: "IRRIGATE_SOON",
-      depth_mm: range.low,
-      litres_per_m2: range.low,
-      depth_range_mm: range,
-      reason_keys: reasons,
-      confidence: situation.quality.status === "GOOD" ? "MODERATE" : "LOW",
-    };
-  }
-
-  // Adequate water. A negative 7-day balance can still be safe when the root
-  // zone holds enough readily available water to buffer it, say so explicitly
-  // rather than implying rainfall alone met demand.
-  if (wb.balance_7d_mm < 0) {
-    reasons.push("farm_reason_buffered_by_rootzone");
-  } else {
-    reasons.push("farm_reason_adequate_moisture");
-    if (wb.rain_7d_mm >= wb.demand_7d_mm) reasons.push("farm_reason_rain_meets_demand");
-  }
+  const range = irrigationDepthRange(wb.net_irrigation_7d_mm, wb.total_available_range_mm);
+  const reasons = ["farm_reason_demand_exceeds_rain"];
+  if (wb.net_irrigation_7d_mm > wb.total_available_range_mm.low) reasons.push("farm_reason_root_zone_cap");
+  if (wb.etc_mm_day > HIGH_ETC_MM) reasons.push("farm_reason_high_et");
+  if (wb.forecast_rain_48h_mm == null) reasons.push("farm_reason_forecast_unavailable");
   return {
-    action: "NO_IRRIGATION",
-    depth_mm: 0,
-    litres_per_m2: 0,
-    depth_range_mm: null,
+    action: "IRRIGATE_NOW",
+    depth_mm: range.low,
+    litres_per_m2: range.low,
+    depth_range_mm: range,
     reason_keys: reasons,
-    confidence: situation.quality.status === "GOOD" ? "HIGH" : "MODERATE",
+    confidence: wb.forecast_rain_48h_mm == null ? capAtModerate(confidence) : confidence,
   };
 }
 
@@ -373,42 +566,45 @@ export function evaluateSprayWindow(situation: SituationResult): FieldWindow {
   return { operation: "spraying", quality: score, reason_keys: reasons.slice(0, 4) };
 }
 
-// Planting outlook (rain-fed)
+// Planting outlook (rain-fed), from the same rain record as the water balance
 
 export interface PlantingOutlook {
   favourable: boolean;
   rain_30d_mm: number;
+  rain_source: RainSource;
+  /** Days of the 30 with a reading */
+  rain_days_with_data: number;
   required_mm: number;
   dry_spell_days: number;
-  percentile: number;
   message_key: string;
 }
 
-export function evaluatePlantingOutlook(
-  situation: SituationResult,
-  crop: CropProfile,
-): PlantingOutlook {
-  const rain30 = situation.chirps.chirps_30d_mm;
-  const dry = situation.chirps.chirps_dry_spell_days;
-  const pct = situation.chirps.chirps_percentile;
+const LONG_DRY_SPELL_DAYS = 7;
+
+export function evaluatePlantingOutlook(rain: RainRecord, today: string, crop: CropProfile): PlantingOutlook {
+  const byDate = new Map(rain.days.map((d) => [d.date, d.mm]));
+  const month = datesEnding(today, 30).map((date) => byDate.get(date) ?? null);
+  const reported = month.filter((mm): mm is number => mm != null);
+  const rain30 = round1(reported.reduce((a, b) => a + b, 0));
+  const dry = spellLength(month, false);
   const required = crop.planting_rain_mm;
 
   // Rain-fed planting favours accumulated moisture plus no long dry spell
-  const favourable = rain30 >= required && dry <= 7;
+  const favourable = rain30 >= required && dry <= LONG_DRY_SPELL_DAYS;
 
   let key: string;
-  if (favourable && pct >= 60) key = "farm_plant_favourable_wet";
-  else if (favourable) key = "farm_plant_favourable";
-  else if (rain30 < required && dry > 7) key = "farm_plant_dry";
+  if (favourable) key = "farm_plant_favourable";
+  else if (rain30 < required && dry > LONG_DRY_SPELL_DAYS) key = "farm_plant_dry";
   else if (rain30 < required) key = "farm_plant_insufficient";
   else key = "farm_plant_dryspell";
 
   return {
     favourable,
     rain_30d_mm: rain30,
+    rain_source: rain.source,
+    rain_days_with_data: reported.length,
     required_mm: required,
     dry_spell_days: dry,
-    percentile: pct,
     message_key: key,
   };
 }
@@ -421,24 +617,18 @@ export interface CropStressSignal {
   level: HeatStress;
   /** Peak air temperature used for the assessment */
   peak_temp_c: number;
+  /** The station's measured maximum over the last 24 hours, or the regional forecast maximum for today */
+  peak_source: Et0Source;
   reason_keys: string[];
 }
 
 /**
- * Crop heat-stress signal from forecast air temperature.
- * Thresholds reflect widely documented cardinal temperatures for the
- * crops listed above; they are advisory signals, not yield predictions.
+ * Crop heat-stress signal from the day's peak air temperature, the same Tmax
+ * the ET₀ uses. Thresholds reflect widely documented cardinal temperatures for
+ * the crops listed above; they are advisory signals, not yield predictions.
  */
-export function evaluateCropStress(
-  situation: SituationResult,
-  crop: CropProfile,
-  stage: GrowthStage,
-): CropStressSignal {
-  // Approximate peak air temperature from the WBGT peak and current offset
-  const peakWbgt = situation.expected_peak?.wbgt_c ?? situation.current.wbgt_c;
-  const offset = situation.current.temperature_c - situation.current.wbgt_c;
-  const peakTemp = Math.round((peakWbgt + offset) * 10) / 10;
-
+export function evaluateCropStress(et0: Et0Estimate, stage: GrowthStage): CropStressSignal {
+  const peakTemp = et0.tmax_c;
   const reasons: string[] = [];
   let level: HeatStress = "NONE";
 
@@ -454,12 +644,8 @@ export function evaluateCropStress(
   else reasons.push("farm_reason_no_heat_stress");
 
   if (sensitive && level !== "NONE") reasons.push("farm_reason_flowering_sensitive");
-  // Below the clay wilting point the crop cannot draw water to cool itself.
-  if (situation.era5.era5_soil_moisture < CLAY_WILTING_POINT.low && level !== "NONE") {
-    reasons.push("farm_reason_dry_soil_compounds");
-  }
 
-  return { level, peak_temp_c: peakTemp, reason_keys: reasons.slice(0, 3) };
+  return { level, peak_temp_c: peakTemp, peak_source: et0.source, reason_keys: reasons };
 }
 
 // Full farm advisory bundle
@@ -480,27 +666,20 @@ export interface FarmAdvisory {
 
 export function buildFarmAdvisory(
   situation: SituationResult,
-  cropKey: string,
+  crop: CropProfile,
   stage: GrowthStage,
+  inputs: FarmInputs,
 ): FarmAdvisory {
-  const crop = getCropProfile(cropKey);
-
-  // Daily temperature range from the forecast series (drives Hargreaves ET₀)
-  const temps = situation.forecast_series.map((p) => p.value);
-  const offset = situation.current.temperature_c - situation.current.wbgt_c;
-  const tmax = Math.round((Math.max(...temps) + offset) * 10) / 10;
-  const tmin = Math.round((Math.min(...temps) + offset) * 10) / 10;
-
-  const wb = computeWaterBalance(situation, crop, stage, tmax, tmin);
+  const wb = computeWaterBalance(inputs, crop, stage);
 
   return {
     crop,
     stage,
     water_balance: wb,
-    irrigation: computeIrrigationAdvice(wb, situation),
+    irrigation: computeIrrigationAdvice(wb),
     spray_window: evaluateSprayWindow(situation),
-    planting: evaluatePlantingOutlook(situation, crop),
-    stress: evaluateCropStress(situation, crop, stage),
+    planting: evaluatePlantingOutlook(inputs.rain, inputs.today, crop),
+    stress: evaluateCropStress(inputs.et0, stage),
     field_work_window: situation.best_time
       ? {
           start: situation.best_time.recommended.start,

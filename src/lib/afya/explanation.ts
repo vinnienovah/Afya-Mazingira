@@ -41,9 +41,9 @@ export interface ExplanationFacts {
   transition_next_sw: string | null;
   transition_probability: number | null;
   transition_typical_hours: number | null;
-  era5_temp_anomaly: number;
-  era5_humidity_anomaly: number;
-  chirps_7d_mm: number;
+  era5_temp_anomaly: number | null;
+  era5_humidity_anomaly: number | null;
+  chirps_7d_mm: number | null;
   sentinel2_ndvi: number | null;
   sentinel3_lst: number | null;
   model_3h_algorithm: string;
@@ -127,7 +127,7 @@ export function buildExplanationFacts(situation: SituationResult): ExplanationFa
 // from, and the AI correctly (if unhelpfully) says so. This gives it the
 // real, already-computed farm advisory facts to draw on instead.
 const FARM_REASON_EN: Record<string, string> = {
-  farm_reason_rain_expected: "rain is expected soon, so irrigating now would waste water",
+  farm_reason_rain_expected: "the regional forecast has 10 mm or more of rain in the next 48 hours, so irrigating now could waste water",
   farm_reason_deficit_but_rain: "there is a soil water deficit, but expected rain should cover it",
   farm_reason_high_depletion: "root-zone water is substantially depleted",
   farm_reason_demand_exceeds_rain: "crop water demand has exceeded recent rainfall",
@@ -138,6 +138,9 @@ const FARM_REASON_EN: Record<string, string> = {
   farm_reason_adequate_moisture: "soil moisture is adequate for this stage",
   farm_reason_rain_meets_demand: "recent rainfall meets crop water demand",
   farm_reason_buffered_by_rootzone: "rainfall is below demand, but the root zone still holds enough reserve",
+  farm_reason_small_shortfall: "the 7-day shortfall is under 5 mm, too small to be worth irrigating",
+  farm_reason_root_zone_cap: "the root zone cannot hold the whole shortfall at once, so the rest should be given over the next days",
+  farm_reason_forecast_unavailable: "the rain forecast could not be read, so upcoming rain was not checked",
   farm_reason_wind_drift: "wind is too strong, risking spray drift",
   farm_reason_wind_too_calm: "wind is very light, giving poor spray deposition",
   farm_reason_wind_suitable: "wind speed is suitable for spraying",
@@ -146,9 +149,9 @@ const FARM_REASON_EN: Record<string, string> = {
   farm_reason_low_rain_risk: "rain risk during application is low",
   farm_reason_evaporation: "high temperature will make droplets evaporate quickly",
   farm_reason_data_limited: "station data is limited, so confidence is reduced",
-  farm_reason_severe_heat: "forecast temperature is well above the crop's comfortable range",
-  farm_reason_moderate_heat: "forecast temperature is above the crop's comfortable range",
-  farm_reason_mild_heat: "forecast temperature is at the edge of the comfortable range",
+  farm_reason_severe_heat: "peak air temperature is well above the crop's comfortable range",
+  farm_reason_moderate_heat: "peak air temperature is above the crop's comfortable range",
+  farm_reason_mild_heat: "peak air temperature is at the edge of the comfortable range",
   farm_reason_no_heat_stress: "temperatures stay within the crop's comfortable range",
   farm_reason_flowering_sensitive: "flowering is the most heat-sensitive stage",
   farm_reason_dry_soil_compounds: "dry soil makes heat stress worse",
@@ -162,7 +165,8 @@ export function buildFarmExplanationFacts(advisory: {
   stage: string;
   water_balance: {
     et0_mm_day: number; etc_mm_day: number; rain_7d_mm: number; rain_30d_mm: number;
-    balance_7d_mm: number; balance_30d_mm: number; soil_moisture_pct: number; depletion_pct: number;
+    balance_7d_mm: number; balance_30d_mm: number; soil_moisture_pct: number | null; depletion_pct: number;
+    net_irrigation_7d_mm: number; rain_source: string; et0_source: string;
   };
   irrigation: { action: string; depth_mm: number; reason_keys: string[] };
   spray_window: { quality: string; reason_keys: string[] };
@@ -183,6 +187,9 @@ export function buildFarmExplanationFacts(advisory: {
     farm_water_balance_7d_mm: advisory.water_balance.balance_7d_mm,
     farm_water_balance_30d_mm: advisory.water_balance.balance_30d_mm,
     farm_daily_water_demand_mm: advisory.water_balance.etc_mm_day,
+    farm_net_irrigation_7d_mm: advisory.water_balance.net_irrigation_7d_mm,
+    farm_rain_source: advisory.water_balance.rain_source,
+    farm_et0_source: advisory.water_balance.et0_source,
     farm_spray_window_quality: advisory.spray_window.quality,
     farm_spray_window_reasons: reasonText(advisory.spray_window.reason_keys),
     farm_planting_outlook: advisory.planting.favourable ? "favourable" : "unfavourable",

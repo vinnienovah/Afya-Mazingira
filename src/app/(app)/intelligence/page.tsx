@@ -340,13 +340,13 @@ export default function IntelligencePage() {
           <p className="text-xs font-semibold text-afya-charcoal mb-2">{t("local_vs_regional")}</p>
           <div className="flex gap-6">
             <div>
-              <div className="text-lg font-bold" style={{ color: era5.local_temp_anomaly_c >= 0 ? "#E27832" : "#247B78" }}>
+              <div className="text-lg font-bold" style={{ color: (era5.local_temp_anomaly_c ?? 0) >= 0 ? "#E27832" : "#247B78" }}>
                 {era5Ok ? `${era5.local_temp_anomaly_c >= 0 ? "+" : ""}${era5.local_temp_anomaly_c.toFixed(1)}°C` : "-"}
               </div>
               <div className="text-[10px] text-afya-muted">{lang === "sw" ? "Tofauti ya Joto" : "Temp anomaly"}</div>
             </div>
             <div>
-              <div className="text-lg font-bold" style={{ color: era5.local_humidity_anomaly >= 0 ? "#247B78" : "#E27832" }}>
+              <div className="text-lg font-bold" style={{ color: (era5.local_humidity_anomaly ?? 0) >= 0 ? "#247B78" : "#E27832" }}>
                 {era5Ok ? `${era5.local_humidity_anomaly >= 0 ? "+" : ""}${era5.local_humidity_anomaly.toFixed(1)}%` : "-"}
               </div>
               <div className="text-[10px] text-afya-muted">{lang === "sw" ? "Tofauti ya Unyevu" : "RH anomaly"}</div>

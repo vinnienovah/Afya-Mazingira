@@ -100,9 +100,12 @@ export interface BestTimeResult {
   duration_minutes: number;
 }
 
-export interface Era5Context {
-  // False when ERA5-Land could not be fetched and the values are placeholders.
-  available?: boolean;
+// Every value null: what a context carries when its source could not be read.
+type Unavailable<T> = { [K in keyof T]: null };
+
+// ERA5 (~28 km, Open-Meteo archive) at the station's hour of day on the latest
+// day ERA5 has published, about five days back; valid_time is that hour.
+interface Era5Values {
   era5_temp_c: number;
   era5_dewpoint_c: number;
   era5_relative_humidity: number;
@@ -111,23 +114,42 @@ export interface Era5Context {
   era5_wind_dir_deg: number;
   era5_solar_wm2: number;
   era5_precip_hourly_mm: number;
+  // 0 to 7 cm, m³/m³
   era5_soil_moisture: number;
   local_temp_anomaly_c: number;
   local_humidity_anomaly: number;
   valid_time: string;
 }
 
-export interface ChirpsContext {
-  // False when the rainfall could not be fetched and the values are placeholders.
-  available?: boolean;
+export type Era5Context =
+  | ({ available: true } & Era5Values)
+  | ({ available: false } & Unavailable<Era5Values>);
+
+// Rainfall around the station from Open-Meteo's forecast model with past days,
+// which has no publication lag. Nairobi calendar days; today counts the hours
+// up to `through`. The chirps_ names predate the move away from CHIRPS.
+interface RainfallValues {
+  source: "open-meteo-forecast";
+  // Today so far
   chirps_mm: number;
+  // The 7 and 30 days ending today, today so far included
   chirps_7d_mm: number;
   chirps_30d_mm: number;
+  // Mid-rank percentile of today among those 30 days
   chirps_percentile: number;
+  // Days in a row, ending today, below or at least 1 mm
   chirps_dry_spell_days: number;
   chirps_wet_spell_days: number;
+  // Today (YYYY-MM-DD), the last day of both windows
   valid_date: string;
+  window_7d_start: string;
+  window_30d_start: string;
+  through: string;
 }
+
+export type ChirpsContext =
+  | ({ available: true } & RainfallValues)
+  | ({ available: false } & Unavailable<RainfallValues>);
 
 export interface SentinelContext {
   sentinel2_available: boolean;

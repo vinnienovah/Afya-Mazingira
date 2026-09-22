@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { runPipeline } from "@/lib/afya/pipeline";
 import { generateExplanation, buildExplanationFacts, buildFarmExplanationFacts } from "@/lib/afya/explanation";
-import { buildFarmAdvisory, type GrowthStage } from "@/lib/afya/farm-engine";
+import { buildFarmAdvisory, findCropProfile, type GrowthStage } from "@/lib/afya/farm-engine";
+import { loadFarmInputs } from "@/lib/afya/farm-inputs";
 import type { Lang } from "@/lib/afya/types";
 
 // Safety net for the (usually much faster) real ERA5/Sentinel fetches in
@@ -37,8 +38,11 @@ export async function POST(req: NextRequest) {
 
     const situation = await runPipeline();
     const facts = buildExplanationFacts(situation);
-    const extraFacts = context === "farm"
-      ? buildFarmExplanationFacts(buildFarmAdvisory(situation, crop ?? "maize", (stage ?? "vegetative") as GrowthStage))
+    // An unknown crop gets no farm facts rather than another crop's.
+    const farmCrop = context === "farm" ? findCropProfile(crop ?? "maize") : null;
+    const farmInputs = farmCrop ? await loadFarmInputs() : null;
+    const extraFacts = farmCrop && farmInputs
+      ? buildFarmExplanationFacts(buildFarmAdvisory(situation, farmCrop, (stage ?? "vegetative") as GrowthStage, farmInputs))
       : undefined;
     const result = await generateExplanation(
       situation,
