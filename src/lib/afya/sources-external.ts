@@ -107,6 +107,8 @@ async function refreshEra5(): Promise<void> {
       ].join(","),
       start_date: start.toISOString().slice(0, 10),
       end_date: end.toISOString().slice(0, 10),
+      // Without it the endpoint blends finer models into the latest days.
+      models: "era5",
       timezone: "UTC",
     });
     const res = await fetch(`https://archive-api.open-meteo.com/v1/era5?${params}`, {

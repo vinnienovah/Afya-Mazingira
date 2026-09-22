@@ -131,3 +131,20 @@ test("soil moisture is placed within its own last 365 days", () => {
   // Too short a record for a yearly rank.
   assert.equal(soilMoistureContext(dates.slice(-200), values.slice(-200)), null);
 });
+
+test("the regional context asks the archive for ERA5 itself, not its blend of finer models", async () => {
+  const urls: string[] = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    urls.push(String(input));
+    return new Response(JSON.stringify({ hourly: { time: [] } }), { status: 200 });
+  }) as typeof fetch;
+  try {
+    await getEra5ContextLive(new Date().toISOString(), 24, 50, true);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  const era5 = urls.map((u) => new URL(u)).filter((u) => u.pathname.endsWith("/v1/era5"));
+  assert.ok(era5.length > 0, urls.join("\n"));
+  for (const u of era5) assert.equal(u.searchParams.get("models"), "era5");
+});
