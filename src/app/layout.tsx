@@ -13,7 +13,13 @@ export const metadata: Metadata = {
     "AFYA MAZINGIRA transforms environmental observations into forecasts, risk assessments, and early-action recommendations for JKUAT/Juja, Kenya.",
   manifest: "/manifest.json",
   appleWebApp: { capable: true, statusBarStyle: "default", title: "AFYA MAZINGIRA" },
-  icons: { icon: "/icons/icon-192.png", apple: "/icons/icon-192.png" },
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "16x16 32x32 48x48" },
+      { url: "/icons/icon-192.png", type: "image/png", sizes: "192x192" },
+    ],
+    apple: { url: "/apple-touch-icon.png", sizes: "180x180" },
+  },
 };
 
 export const viewport: Viewport = {
