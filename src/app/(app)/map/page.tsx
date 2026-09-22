@@ -14,7 +14,10 @@ import { RiskChip } from "@/components/ui/RiskChip";
 import {
   X, ChevronRight, ChevronLeft, Play, Pause, Info,
   Layers, Radio, Thermometer, Droplets, Leaf, } from "lucide-react";
-import type { CountyFeature, SatelliteAcquisition } from "@/lib/afya/map-data";
+import type { CountyFeature, HourSource, SatelliteAcquisition } from "@/lib/afya/map-data";
+import {
+  HOUR_SOURCE_LABEL_KEY, NDVI_STEPS, NO_DATA_COLOUR, RAIN_STEPS, THERMAL_STEPS, outlookColour,
+} from "@/lib/afya/map-scales";
 import type { MapLayerKey } from "@/components/map/CountyLeafletMap";
 import { cn } from "@/lib/utils";
 import type { FeatureCollection, Geometry } from "geojson";
@@ -74,6 +77,11 @@ export default function MapPage() {
 
   const currentTime = TIMES[timeIdx];
   const sat = satellites[satIdx];
+
+  const legend: [string, string][] =
+    layer === "outlook"
+      ? (["LOW", "ELEVATED", "HIGH", "VERY_HIGH"] as const).map((lv) => [RISK_META[lv].color, lang === "sw" ? RISK_META[lv].sw : RISK_META[lv].en])
+      : (layer === "rain" ? RAIN_STEPS : layer === "vegetation" ? NDVI_STEPS : THERMAL_STEPS).map((s) => [s.colour, s.label]);
 
   return (
     <div className="space-y-5">
@@ -197,48 +205,30 @@ export default function MapPage() {
                   stationLabel={t("jkuat_station")}
                   stationSubLabel={t("ground_measurement")}
                   lang={lang}
+                  t={t}
                 />
               )}
 
               {/* Legend overlay */}
               <div className="absolute bottom-4 left-4 z-[500] rounded-xl bg-white/95 border border-afya-border px-3 py-2 backdrop-blur-sm shadow-sm">
-                {layer === "outlook" && (
-                  <div className="flex flex-col gap-1">
-                    {(["LOW", "ELEVATED", "HIGH", "VERY_HIGH"] as const).map((lv) => (
-                      <div key={lv} className="flex items-center gap-1.5 text-[10px] font-semibold text-afya-charcoal">
-                        <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: RISK_META[lv].color }} aria-hidden="true" />
-                        {lang === "sw" ? RISK_META[lv].sw : RISK_META[lv].en}
-                      </div>
-                    ))}
-                  </div>
+                {layer === "thermal" && (
+                  <p className="text-[10px] font-bold text-afya-charcoal mb-1">{t("map_air_temp")} · {currentTime} EAT</p>
                 )}
-                {layer === "rain" && (
-                  <div className="flex flex-col gap-1">
-                    {[["#EAF4FA","< 0.5 mm"],["#93C5FD","0.5–2 mm"],["#3786B5","2–6 mm"],["#1E5A8A","6–12 mm"],["#0F3A5C","> 12 mm"]].map(([c, l]) => (
-                      <div key={l} className="flex items-center gap-1.5 text-[10px] font-semibold text-afya-charcoal">
-                        <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: c }} aria-hidden="true" />{l}
-                      </div>
-                    ))}
+                <div className="flex flex-col gap-1">
+                  {legend.map(([c, l]) => (
+                    <div key={l} className="flex items-center gap-1.5 text-[10px] font-semibold text-afya-charcoal">
+                      <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: c }} aria-hidden="true" />{l}
+                    </div>
+                  ))}
+                  <div className="flex items-center gap-1.5 text-[10px] font-semibold text-afya-charcoal">
+                    <span
+                      className="w-3 h-3 rounded-sm border border-dashed border-[#68756F]"
+                      style={{ backgroundColor: NO_DATA_COLOUR }}
+                      aria-hidden="true"
+                    />
+                    {t("no_data")}
                   </div>
-                )}
-                {layer === "vegetation" && (
-                  <div className="flex flex-col gap-1">
-                    {[["#D4B896","NDVI < 0.2"],["#A8C686","0.2–0.35"],["#5B9E6B","0.35–0.5"],["#1A6B3C","0.5–0.65"],["#0D4625","> 0.65"]].map(([c, l]) => (
-                      <div key={l} className="flex items-center gap-1.5 text-[10px] font-semibold text-afya-charcoal">
-                        <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: c }} aria-hidden="true" />{l}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {(layer === "thermal" || layer === "lst") && (
-                  <div className="flex flex-col gap-1">
-                    {[["#DBEAFE","< 28°C"],["#93C5FD","28–31°C"],["#F2B705","31–34°C"],["#E27832","34–37°C"],["#C62828","> 37°C"]].map(([c, l]) => (
-                      <div key={l} className="flex items-center gap-1.5 text-[10px] font-semibold text-afya-charcoal">
-                        <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: c }} aria-hidden="true" />{l}
-                      </div>
-                    ))}
-                  </div>
-                )}
+                </div>
               </div>
             </div>
 
@@ -254,8 +244,7 @@ export default function MapPage() {
                 />
                 Conduit · {t("measured_label")} · JKUAT
               </span>
-              <span className="text-[10px] text-afya-muted">ERA5-Land · {t("regional_model_label")} · ~9km</span>
-              <span className="text-[10px] text-afya-muted">ERA5-Land · {t("historical_label")}</span>
+              <span className="text-[10px] text-afya-muted">{t("map_counties_source")} · {t("regional_model_label")}</span>
               <span className="text-[10px] text-afya-muted/70 ml-auto">{t("map_boundaries_note")}</span>
             </div>
           </Card>
@@ -332,7 +321,7 @@ export default function MapPage() {
         {/* SIDE PANEL */}
         <div className="space-y-4">
           {selectedCounty ? (
-            <CountyPanel county={selectedCounty} onClose={() => setSelectedName(null)} lang={lang} t={t} />
+            <CountyPanel county={selectedCounty} timeIdx={timeIdx} onClose={() => setSelectedName(null)} lang={lang} t={t} />
           ) : (
             <StationPanel situation={situation} t={t} />
           )}
@@ -354,12 +343,16 @@ export default function MapPage() {
 
 // County detail panel
 function CountyPanel({
-  county, onClose, lang, t,
+  county, timeIdx, onClose, lang, t,
 }: {
-  county: CountyFeature["properties"]; onClose: () => void; lang: string; t: (k: string) => string;
+  county: CountyFeature["properties"]; timeIdx: number; onClose: () => void; lang: string; t: (k: string) => string;
 }) {
   const p = county;
   const hasGround = p.sources.includes("Conduit station");
+  const hour = p.outlook_hours[timeIdx];
+  const unavailable = t("data_unavailable");
+  const fmt = (v: number | null, digits: number, unit: string) => (v == null ? unavailable : `${v.toFixed(digits)}${unit}`);
+  const sourceOf = (s: HourSource | null) => (s ? ` · ${t(HOUR_SOURCE_LABEL_KEY[s])}` : "");
   return (
     <Card>
       <div className="flex items-start justify-between mb-3">
@@ -385,37 +378,59 @@ function CountyPanel({
         {hasGround ? t("ground_regional_sub") : t("regional_intelligence_sub")}
       </p>
 
-      <RiskChip level={p.outlook_category} size="md" />
+      {p.outlook_category ? (
+        <RiskChip level={p.outlook_category} size="md" />
+      ) : (
+        <span className="inline-flex rounded-full border border-dashed border-[#68756F] px-3 py-1 text-xs font-bold text-afya-charcoal" style={{ backgroundColor: NO_DATA_COLOUR }}>
+          {unavailable}
+        </span>
+      )}
 
       <div className="mt-4 space-y-3">
         <div>
           <p className="text-[11px] font-semibold text-afya-muted mb-2 uppercase tracking-wide">{t("outlook")}</p>
           <div className="grid grid-cols-4 gap-1.5">
-            {p.outlook_hours.map((h) => (
-              <div key={h.hour} className="text-center">
+            {p.outlook_hours.map((h, i) => (
+              <div key={h.hour} className={cn("text-center rounded-lg p-0.5", i === timeIdx && "ring-2 ring-afya-deep/40")}>
                 <div className="text-[9px] text-afya-muted">{h.hour}</div>
                 <div
-                  className="mt-1 rounded-lg px-1 py-1 text-[9px] font-bold text-white"
-                  style={{ backgroundColor: RISK_META[h.category as keyof typeof RISK_META]?.color ?? "#aaa" }}
+                  className={cn("mt-1 rounded-lg px-1 py-1 text-[9px] font-bold", h.category ? "text-white" : "text-afya-charcoal")}
+                  style={{ backgroundColor: outlookColour(h.category) }}
                 >
-                  {lang === "sw" ? RISK_META[h.category as keyof typeof RISK_META]?.sw : RISK_META[h.category as keyof typeof RISK_META]?.en}
+                  {h.category ? (lang === "sw" ? RISK_META[h.category].sw : RISK_META[h.category].en) : t("no_data")}
+                </div>
+                <div className="mt-0.5 text-[9px] text-afya-muted tabular-nums">
+                  {h.temp_c != null ? `${h.temp_c.toFixed(1)}°C` : "-"}
                 </div>
               </div>
             ))}
           </div>
         </div>
 
+        {hour && (
+          <div className="rounded-lg border border-afya-border bg-afya-canvas/50 px-2.5 py-2 space-y-0.5 text-[10px] text-afya-muted">
+            <div className="font-semibold text-afya-charcoal">{hour.hour} EAT</div>
+            <div>
+              {t("map_air_temp")}: <strong className="text-afya-charcoal tabular-nums">{fmt(hour.temp_c, 1, "°C")}</strong>
+              {sourceOf(hour.temp_source)}
+            </div>
+            <div>
+              {t("map_shade_wbgt")}: <strong className="text-afya-charcoal tabular-nums">{fmt(hour.wbgt_c, 1, "°C")}</strong>
+              {sourceOf(hour.wbgt_source)}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-2">
           {[
-            { l_en: "Temp Anomaly", l_sw: "Tofauti ya Joto", v: `${p.temperature_anomaly_c >= 0 ? "+" : ""}${p.temperature_anomaly_c}°C` },
-            { l_en: "Rain 24h", l_sw: "Mvua saa 24", v: `${p.rain_24h_mm} mm` },
-            { l_en: "Soil Moisture", l_sw: "Unyevu wa Udongo", v: `${(p.soil_moisture * 100).toFixed(0)}%` },
-            { l_en: "NDVI", l_sw: "NDVI", v: p.ndvi_mean !== null ? p.ndvi_mean.toFixed(2) : "-" },
-            { l_en: "LST", l_sw: "Joto la Uso", v: p.lst_c !== null ? `${p.lst_c.toFixed(1)}°C` : "-" },
-            { l_en: "Confidence", l_sw: "Uhakika", v: p.confidence },
+            { l: t("map_temp_vs_mean"), v: p.temperature_anomaly_c == null ? unavailable : `${p.temperature_anomaly_c >= 0 ? "+" : ""}${p.temperature_anomaly_c}°C` },
+            { l: t("map_rain_today"), v: fmt(p.rain_today_mm, 1, " mm") },
+            { l: t("map_soil_0_1"), v: p.soil_moisture == null ? unavailable : `${(p.soil_moisture * 100).toFixed(0)}%` },
+            { l: "NDVI", v: p.ndvi_mean !== null ? p.ndvi_mean.toFixed(2) : "-" },
+            { l: t("confidence"), v: p.confidence },
           ].map((ind, i) => (
             <div key={i} className="rounded-lg border border-afya-border bg-afya-canvas/50 px-2.5 py-2">
-              <div className="text-[9px] text-afya-muted">{lang === "sw" ? ind.l_sw : ind.l_en}</div>
+              <div className="text-[9px] text-afya-muted">{ind.l}</div>
               <div className="text-sm font-bold text-afya-charcoal mt-0.5 tabular-nums">{ind.v}</div>
             </div>
           ))}
@@ -431,11 +446,7 @@ function CountyPanel({
           </div>
         </div>
 
-        <p className="text-[9px] text-afya-muted/70 leading-relaxed">
-          {lang === "sw"
-            ? "Muonekano wa kikanda unatokana na data za ERA5-Land, ikiwemo mvua yake. Si kipimo kutoka Conduit moja."
-            : "County outlook is derived from ERA5-Land reanalysis, including its rainfall. It is not a Conduit measurement."}
-        </p>
+        <p className="text-[9px] text-afya-muted/70 leading-relaxed">{t("map_county_note")}</p>
       </div>
     </Card>
   );

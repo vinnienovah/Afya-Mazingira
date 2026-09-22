@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { users, sessions } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
+import { secureAttribute } from "@/lib/auth/cookies";
 
 // Session token
 export function generateToken(): string {
@@ -61,14 +62,19 @@ export async function deleteSession(token: string) {
   await db.delete(sessions).where(eq(sessions.token, token));
 }
 
+/** Signs the user out everywhere. */
+export async function deleteUserSessions(userId: number) {
+  await db.delete(sessions).where(eq(sessions.user_id, userId));
+}
+
 // Cookie helpers
 
 export function sessionCookie(token: string, maxAge = 30 * 24 * 3600) {
-  return `afya_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
+  return `afya_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secureAttribute()}`;
 }
 
 export function clearSessionCookie() {
-  return `afya_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
+  return `afya_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secureAttribute()}`;
 }
 
 // CSRF token

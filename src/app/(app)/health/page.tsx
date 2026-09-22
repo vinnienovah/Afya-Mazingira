@@ -6,12 +6,14 @@ import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recha
 import { Activity, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useLanguage } from "@/lib/contexts/language";
 import { fmtAgo } from "@/lib/afya/format";
+import { STRINGS } from "@/lib/afya/i18n";
 import type { ChordsStation } from "@/lib/afya/sources";
+import type { GroupStatus } from "@/lib/afya/sentinel";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 
-type Status = "good" | "suspect" | "bad";
+type Status = GroupStatus;
 
 interface Thermometers { pair: string; mean_abs_c: number; mean_signed_c: number; max_abs_c: number; slots: number }
 interface Audits {
@@ -26,9 +28,15 @@ interface Archive {
   first: string;
   last: string;
   slots: number;
-  summary: { days: number; mean_score: number; days_below_80: number; rain_gauge_disagreement_days: number; empty_sensor_days: number };
+  summary: {
+    days: number; mean_score: number; days_below_80: number; rain_gauge_disagreement_days: number;
+    gauge2_silent_days: number; gauge1_silent_days: number; empty_sensor_days: number;
+    missing_minutes: number; days_with_missing_time: number;
+  };
+  rain: { gauge1_mm: number };
   rule_slots: Record<string, number>;
-  gust_direction_copy: { days: number; of: number; share_of_rows_pct: number };
+  gust_direction_copy: { days: number; of: number; share_pct: number | null };
+  battery: Status;
   audits: Audits;
   gaps: { over_one_hour: number; longest: { from: string; to: string; hours: number } | null };
   days: { date: string; score: number; bad: string[]; suspect: string[]; missing_minutes: number }[];
@@ -42,6 +50,7 @@ interface HealthResponse {
     latest: string | null;
     age_minutes: number | null;
     slots: number;
+    missing_minutes: number;
     groups: { group: string; status: Status; rules: string[]; empty_channels: string[]; measured_share: number }[];
     audits: Audits;
     firmware_below_wet_bulb_now: boolean | null;
@@ -64,6 +73,12 @@ const STATIONS: readonly ChordsStation[] = [
 ];
 const CONDUIT_ID = STATIONS[0].id;
 
+const fill = (text: string, values: Record<string, string | number>) =>
+  Object.entries(values).reduce((s, [k, v]) => s.replace(`{${k}}`, String(v)), text);
+// An interface string from i18n.ts in both languages, with any {placeholders} filled.
+const both = (key: string, values: Record<string, string | number> = {}): [string, string] =>
+  [fill(STRINGS.en[key], values), fill(STRINGS.sw[key], values)];
+
 const GROUP_NAMES: Record<string, [string, string]> = {
   temperature: ["Temperature, 3 sensors", "Joto, vipima 3"],
   humidity: ["Humidity", "Unyevu"],
@@ -71,18 +86,25 @@ const GROUP_NAMES: Record<string, [string, string]> = {
   wind: ["Wind", "Upepo"],
   light: ["Light sensor", "Kipima mwanga"],
   rain: ["Rain gauges", "Vipimo vya mvua"],
+  gust_direction: both("health_group_gust_direction"),
+  battery: both("health_group_battery"),
 };
 
+// A group the feed cannot judge, or that sends nothing, is grey: neither is a fault.
 const STATUS_STYLE: Record<Status, string> = {
   good: "bg-afya-green/10 text-afya-green",
   suspect: "bg-afya-gold/15 text-[#7a5c00]",
   bad: "bg-afya-red/10 text-afya-red",
+  not_judged: "bg-afya-canvas text-afya-muted",
+  not_reported: "bg-afya-canvas text-afya-muted",
 };
 
 const STATUS_NAME: Record<Status, [string, string]> = {
   good: ["good", "nzuri"],
   suspect: ["suspect", "ya shaka"],
   bad: ["bad", "mbaya"],
+  not_judged: both("health_status_not_judged"),
+  not_reported: both("health_status_not_reported"),
 };
 
 // What each rule checks, on 15-minute data. The thresholds live in sentinel.ts.
@@ -93,11 +115,11 @@ const RULES: [string, string, string][] = [
   ["R04", "Wind above 60 m/s or gust above 75 m/s", "Upepo juu ya 60 m/s au upepo mkali juu ya 75 m/s"],
   ["R06", "Light reading below the sensor's dark floor of 240 counts", "Mwanga chini ya kiwango cha giza cha kipima, 240"],
   ["R07", "Temperature jumps more than 5 °C in 15 minutes", "Joto linaruka zaidi ya 5 °C kwa dakika 15"],
-  ["R08", "The same value for 2 hours (temperature, humidity) or 3 hours (pressure, non-zero wind)", "Thamani ileile kwa saa 2 (joto, unyevu) au saa 3 (shinikizo, upepo usio sifuri)"],
+  ["R08", ...both("health_rule_r08")],
   ["R09", "The three thermometers differ by more than 2 °C", "Vipima joto vitatu vinatofautiana zaidi ya 2 °C"],
-  ["R11", "One rain gauge records 0.4 mm or more in a day while the other records nothing", "Kipima mvua kimoja kinarekodi 0.4 mm au zaidi kwa siku na kingine hakirekodi chochote"],
-  ["R12", "A sensor reports nothing for a whole day", "Kipima hakitoi chochote kwa siku nzima"],
-  ["R13", "The gust-direction column is a copy of the gust speed", "Safu ya mwelekeo wa upepo mkali ni nakala ya kasi yake"],
+  ["R11", ...both("health_rule_r11")],
+  ["R12", ...both("health_rule_r12")],
+  ["R13", ...both("health_rule_r13")],
   ["R16", "The firmware WBGT is more than 1.5 °C below the wet bulb", "WBGT ya programu dhibiti iko chini ya joto la balbu nyevu kwa zaidi ya 1.5 °C"],
 ];
 
@@ -138,7 +160,8 @@ export default function StationHealthPage() {
   const unlisted = live && !conduit
     ? Object.keys(GROUP_NAMES).filter((g) => !live.groups.some((x) => x.group === g))
     : [];
-  const rainFlagged = !!live?.groups.some((g) => g.group === "rain" && g.status !== "good");
+  const rainNotJudged = !!live?.groups.some((g) => g.group === "rain" && g.status === "not_judged");
+  const batteryMissing = !!live?.groups.some((g) => g.group === "battery" && g.status === "not_reported");
 
   return (
     <div className="max-w-5xl mx-auto space-y-5">
@@ -164,11 +187,7 @@ export default function StationHealthPage() {
               ? "Usomaji uliojazwa kwenye mapengo huwekwa alama. Ubora wa data hushuka vipimo muhimu vinapokosekana, na ushauri husimama baada ya saa 3 bila data."
               : "Readings filled in across gaps are marked. Data quality drops when a critical sensor is missing, and advice stops after three hours without data."}
           </li>
-          <li>
-            {sw
-              ? "Kwa kuwa kipima mvua 2 hakiaminiki, mvua ikipimwa na kipima chochote huhesabiwa, na jumla za mvua hutoka ERA5-Land."
-              : "Because rain gauge 2 cannot be trusted, rain from either gauge counts as rain, and rainfall totals come from ERA5-Land."}
-          </li>
+          <li>{t("health_change_rain")}</li>
         </ul>
       </Card>
 
@@ -215,20 +234,8 @@ export default function StationHealthPage() {
               </div>
             ))}
           </div>
-          {conduit && live.feed === "chords" && (
-            <p className="mt-3 text-xs text-afya-muted">
-              {sw
-                ? "Mtiririko wa moja kwa moja wa CHORDS haubebi vipimo vya mvua, kwa hiyo vipima mvua vinaonekana kimya hapa. Kumbukumbu hapa chini inaonyesha jinsi vinavyofanya kazi."
-                : "The CHORDS live feed carries no rain readings, so the rain gauges look silent here. The record below shows how they actually behave."}
-            </p>
-          )}
-          {!conduit && rainFlagged && (
-            <p className="mt-3 text-xs text-afya-muted">
-              {sw
-                ? "Mtiririko wa moja kwa moja wa CHORDS hubeba usomaji mchache wa mvua, hivyo vipima mvua vinaweza kuonekana kimya hapa."
-                : "The CHORDS live feed carries few rain readings, so the rain gauges can look silent here."}
-            </p>
-          )}
+          {rainNotJudged && <p className="mt-3 text-xs text-afya-muted">{t("health_chords_rain_note")}</p>}
+          {batteryMissing && <p className="mt-3 text-xs text-afya-muted">{t("health_battery_note")}</p>}
           {unlisted.length > 0 && (
             <p className="mt-3 text-xs text-afya-muted">
               {sw
@@ -273,6 +280,7 @@ export default function StationHealthPage() {
 }
 
 function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
+  const text = STRINGS[sw ? "sw" : "en"];
   const a03 = archive.audits.A03_firmware_wbgt_vs_wet_bulb;
   const a01 = archive.audits.A01_wet_bulb_vs_stull;
   const shtBmx = archive.audits.A05_thermometers.find((p) => p.pair === "temp_sht - temp_bmx");
@@ -285,19 +293,26 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
     return String(archive.rule_slots[id] ?? 0);
   };
 
+  const gustShare = archive.gust_direction_copy.share_pct ?? 0;
+  const longest = archive.gaps.longest?.hours ?? 0;
+  const scoreFloor = Math.min(80, Math.floor(Math.min(...archive.days.map((d) => d.score)) / 10) * 10);
   const findings: [string, string][] = [
     [
       `The firmware WBGT is more than 1.5 °C below the wet bulb in ${pct(a03.far_below_pct)} of the record (${pct(a03.far_below_night_pct)} at night, ${pct(a03.far_below_day_pct)} by day). A WBGT below the wet bulb is not physically possible in shade, so the formula in the firmware should be checked.`,
       `WBGT ya programu dhibiti iko chini ya balbu nyevu kwa zaidi ya 1.5 °C katika ${pct(a03.far_below_pct)} ya kumbukumbu (${pct(a03.far_below_night_pct)} usiku, ${pct(a03.far_below_day_pct)} mchana). Hilo haliwezekani kivulini, hivyo fomula ya programu dhibiti ikaguliwe.`,
     ],
+    both("health_finding_gauges", { g2: archive.summary.gauge2_silent_days, g1: archive.summary.gauge1_silent_days }),
+    both("health_finding_uv_column"),
     [
-      `Rain gauge 2 recorded nothing on ${archive.summary.rain_gauge_disagreement_days} days when gauge 1 measured 0.4 mm or more. It may be blocked or disconnected; check it during the next rain.`,
-      `Kipima mvua 2 hakikurekodi chochote siku ${archive.summary.rain_gauge_disagreement_days} ambazo kipima 1 kilipima 0.4 mm au zaidi. Huenda kimeziba au hakijaunganishwa; kikaguliwe mvua ijayo.`,
+      `The gust-direction column repeats the gust speed on ${archive.gust_direction_copy.days} of ${archive.gust_direction_copy.of} days (${gustShare} % of readings), so gust direction cannot be used. The export should be fixed.`,
+      `Safu ya mwelekeo wa upepo mkali inarudia kasi yake siku ${archive.gust_direction_copy.days} kati ya ${archive.gust_direction_copy.of} (${gustShare} % ya usomaji), hivyo haiwezi kutumika. Uhamishaji wa data urekebishwe.`,
     ],
-    [
-      `The gust-direction column repeats the gust speed on ${archive.gust_direction_copy.days} of ${archive.gust_direction_copy.of} days (${archive.gust_direction_copy.share_of_rows_pct} % of rows), so gust direction cannot be used. The export should be fixed.`,
-      `Safu ya mwelekeo wa upepo mkali inarudia kasi yake siku ${archive.gust_direction_copy.days} kati ya ${archive.gust_direction_copy.of} (${archive.gust_direction_copy.share_of_rows_pct} % ya safu), hivyo haiwezi kutumika. Uhamishaji wa data urekebishwe.`,
-    ],
+    ...(archive.battery === "not_reported" ? [both("health_finding_battery")] : []),
+    both("health_finding_gaps", {
+      days: archive.summary.days_with_missing_time,
+      minutes: archive.summary.missing_minutes,
+      hours: longest.toFixed(1),
+    }),
     [
       `The firmware wet bulb matches Stull (2011) to ${a01.mae_c?.toFixed(3) ?? "-"} °C on average, so it is sound and the app uses it.`,
       `Balbu nyevu ya programu dhibiti inalingana na Stull (2011) kwa wastani wa ${a01.mae_c?.toFixed(3) ?? "-"} °C, hivyo ni sahihi na programu inaitumia.`,
@@ -314,12 +329,14 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
     <>
       <Card>
         <CardTitle>{sw ? "Kila siku tangu Juni 2025" : "Every day since June 2025"}</CardTitle>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-2 mb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-2 mb-4">
           {[
             [sw ? "Siku" : "Days", String(archive.summary.days)],
             [sw ? "Alama ya wastani" : "Mean score", String(archive.summary.mean_score)],
             [sw ? "Siku chini ya 80" : "Days below 80", String(archive.summary.days_below_80)],
             [sw ? "Mapengo zaidi ya saa 1" : "Gaps over an hour", String(archive.gaps.over_one_hour)],
+            [text.health_tile_rain, `${Math.round(archive.rain.gauge1_mm).toLocaleString("en")} mm`],
+            [text.health_tile_gauge2_silent, String(archive.summary.gauge2_silent_days)],
           ].map(([label, value]) => (
             <div key={label} className="rounded-lg bg-afya-canvas px-3 py-2">
               <div className="text-[11px] text-afya-muted">{label}</div>
@@ -331,17 +348,13 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={archive.days} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
               <XAxis dataKey="date" tick={{ fontSize: 10 }} interval={60} tickFormatter={(d: string) => d.slice(0, 7)} />
-              <YAxis domain={[80, 100]} tick={{ fontSize: 10 }} allowDataOverflow />
+              <YAxis domain={[scoreFloor, 100]} tick={{ fontSize: 10 }} />
               <Tooltip formatter={(v) => [v, sw ? "Alama" : "Score"]} />
               <Bar dataKey="score" fill="#006B3C" />
             </BarChart>
           </ResponsiveContainer>
         </div>
-        <p className="mt-3 text-xs text-afya-muted">
-          {sw
-            ? "Alama = 100, toa 10 kwa kila kundi la vipima lililo baya, 2 kwa kila lenye shaka, na 1 kwa kila dakika 14.4 bila data. WBGT ya programu dhibiti hukaguliwa kando (A03), si kwenye alama."
-            : "Score = 100, less 10 for each sensor group that is bad, 2 for each that is suspect, and 1 for every 14.4 minutes without data. The firmware WBGT is judged separately (A03), not in the score."}
-        </p>
+        <p className="mt-3 text-xs text-afya-muted">{text.health_score_rule}</p>
       </Card>
 
       <Card>

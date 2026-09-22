@@ -5,18 +5,19 @@ import type {
 import type { DemoObservation } from "./demo-observations";
 import { getObservationSeries } from "./sources";
 import { getEra5ContextLive, getSentinelContextLive, getRainfallContext, getRegionalForecastSeries } from "./sources-external";
-import { computeFeatures } from "./feature-engine";
+import { computeFeatures, rainInputs } from "./feature-engine";
 import { classifyState, buildStateHistory, stateSince, getNextTransition } from "./state-engine";
 import {
-  predictHorizon, buildForecastSeries, findExpectedPeak, horizonScores, FORECAST_METHOD, FORECAST_PERIODS,
+  predictHorizon, buildForecastSeries, findExpectedPeak, horizonScores, forecastContributions,
+  FORECAST_METHOD, FORECAST_MODEL_NAME, FORECAST_PERIODS, type ForecastInputs,
 } from "./forecast-engine";
+import { getClimatology } from "./climatology-source";
+import evaluation from "./model/forecast-evaluation.json";
 import { computeThermalRisk, computeRainProbability, computeUncertainty } from "./risk-engine";
 import { findBestWindowFromNow } from "./best-time-engine";
 import { evaluateQuality } from "./data-quality";
 import { groupStatus } from "./sentinel";
 import { JKUAT_COORDS } from "./constants";
-
-const DAYLIGHT_HOURS = [6, 19] as const;
 
 // AFYA MAZINGIRA Intelligence Pipeline
 // CONDUIT → QC → FEATURES → STATE → FORECAST → RISK → BEST-TIME → EXPLANATION
@@ -48,8 +49,11 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
   // For anything standing in for "now" (live, or the CSV archive's latest
   // available row) the effective "now" is the real clock so observation age
   // is reported from the real clock; for a deliberate historical replay or synthetic
-  // demo it is the (possibly simulated) anchor itself.
-  const effectiveNow = bundle.realtime ? new Date().toISOString() : anchor;
+  // demo it is the simulated time asked for, not the latest observation before it,
+  // so a replayed window never starts before the replay's own clock.
+  const effectiveNow = bundle.realtime ? new Date().toISOString() : anchorIso;
+  // The usual WBGT by time of day, from observations before the latest one.
+  const climatology = getClimatology(series[series.length - 1].ts);
 
   // Step 2: Quality control
   const quality: DataQuality = evaluateQuality(series, effectiveNow);
@@ -82,11 +86,12 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
   if (!fv) throw new Error("Insufficient history for feature computation");
   const currentObs = series[latestIdx];
 
-  // Step 4: Environmental state
-  const stateId: StateId = classifyState(fv);
+  // Step 4: Environmental state. A change counts once the new state has held
+  // for an hour, so the current state is the last one that did.
   const featureSeries = series.map((_, i) => computeFeatures(series, i));
   const timestamps = series.map((o) => o.ts);
   const allSegments = buildStateHistory(featureSeries, timestamps);
+  const stateId: StateId = allSegments.length ? allSegments[allSegments.length - 1].state_id : classifyState(fv);
   const cutoffMs = new Date(anchor).getTime() - 24 * 3600 * 1000;
   const state_history_24h = allSegments.filter(
     (s) => new Date(s.end).getTime() >= cutoffMs,
@@ -95,14 +100,16 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
   const prevState = allSegments.length >= 2
     ? allSegments[allSegments.length - 2].state_id
     : null;
-  const transition = getNextTransition(stateId);
+  const transition = getNextTransition(stateId, currentObs.ts);
 
   // Step 5: Forecast (+ uncertainty widening when degraded)
-  const raw1h = predictHorizon(fv, "1h");
-  const raw3h = predictHorizon(fv, "3h");
-  const raw6h = predictHorizon(fv, "6h");
-  const raw9h = predictHorizon(fv, "9h");
-  let forecast_series = buildForecastSeries(fv, anchor);
+  const inputs: ForecastInputs = { fv, nowIso: currentObs.ts, climatology: await climatology };
+  if (!inputs.climatology) quality.flags.push("forecast_fell_back_to_no_change");
+  const raw1h = predictHorizon(inputs, "1h");
+  const raw3h = predictHorizon(inputs, "3h");
+  const raw6h = predictHorizon(inputs, "6h");
+  const raw9h = predictHorizon(inputs, "9h");
+  let forecast_series = buildForecastSeries(inputs);
 
   const degraded = quality.status === "DEGRADED";
   const widen = (v: number, lo: number, hi: number) => ({
@@ -119,12 +126,8 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
   const f3h = forecast[1];
   const expected_peak = findExpectedPeak(forecast_series);
 
-  // Step 6: Rain probability
-  const rainProbability = computeRainProbability(
-    currentObs.rg1 > 0 || currentObs.rg2 > 0,
-    fv.pressure_delta_1h,
-    fv.humidity_sht,
-  );
+  // Step 6: Rain probability for the next three hours
+  const rainProbability = Math.round(computeRainProbability(rainInputs(series, latestIdx), currentObs.ts) * 100) / 100;
 
   // Step 7: Context (live adapters with graceful fallback)
   // Skip the real fetch entirely for a historical replay anchor, a
@@ -145,6 +148,7 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
   const uncertainty = computeUncertainty(f3h.lower, f3h.upper);
   const risk: RiskAssessment = {
     thermal: thermalRisk,
+    thermal_now: computeThermalRisk(round1(currentObs.wet_bulb_globe_temp), 0),
     rain_probability: rainProbability,
     uncertainty,
     data_quality: quality.status,
@@ -153,22 +157,19 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
   // Step 9: Best-Time (start clamped to the effective now so a stale
   // forecast never recommends an already-elapsed window)
   // People plan outdoor work and exercise in daylight, so the headline window
-  // comes from the forecast's daylight hours only, 06:00 to 19:00 local.
-  const daylight = forecast_series.filter((p) => {
-    const hour = (new Date(p.time).getUTCHours() + 3) % 24;
-    return hour >= DAYLIGHT_HOURS[0] && hour < DAYLIGHT_HOURS[1];
-  });
+  // lies between sunrise and sunset at the station (the engine's default).
   const best_time: BestTimeResult | null = findBestWindowFromNow(
-    daylight,
+    forecast_series,
     activityKey,
     durationMinutes,
     10, // 10-hour look-ahead window
     quality,
     effectiveNow,
+    { rainProbability: risk.rain_probability },
   );
 
-  // Step 10: Contributors (deterministic feature importance proxy)
-  const contributors: Contributor[] = buildContributors(fv, stateId);
+  // Step 10: What moves the +3 h forecast, from the model itself
+  const contributors: Contributor[] = buildContributors(inputs);
 
   // Build output
   const current: CurrentObservation = {
@@ -184,6 +185,7 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
     wet_bulb_c: round1(currentObs.wet_bulb_temp),
     wbgt_c: round1(currentObs.wet_bulb_globe_temp),
     rain_observed: currentObs.rg1 > 0 || currentObs.rg2 > 0,
+    imputed: currentObs.imputed ?? [],
   };
 
   return {
@@ -217,18 +219,24 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
 
 const round1 = (v: number) => Math.round(v * 10) / 10;
 
-function buildContributors(fv: {
-  temp_delta_1h: number; si1145_ir: number; wind_spd: number;
-  humidity_delta_1h: number; hour_cos: number;
-}, stateId: StateId): Contributor[] {
-  const contribs: Contributor[] = [];
-  if (fv.temp_delta_1h > 0.3) contribs.push({ feature: "temp_rising", direction: "increasing" });
-  if (fv.temp_delta_1h < -0.3) contribs.push({ feature: "temp_falling", direction: "low" });
-  if (fv.si1145_ir > 3500) contribs.push({ feature: "high_radiation", direction: "high" });
-  if (fv.wind_spd < 1.0) contribs.push({ feature: "low_ventilation", direction: "low" });
-  if (fv.humidity_delta_1h < -2) contribs.push({ feature: "humidity_falling", direction: "low" });
-  if (stateId === 2) contribs.push({ feature: "peak_radiation", direction: "high" });
-  return contribs.slice(0, 4);
+// Smaller effects than this are reported as steady.
+const STEADY_C = 0.05;
+
+/**
+ * The model's own terms for the +3 h forecast, largest first, each with its
+ * effect in °C. For the seasonal model they add up to the forecast minus the
+ * current reading; for a ridge, to the forecast minus its mean.
+ */
+function buildContributors(inputs: ForecastInputs): Contributor[] {
+  return forecastContributions(inputs, "3h").terms
+    .filter((t) => Number.isFinite(t.contribution_c))
+    .sort((a, b) => Math.abs(b.contribution_c) - Math.abs(a.contribution_c))
+    .slice(0, 4)
+    .map((t) => ({
+      feature: t.feature,
+      direction: t.contribution_c > STEADY_C ? "increasing" : t.contribution_c < -STEADY_C ? "decreasing" : "stable",
+      contribution_c: Math.round(t.contribution_c * 100) / 100,
+    }));
 }
 
 // Historical Replay Pipeline
@@ -259,8 +267,10 @@ export async function runHistoricalReplay(dateStr: string): Promise<ReplayStep[]
 // Model metadata
 
 export function getModelRegistry() {
+  const rolling = evaluation.models[evaluation.chosen as keyof typeof evaluation.models].overall;
   return (["1h", "3h", "6h", "9h"] as const).map((horizon) => ({
     name: `wbgt_forecast_${horizon}`,
+    model: FORECAST_MODEL_NAME,
     algorithm: FORECAST_METHOD,
     target: "shade WBGT",
     horizon,
@@ -268,5 +278,6 @@ export function getModelRegistry() {
     training: FORECAST_PERIODS.train,
     calibration: FORECAST_PERIODS.calibration,
     test: FORECAST_PERIODS.test,
+    month_by_month: { months: evaluation.months, ...rolling[horizon] },
   }));
 }

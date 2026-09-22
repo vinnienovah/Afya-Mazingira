@@ -13,9 +13,10 @@ import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { CLIMATE_LOCATIONS } from "@/lib/afya/constants";
 import { fmtDate, fmtTimeShort } from "@/lib/afya/format";
+import { addDays, nairobiDate } from "@/lib/afya/nairobi-day";
 import { cn } from "@/lib/utils";
 import ClimateVariablesPanel from "@/components/charts/ClimateVariablesPanel";
-import { ReplayContent } from "@/app/(app)/replay/page";
+import { ReplayContent } from "@/components/replay/ReplayContent";
 import { Radio, LineChart as LineChartIcon, History as HistoryIcon } from "lucide-react";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -38,11 +39,18 @@ interface HistoryResponse {
   location?: string;
   coverage?: { minIso: string; maxIso: string } | null;
   points: HistoryPoint[];
+  // Why there are no points: no_station_data, era5_not_yet_published, no_era5_data or future_range.
+  reason?: string;
+  // The last day ERA5 has, when the range reaches past it.
+  era5_until?: string | null;
 }
 
-function isoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
+const REASON_KEYS: Record<string, string> = {
+  no_station_data: "ch_reason_no_station_data",
+  era5_not_yet_published: "ch_reason_era5_lag",
+  no_era5_data: "ch_no_data",
+  future_range: "ch_reason_future",
+};
 
 const AXIS_STYLE = { fontSize: 10, fill: "#8a9691" };
 const GRID_STYLE = { stroke: "#e3e9e5" };
@@ -147,20 +155,21 @@ export default function DashboardPage() {
 
 function ClimateHistoryTab() {
   const { t, lang } = useLanguage();
-  const today = useMemo(() => new Date(), []);
+  // Dates are Nairobi dates: after 21:00 UTC it is already tomorrow in Juja.
+  const today = useMemo(() => nairobiDate(new Date()), []);
 
   const [dataset, setDataset] = useState<Dataset>("conduit");
   const [location, setLocation] = useState("jkuat");
   const [granularity, setGranularity] = useState<Granularity>("daily");
-  const [from, setFrom] = useState(() => isoDate(new Date(today.getTime() - 30 * 86400_000)));
-  const [to, setTo] = useState(() => isoDate(today));
+  const [from, setFrom] = useState(() => addDays(today, -30));
+  const [to, setTo] = useState(today);
 
   const url = `/api/climate-history?dataset=${dataset}&location=${location}&from=${from}&to=${to}&granularity=${granularity}`;
   const { data, isLoading } = useSWR<HistoryResponse>(url, fetcher);
 
   function applyPreset(days: number) {
-    setTo(isoDate(today));
-    setFrom(isoDate(new Date(today.getTime() - days * 86400_000)));
+    setTo(today);
+    setFrom(addDays(today, -days));
   }
 
   const points = data?.points ?? [];
@@ -217,7 +226,7 @@ function ClimateHistoryTab() {
               type="date"
               value={to}
               min={from}
-              max={isoDate(today)}
+              max={today}
               onChange={(e) => setTo(e.target.value)}
               className="w-full rounded-xl border border-afya-border bg-white px-3 py-2.5 text-sm text-afya-charcoal focus:outline-none focus:ring-2 focus:ring-afya-green"
             />
@@ -256,7 +265,13 @@ function ClimateHistoryTab() {
         {dataset === "conduit" && data?.coverage && (
           <p className="text-[10px] text-afya-muted/70 mt-3">
             {t("ch_coverage_note")} {fmtDate(data.coverage.minIso)} – {fmtDate(data.coverage.maxIso)}
-            {" · "}{lang === "sw" ? "data ya moja kwa moja baada ya hapo" : "real live data fills anything after that"}
+            {" · "}{t("ch_live_after")}
+          </p>
+        )}
+        {dataset === "era5" && (
+          <p className="text-[10px] text-afya-muted/70 mt-3">
+            {t("ch_era5_source")}
+            {data?.era5_until && ` ${t("ch_era5_until").replace("{date}", fmtDate(data.era5_until))}`}
           </p>
         )}
       </Card>
@@ -267,7 +282,12 @@ function ClimateHistoryTab() {
           {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[236px] w-full rounded-2xl" />)}
         </div>
       ) : points.length === 0 ? (
-        <Card><p className="text-sm text-afya-muted text-center py-10">{t("ch_no_data")}</p></Card>
+        <Card>
+          <p className="text-sm text-afya-muted text-center py-10">
+            {t(REASON_KEYS[data?.reason ?? ""] ?? "ch_no_data")}
+            {data?.era5_until && ` ${t("ch_era5_until").replace("{date}", fmtDate(data.era5_until))}`}
+          </p>
+        </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           <MiniChart title={lang === "sw" ? "Joto" : "Temperature"}>
@@ -306,7 +326,7 @@ function ClimateHistoryTab() {
             </LineChart>
           </MiniChart>
 
-          <MiniChart title={lang === "sw" ? "Mvua" : "Rainfall"}>
+          <MiniChart title={dataset === "conduit" ? t("ch_rain_gauge1") : t("ch_rain_era5")}>
             <BarChart data={points} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" {...GRID_STYLE} vertical={false} />
               <XAxis dataKey="time" tickFormatter={timeFmt} tick={AXIS_STYLE} minTickGap={40} />

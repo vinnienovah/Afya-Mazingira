@@ -6,7 +6,7 @@ import {
   getObservationSeries,
   type SeriesBundle,
 } from "@/lib/afya/sources";
-import { audits, CHANNEL_GROUPS, checkReadings, groupStatus, type Group } from "@/lib/afya/sentinel";
+import { audits, CHANNEL_GROUPS, checkReadings, EXPORT_GROUPS, groupStatus, type GroupReport } from "@/lib/afya/sentinel";
 import type { DemoObservation } from "@/lib/afya/demo-observations";
 import archive from "@/lib/afya/model/station-health.json";
 
@@ -18,6 +18,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 const CACHE_HEADERS = { "Cache-Control": "s-maxage=300, stale-while-revalidate=600" };
+const ALL_GROUPS: Record<string, readonly string[]> = { ...CHANNEL_GROUPS, ...EXPORT_GROUPS };
 
 function liveChecks(
   series: DemoObservation[],
@@ -30,8 +31,8 @@ function liveChecks(
   const latest = recent.at(-1) ?? null;
   // A group with no channel on the station's own list is a sensor it does not
   // have, so it is left out rather than reported as failed.
-  const listed = (group: Group) =>
-    !channels.length || (CHANNEL_GROUPS[group] as readonly string[]).some((f) => channels.includes(f));
+  const listed = (group: GroupReport["group"]) =>
+    !channels.length || ALL_GROUPS[group].some((f) => channels.includes(f));
 
   return {
     source,
@@ -39,7 +40,9 @@ function liveChecks(
     latest: latest?.ts ?? null,
     age_minutes: latest ? Math.round((Date.now() - Date.parse(latest.ts)) / 60000) : null,
     slots: recent.length,
-    groups: groupStatus(recent, hits).filter((g) => listed(g.group)),
+    missing_minutes: Math.round(recent.reduce((s, o) => s + (o.gap_minutes ?? 0), 0)),
+    groups: groupStatus(recent, hits, { feed, exportGroups: true, batteryListed: channels.includes("battery_v") })
+      .filter((g) => listed(g.group)),
     audits: audits(recent),
     firmware_below_wet_bulb_now:
       latest && typeof latest.firmware_wbgt === "number" ? latest.firmware_wbgt < latest.wet_bulb_temp : null,
@@ -56,7 +59,7 @@ export async function GET(req: NextRequest) {
   if (!station || station.id === CONDUIT_INSTRUMENT_ID) {
     const bundle = await getObservationSeries(new Date().toISOString(), 30);
     return NextResponse.json(
-      { archive, live: liveChecks(bundle.series, bundle.source, bundle.feed) },
+      { archive, live: liveChecks(bundle.series, bundle.source, bundle.feed, bundle.channels) },
       { headers: CACHE_HEADERS },
     );
   }

@@ -39,10 +39,14 @@ export function AuthCard({ initialMode }: { initialMode: Mode }) {
 
   // The Google sign-in redirect reports failures as ?error=.
   const oauthError = useQueryParam("error");
-  const oauthMessage =
-    oauthError === "google_auth_failed" ? t("error_google_auth")
-      : oauthError === "google_not_configured" ? t("error_google_not_configured")
-        : null;
+  const OAUTH_ERRORS: Record<string, string> = {
+    google_auth_failed: "error_google_auth",
+    google_not_configured: "error_google_not_configured",
+    google_email_unverified: "error_google_email_unverified",
+    google_account_conflict: "error_google_account_conflict",
+    service_unavailable: "error_service_unavailable",
+  };
+  const oauthMessage = oauthError && OAUTH_ERRORS[oauthError] ? t(OAUTH_ERRORS[oauthError]) : null;
   const shownError = error ?? oauthMessage;
 
   function switchMode(next: Mode) {
@@ -84,6 +88,7 @@ export function AuthCard({ initialMode }: { initialMode: Mode }) {
         });
         const data = await res.json().catch(() => ({}));
         if (res.status === 409) { setError(t("error_email_taken")); return; }
+        if (res.status === 429) { setError(t(data.error === "email_quota" ? "error_email_quota" : "error_rate_limited")); return; }
         if (!res.ok) { setError(t("error_generic")); return; }
         if (data.verified) {
           await refresh();
@@ -105,6 +110,8 @@ export function AuthCard({ initialMode }: { initialMode: Mode }) {
           setUnverifiedEmail(data.email ?? email);
           return;
         }
+        if (res.status === 429) { setError(t("error_rate_limited")); return; }
+        if (res.status === 503) { setError(t("error_service_unavailable")); return; }
         if (!res.ok) { setError(t("error_auth")); return; }
         await refresh();
         router.push("/situation");
@@ -118,11 +125,16 @@ export function AuthCard({ initialMode }: { initialMode: Mode }) {
     setResendLoading(true);
     setResendSent(false);
     try {
-      await fetch("/api/auth/resend-verification", {
+      const res = await fetch("/api/auth/resend-verification", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: targetEmail, lang }),
       });
+      if (res.status === 429) {
+        const data = await res.json().catch(() => ({}));
+        setError(t(data.error === "email_quota" ? "error_email_quota" : "error_rate_limited"));
+        return;
+      }
       setResendSent(true);
     } finally {
       setResendLoading(false);
@@ -187,6 +199,7 @@ export function AuthCard({ initialMode }: { initialMode: Mode }) {
                 {resendLoading && <RefreshCw className="w-4 h-4 animate-spin" strokeWidth={2} aria-hidden="true" />}
                 {resendSent ? t("resend_email_sent") : t("resend_email")}
               </button>
+              {error && <p className="text-xs text-afya-red mt-3" role="alert">{error}</p>}
 
               <button
                 onClick={() => switchMode("signin")}

@@ -22,8 +22,8 @@ export const STATES: Record<
     text: "text-[#8a6d00]",
   },
   2: {
-    name: "Hot / High-Radiation Exposure",
-    name_sw: "Joto / Mionzi Mikali",
+    name: "Hot / Peak Heat",
+    name_sw: "Joto Kali / Kilele cha Joto",
     color: "#E27832",
     bg: "bg-[#E27832]",
     light: "bg-[#E27832]/10 text-[#E27832]",

@@ -1,5 +1,7 @@
 import type { RiskLevel, UncertaintyCategory } from "./types";
+import type { RainInputs } from "./feature-engine";
 import { wbgtToRisk, riskRank } from "./constants";
+import rainModel from "./model/rain-model.json";
 
 // Risk / Exposure Engine
 // Thermal exposure risk is activity-aware.
@@ -25,23 +27,23 @@ export function computeUncertainty(lower: number, upper: number): UncertaintyCat
 }
 
 /**
- * Chance of rain in the next few hours, 0 to 1. A rule of thumb (falling
- * pressure and high humidity raise it), not fitted to the station's rain
- * record: the rain gauges are too sparse and unreliable to fit it on.
+ * Chance, 0 to 1, that gauge 1 records rain in the next three hours: a
+ * logistic regression on humidity, recent changes in humidity, pressure and
+ * temperature, the time of day and recent rain, fitted to the gauge's own
+ * record by scripts/fit-models.ts and tested month by month on months it had
+ * not seen. Without inputs it gives how often it has rained in the next three
+ * hours at this month and hour.
  */
-export function computeRainProbability(
-  currentRainObserved: boolean,
-  pressureDelta1h: number,
-  humidityCurrent: number,
-): number {
-  if (currentRainObserved) return 0.85;
-  // Falling pressure + high humidity = elevated signal
-  let score = 0.05;
-  if (pressureDelta1h < -0.5) score += 0.20;
-  if (pressureDelta1h < -1.2) score += 0.15;
-  if (humidityCurrent > 80) score += 0.15;
-  if (humidityCurrent > 90) score += 0.10;
-  return Math.min(0.92, score);
+export function computeRainProbability(inputs: RainInputs | null, atIso: string): number {
+  if (rainModel.kind === "logistic" && inputs) {
+    let z = rainModel.intercept;
+    rainModel.features.forEach((name, j) => {
+      z += rainModel.coef[j] * ((inputs[name as keyof RainInputs] - rainModel.feature_mean[j]) / rainModel.feature_std[j]);
+    });
+    return 1 / (1 + Math.exp(-z));
+  }
+  const local = new Date(Date.parse(atIso) + 3 * 3600 * 1000);
+  return rainModel.month_hour[local.getUTCMonth()][local.getUTCHours()];
 }
 
 /**

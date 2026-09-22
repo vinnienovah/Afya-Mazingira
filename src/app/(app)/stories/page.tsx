@@ -34,10 +34,10 @@ const STORIES: Story[] = [
     role_en: "Smallholder farmer · Juja", role_sw: "Mkulima mdogo · Juja",
     problem_en: "She irrigates her kale on a fixed schedule. In a dry week her crop still stresses; in a wet week she wastes water and fuel pumping from the river.",
     problem_sw: "Anamwagilia sukuma wiki kwa ratiba isiyobadilika. Wiki ya ukame mimea bado inateseka; wiki ya mvua anapoteza maji na mafuta ya pampu.",
-    data_en: "Conduit rainfall and temperature at 15-minute intervals, ERA5-Land soil moisture and 7-day and 30-day rainfall totals.",
-    data_sw: "Mvua na joto la Conduit kila dakika 15, unyevu wa udongo na jumla ya mvua ya siku 7 na 30 kutoka ERA5-Land.",
-    insight_en: "AFYA MAZINGIRA computes reference evapotranspiration (Hargreaves) and crop water demand (FAO-56 Kc), then balances it against measured recent rainfall and soil moisture.",
-    insight_sw: "AFYA MAZINGIRA huhesabu uvukizi wa marejeleo (Hargreaves) na mahitaji ya maji ya zao (FAO-56 Kc), kisha kulinganisha na mvua iliyopimwa na unyevu wa udongo.",
+    data_en: "Conduit air temperature every 15 minutes, rainfall totals for the last 7 and 30 days, and regional soil moisture from ERA5.",
+    data_sw: "Joto la hewa la Conduit kila dakika 15, jumla ya mvua ya siku 7 na 30 zilizopita, na unyevu wa udongo wa kikanda kutoka ERA5.",
+    insight_en: "AFYA MAZINGIRA computes reference evapotranspiration (Hargreaves) and crop water demand (FAO-56 Kc), then balances it against recent rainfall and soil moisture.",
+    insight_sw: "AFYA MAZINGIRA huhesabu uvukizi wa marejeleo (Hargreaves) na mahitaji ya maji ya zao (FAO-56 Kc), kisha kulinganisha na mvua ya hivi karibuni na unyevu wa udongo.",
     decision_en: "\"Hold, rain expected\" instead of irrigating, or an exact application depth in mm when the root zone is depleted.",
     decision_sw: "\"Subiri, mvua inatarajiwa\" badala ya kumwagilia, au kina hasa cha mm wakati eneo la mizizi limekauka kweli.",
     impact_en: "Water and pumping fuel are only spent when the crop actually needs them, and irrigation happens before stress rather than after visible wilting.",
@@ -54,9 +54,9 @@ const STORIES: Story[] = [
     problem_en: "Training is scheduled at 14:00 because that is when the pitch is free, often the hottest, highest-radiation part of the day.",
     problem_sw: "Mazoezi yamepangwa saa 14:00 kwa sababu ndipo uwanja upo wazi, mara nyingi wakati wa joto na mionzi mikali zaidi.",
     data_en: "Conduit temperature, humidity, wind, and WBGT computed from its wet bulb and air temperature, updated every 15 minutes.",
-    data_sw: "Joto, unyevu, upepo na ishara ya WBGT ya Conduit, inayosasishwa kila dakika 15.",
-    insight_en: "Horizon-specialised models forecast exposure at +1h, +3h, +6h and +9h with calibrated uncertainty, and the Climate Reflex engine identifies the coming state transition.",
-    insight_sw: "Mifumo maalum hutabiri kupatwa kwa +saa 1, +3, +6 na +9 pamoja na utata uliorekebishwa, na Climate Reflex hutambua mabadiliko ya hali yanayokuja.",
+    data_sw: "Joto, unyevu na upepo wa Conduit, na WBGT inayokokotolewa kutoka balbu nyevu na joto la hewa, kila dakika 15.",
+    insight_en: "Horizon-specialised models forecast exposure at +1h, +3h, +6h and +9h with calibrated uncertainty, and the station record shows which state most often comes next.",
+    insight_sw: "Mifumo maalum hutabiri kupatwa kwa +saa 1, +3, +6 na +9 pamoja na utata uliorekebishwa, na kumbukumbu za kituo zinaonyesha hali inayofuata mara nyingi.",
     decision_en: "The deterministic Best-Time engine ranks every 15-minute window and returns a specific lower-exposure slot, plus an alternative.",
     decision_sw: "Injini ya Wakati-Bora hupanga kila dirisha la dakika 15 na kurudisha muda mahususi wenye kupatwa kidogo, pamoja na mbadala.",
     impact_en: "High-intensity sessions move out of the exposure peak without cancelling training, and the decision is defensible to the athletics department.",
@@ -72,8 +72,8 @@ const STORIES: Story[] = [
     role_en: "Construction · Thika Road", role_sw: "Ujenzi · Barabara ya Thika",
     problem_en: "Concrete pours and heavy manual work are planned the night before, with no view of how tomorrow's conditions will actually develop.",
     problem_sw: "Kumwaga zege na kazi nzito hupangwa usiku uliopita, bila kujua hali ya kesho itakuaje.",
-    data_en: "Conduit ground observations plus ERA5-Land regional context, with an explicit local-versus-regional anomaly.",
-    data_sw: "Uchunguzi wa ardhini wa Conduit pamoja na muktadha wa kikanda wa ERA5-Land, na tofauti ya kimaeneo dhidi ya kikanda.",
+    data_en: "Conduit ground observations plus ERA5 regional context, with an explicit local-versus-regional anomaly.",
+    data_sw: "Uchunguzi wa ardhini wa Conduit pamoja na muktadha wa kikanda wa ERA5, na tofauti ya kimaeneo dhidi ya kikanda.",
     insight_en: "Risk is interpreted per activity intensity, the same WBGT value produces a higher tier for heavy construction than for light walking.",
     insight_sw: "Hatari hufasiriwa kulingana na uzito wa shughuli, thamani ile ile ya WBGT hutoa kiwango cha juu kwa ujenzi mzito kuliko kutembea.",
     decision_en: "Operations dashboard flags which scheduled activities fall inside the exposure peak and proposes concrete alternative windows.",
@@ -99,7 +99,7 @@ const STORIES: Story[] = [
     decision_sw: "Mwonekano mmoja huonyesha tahadhari, vipindi vilivyoathiriwa na madirisha bora ya uendeshaji ya siku.",
     impact_en: "Departments coordinate from one environmental source of truth, and Historical Replay lets the team audit whether past advice was sound.",
     impact_sw: "Idara huratibu kutoka chanzo kimoja, na Marudio ya Kihistoria huruhusu timu kukagua kama ushauri wa zamani ulikuwa sahihi.",
-    cta_href: "/replay",
+    cta_href: "/climate?tab=replay",
     cta_en: "Try Historical Replay", cta_sw: "Jaribu Marudio",
   },
 ];
@@ -132,7 +132,12 @@ export default function StoriesPage() {
     <div className="max-w-5xl mx-auto space-y-5">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-afya-charcoal">{t("stories_title")}</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-2xl font-bold text-afya-charcoal">{t("stories_title")}</h1>
+          <span className="rounded-full border border-afya-gold/40 bg-afya-gold/10 px-2 py-0.5 text-[10px] font-bold tracking-wide text-[#8a6d00]">
+            {t("illustrative")}
+          </span>
+        </div>
         <p className="text-sm text-afya-muted mt-0.5">{t("stories_sub")}</p>
       </div>
 

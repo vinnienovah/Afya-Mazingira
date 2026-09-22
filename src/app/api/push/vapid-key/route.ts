@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { vapidDetails } from "@/lib/push";
 
 export async function GET() {
-  const publicKey = process.env.VAPID_PUBLIC_KEY ?? null;
+  // The public key is only offered when the server can also send.
+  const vapid = vapidDetails();
   return NextResponse.json({
-    public_key: publicKey,
-    configured: !!publicKey,
+    public_key: vapid?.publicKey ?? null,
+    configured: !!vapid,
   });
 }

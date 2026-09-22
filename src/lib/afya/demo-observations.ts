@@ -7,10 +7,15 @@ import { shadeWbgt, stullWetBulb } from "./constants";
 
 export interface DemoObservation {
   ts: string; // ISO UTC
+  // Rain in this 15-minute slot, mm, one value per gauge.
   rg1: number;
   rg2: number;
   rg1tt: number;
   rg2tt: number;
+  // Each gauge's total for the previous rain day (06:00 to 06:00 UTC), as the
+  // station reported it in this slot. Absent when not reported.
+  rg1tp?: number;
+  rg2tp?: number;
   temp_bmx: number;
   press_bmx: number;
   temp_mcp: number;
@@ -31,6 +36,16 @@ export interface DemoObservation {
   // Fields in this slot that were carried forward or defaulted rather than
   // measured. Absent or empty when every value was observed.
   imputed?: string[];
+  // Channels whose reading here broke a hard limit (Sentinel R01 to R04). The
+  // reading was dropped and the slot filled like any other gap.
+  rejected?: string[];
+  // Minutes of this slot inside a gap between readings: time from 15 minutes
+  // after one reading to the next, when they are more than 20 minutes apart.
+  gap_minutes?: number;
+  // The gust-direction column, read only to check whether the export copies
+  // the gust speed into it (Sentinel R13). Never used as a direction.
+  wind_gust_dir?: number | null;
+  battery_v?: number | null;
 }
 
 // Seeded pseudo-random for reproducibility
@@ -209,80 +224,7 @@ export function generateReplayDay(
   return generateDemoSeries(isoAnchor, 26, 20260901);
 }
 
-// Context generators (ERA5, CHIRPS, Sentinel)
-
-export function generateEra5Context(anchor: string, currentTemp: number, currentHum: number): {
-  available: boolean;
-  era5_temp_c: number;
-  era5_dewpoint_c: number;
-  era5_relative_humidity: number;
-  era5_pressure_hpa: number;
-  era5_wind_speed_ms: number;
-  era5_wind_dir_deg: number;
-  era5_solar_wm2: number;
-  era5_precip_hourly_mm: number;
-  era5_soil_moisture: number;
-  local_temp_anomaly_c: number;
-  local_humidity_anomaly: number;
-  valid_time: string;
-} {
-  const rand = mulberry32(42);
-  const d = new Date(anchor);
-  const eatMs = d.getTime() + 3 * 3600 * 1000;
-  const eatDate = new Date(eatMs);
-  const eatHours = eatDate.getUTCHours() + eatDate.getUTCMinutes() / 60;
-
-  // ERA5-Land has ~9km resolution; it smooths local peaks
-  const solar = Math.max(0, Math.exp(-Math.pow(eatHours - 13, 2) / (2 * 4.5 * 4.5)));
-  const era5_temp_c = Math.round((23.5 - 5 * (1 - solar) + rand() * 0.4) * 10) / 10;
-  const era5_dewpoint_c = Math.round((era5_temp_c - (100 - 55) / 5) * 10) / 10;
-  const era5_rh = Math.max(20, Math.min(95, Math.round((55 + (1 - solar) * 20 + rand() * 3) * 10) / 10));
-  const era5_pressure_hpa = Math.round(850.5 * 10) / 10;
-  const era5_wind_speed_ms = Math.round((1.5 + rand() * 0.5) * 10) / 10;
-  const era5_wind_dir_deg = Math.round(115 + rand() * 20);
-  const era5_solar_wm2 = Math.round(solar * 850);
-
-  return {
-    available: false,
-    era5_temp_c,
-    era5_dewpoint_c,
-    era5_relative_humidity: era5_rh,
-    era5_pressure_hpa,
-    era5_wind_speed_ms,
-    era5_wind_dir_deg,
-    era5_solar_wm2,
-    era5_precip_hourly_mm: 0.0,
-    era5_soil_moisture: 0.18,
-    local_temp_anomaly_c: Math.round((currentTemp - era5_temp_c) * 10) / 10,
-    local_humidity_anomaly: Math.round((currentHum - era5_rh) * 10) / 10,
-    valid_time: anchor,
-  };
-}
-
-export function generateChirpsContext(anchor: string): {
-  available: boolean;
-  chirps_mm: number;
-  chirps_7d_mm: number;
-  chirps_30d_mm: number;
-  chirps_percentile: number;
-  chirps_dry_spell_days: number;
-  chirps_wet_spell_days: number;
-  valid_date: string;
-} {
-  // September in Juja is relatively dry; use typical values
-  const d = new Date(anchor);
-  const validDate = d.toISOString().slice(0, 10);
-  return {
-    available: false,
-    chirps_mm: 1.8,
-    chirps_7d_mm: 14.7,
-    chirps_30d_mm: 48.2,
-    chirps_percentile: 62,
-    chirps_dry_spell_days: 4,
-    chirps_wet_spell_days: 1,
-    valid_date: validDate,
-  };
-}
+// Context generators
 
 export function generateSentinelContext(): {
   sentinel2_available: boolean;

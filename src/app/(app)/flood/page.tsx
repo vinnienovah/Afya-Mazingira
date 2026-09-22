@@ -6,6 +6,7 @@ import { useLanguage } from "@/lib/contexts/language";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { RISK_META } from "@/lib/afya/constants";
+import { NO_DATA_COLOUR } from "@/lib/afya/map-scales";
 import { AlertTriangle, Droplets, Waves } from "lucide-react";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -13,15 +14,17 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json());
 interface CountyProps {
   name: string;
   name_sw: string;
-  rain_24h_mm: number;
-  soil_moisture: number;
-  flood_risk: "LOW" | "ELEVATED" | "HIGH";
+  rain_today_mm: number | null;
+  soil_moisture: number | null;
+  // Null when the rain or soil value it needs is missing
+  flood_risk: "LOW" | "ELEVATED" | "HIGH" | null;
   sources: string[];
 }
 interface CountyFeature { properties: CountyProps }
 interface MapResponse { counties: { features: CountyFeature[] } }
 
 const RISK_RANK: Record<string, number> = { HIGH: 2, ELEVATED: 1, LOW: 0 };
+const rank = (risk: CountyProps["flood_risk"]) => (risk ? RISK_RANK[risk] : -1);
 
 export default function FloodRiskPage() {
   const { t, lang } = useLanguage();
@@ -31,12 +34,13 @@ export default function FloodRiskPage() {
     document.title = `${t("nav_flood")} | AFYA MAZINGIRA`;
   }, [t]);
 
-  const counties = (data?.counties.features ?? [])
+  const counties = (data?.counties?.features ?? [])
     .map((f) => f.properties)
-    .sort((a, b) => RISK_RANK[b.flood_risk] - RISK_RANK[a.flood_risk]);
+    .sort((a, b) => rank(b.flood_risk) - rank(a.flood_risk));
 
   const highCount = counties.filter((c) => c.flood_risk === "HIGH").length;
   const elevatedCount = counties.filter((c) => c.flood_risk === "ELEVATED").length;
+  const withData = counties.filter((c) => c.flood_risk != null).length;
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">
@@ -62,8 +66,10 @@ export default function FloodRiskPage() {
           <div className="text-xs text-afya-muted mt-1">{t("flood_elevated_count")}</div>
         </Card>
         <Card>
-          <div className="text-3xl font-bold text-afya-charcoal">{counties.length}</div>
-          <div className="text-xs text-afya-muted mt-1">{t("flood_counties_monitored")}</div>
+          <div className="text-3xl font-bold text-afya-charcoal tabular-nums">
+            {withData}<span className="text-lg text-afya-muted"> / {counties.length}</span>
+          </div>
+          <div className="text-xs text-afya-muted mt-1">{t("flood_counties_with_data")}</div>
         </Card>
       </div>
 
@@ -75,28 +81,41 @@ export default function FloodRiskPage() {
       ) : (
         <div className="space-y-2.5">
           {counties.map((c) => {
-            const meta = RISK_META[c.flood_risk];
+            const meta = c.flood_risk ? RISK_META[c.flood_risk] : null;
+            const colour = meta?.color ?? "#68756F";
             return (
               <Card key={c.name} className="!p-4">
                 <div className="flex items-center gap-4 flex-wrap">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${meta.color}15` }}>
-                    <Waves className="w-5 h-5" style={{ color: meta.color }} strokeWidth={1.8} aria-hidden="true" />
+                  <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: meta ? `${meta.color}15` : NO_DATA_COLOUR }}
+                  >
+                    <Waves className="w-5 h-5" style={{ color: colour }} strokeWidth={1.8} aria-hidden="true" />
                   </div>
                   <div className="flex-1 min-w-[140px]">
                     <div className="font-semibold text-afya-charcoal text-sm">{lang === "sw" ? c.name_sw : c.name}</div>
-                    <div className="flex items-center gap-3 text-xs text-afya-muted mt-0.5">
+                    <div className="flex items-center gap-3 flex-wrap text-xs text-afya-muted mt-0.5">
                       <span className="flex items-center gap-1">
                         <Droplets className="w-3 h-3" strokeWidth={2} aria-hidden="true" />
-                        {c.rain_24h_mm.toFixed(1)} mm/24h
+                        {c.rain_today_mm != null
+                          ? `${c.rain_today_mm.toFixed(1)} ${t("flood_mm_today")}`
+                          : `${t("flood_rain_today")}: ${t("data_unavailable")}`}
                       </span>
-                      <span>{t("flood_soil_moisture")}: {Math.round(c.soil_moisture * 100)}%</span>
+                      <span>
+                        {t("flood_soil_moisture")}:{" "}
+                        {c.soil_moisture != null ? `${Math.round(c.soil_moisture * 100)}%` : t("data_unavailable")}
+                      </span>
                     </div>
                   </div>
                   <span
-                    className="inline-flex items-center rounded-full px-3 py-1 text-xs font-bold shrink-0"
-                    style={{ backgroundColor: `${meta.color}15`, color: meta.color }}
+                    className={
+                      meta
+                        ? "inline-flex items-center rounded-full px-3 py-1 text-xs font-bold shrink-0"
+                        : "inline-flex items-center rounded-full border border-dashed border-[#68756F] px-3 py-1 text-xs font-bold shrink-0"
+                    }
+                    style={{ backgroundColor: meta ? `${meta.color}15` : NO_DATA_COLOUR, color: meta ? meta.color : "#17211C" }}
                   >
-                    {lang === "sw" ? meta.sw : meta.en}
+                    {meta ? (lang === "sw" ? meta.sw : meta.en) : t("data_unavailable")}
                   </span>
                 </div>
               </Card>

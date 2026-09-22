@@ -1,60 +1,54 @@
 "use client";
 
 import { useState } from "react";
-import { useSituation } from "@/lib/contexts/situation";
+import { usePreferredActivity, useSituation } from "@/lib/contexts/situation";
 import { useLanguage } from "@/lib/contexts/language";
-import { STATES } from "@/lib/afya/constants";
-import { fmtTime } from "@/lib/afya/format";
+import { ACTIVITY_PROFILES, STATES } from "@/lib/afya/constants";
+import { fill, fmtAsOf, fmtSigned, fmtTime } from "@/lib/afya/format";
+import { nextStateNote } from "@/lib/afya/display";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { StateChip } from "@/components/ui/StateChip";
-import { RiskChip } from "@/components/ui/RiskChip";
 import { QualityDot } from "@/components/ui/QualityDot";
 import StateTimeline from "@/components/charts/StateTimeline";
 import { SkeletonCard, Skeleton } from "@/components/ui/Skeleton";
 import {
-  Building2, AlertTriangle, CheckCircle2, Clock, TrendingUp,
-  Plus, Save, Trash2, Archive, Wind, Satellite, Activity,
+  AlertTriangle, CheckCircle2, ChevronRight, Clock, TrendingUp,
+  Plus, Trash2, Archive, ArchiveRestore, Satellite, Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { assessActivity, type PlannedActivity } from "@/lib/afya/operations";
+import { assessActivity } from "@/lib/afya/operations";
+import {
+  addActivity, removeActivity, setActivityStatus, type StoredActivity,
+} from "@/lib/afya/operations-store";
+import { useStoredActivities } from "@/lib/use-stored-activities";
 
-// A starting list so the page is not empty. Each one is judged live against
-// the forecast below; the names and hours are examples, not a real schedule.
-const EXAMPLE_ACTIVITIES: PlannedActivity[] = [
-  { id: 1, name: "Outdoor Sports Training", start_hour: 14, end_hour: 16, activity_type: "sports" },
-  { id: 2, name: "Field Maintenance Work", start_hour: 9, end_hour: 12, activity_type: "outdoor_work" },
-  { id: 3, name: "Campus Event Setup", start_hour: 13, end_hour: 17, activity_type: "outdoor_event" },
-  { id: 4, name: "Agricultural Field Work", start_hour: 7, end_hour: 11, activity_type: "field_work" },
-];
+const hourLabel = (h: number) => `${String(h).padStart(2, "0")}:00`;
 
 export default function OperationsPage() {
-  const { situation, isLoading, error } = useSituation();
+  const { situation, isLoading } = useSituation();
   const { t, lang } = useLanguage();
-  const [activities, setActivities] = useState<PlannedActivity[]>(EXAMPLE_ACTIVITIES);
+  const [activities, updateActivities] = useStoredActivities();
   const [newActivity, setNewActivity] = useState("");
   const [newStart, setNewStart] = useState(9);
   const [newEnd, setNewEnd] = useState(12);
+  // Until one is picked here, new activities take the Profile's default activity.
+  const preferred = usePreferredActivity();
+  const [pickedType, setPickedType] = useState<string | null>(null);
+  const newType = pickedType ?? preferred ?? "general";
+  const [showArchived, setShowArchived] = useState(false);
 
-  function addActivity() {
-    if (!newActivity.trim()) return;
-    const act: PlannedActivity = {
-      id: Date.now(),
-      name: newActivity,
-      start_hour: newStart,
-      end_hour: newEnd,
-      activity_type: "general",
-    };
-    setActivities((a) => [...a, act]);
+  const active = activities.filter((a) => a.status === "active");
+  const archived = activities.filter((a) => a.status === "archived");
+  const activityName = (a: StoredActivity) => (a.name_key ? t(a.name_key) : a.name);
+
+  function submitActivity() {
+    const name = newActivity.trim();
+    if (!name) return;
+    updateActivities((list) =>
+      addActivity(list, { name, start_hour: newStart, end_hour: newEnd, activity_type: newType }),
+    );
     setNewActivity("");
-  }
-
-  function deleteActivity(id: number) {
-    setActivities((a) => a.filter((x) => x.id !== id));
-  }
-
-  function archiveActivity(id: number) {
-    setActivities((a) => a.filter((x) => x.id !== id));
   }
 
   if (isLoading) {
@@ -70,8 +64,11 @@ export default function OperationsPage() {
 
   const stateMeta = situation ? STATES[situation.state.state_id] : null;
   const f3h = situation?.forecast.find((f) => f.horizon === "3h");
-  const peakTime = situation?.expected_peak?.time ?? null;
   const transition = situation?.state.transition_likelihood;
+  const era5 = situation?.era5;
+  const era5Ok = !!era5 && era5.available !== false;
+  const anomaly = era5Ok ? era5.local_temp_anomaly_c : null;
+  const soil = era5Ok ? era5.era5_soil_moisture : null;
   const alerts = [
     ...(situation && situation.risk.thermal === "HIGH" || situation?.risk.thermal === "VERY_HIGH"
       ? [{ severity: "high", text_en: `Thermal exposure ${situation.risk.thermal} in forecast`, text_sw: `Kupatwa na joto ${situation.risk.thermal} katika utabiri` }]
@@ -92,6 +89,9 @@ export default function OperationsPage() {
           <h1 className="text-2xl font-bold text-afya-charcoal">{t("ops_title")}</h1>
           <p className="text-sm text-afya-muted mt-0.5">{t("ops_subtitle")}</p>
         </div>
+        {situation && (
+          <span className="text-[11px] text-afya-muted">{t("data_as_of")} {fmtAsOf(situation.generated_at, lang)}</span>
+        )}
         {situation?.demo_mode && (
           <span className="text-[11px] text-afya-muted/60 italic">{t("demo_notice")}</span>
         )}
@@ -143,8 +143,8 @@ export default function OperationsPage() {
               <div className="text-sm font-bold" style={{ color: STATES[transition.state_id].color }}>
                 {lang === "sw" ? STATES[transition.state_id].name_sw : STATES[transition.state_id].name}
               </div>
-              <div className="text-[11px] text-afya-muted mt-1">
-                ~{Math.round((transition.probability ?? 0) * 100)}% {lang === "sw" ? "uwezekano" : "likelihood"}
+              <div className="text-[11px] leading-snug text-afya-muted mt-1">
+                {nextStateNote(transition, lang)}
               </div>
             </>
           )}
@@ -254,11 +254,25 @@ export default function OperationsPage() {
             </div>
             {situation && (
               <div className="space-y-2">
-                <p className="text-xs text-afya-muted">
-                  {lang === "sw"
-                    ? `Tofauti ya joto ya kimaeneo: ${situation.era5.local_temp_anomaly_c >= 0 ? "+" : ""}${situation.era5.local_temp_anomaly_c}°C. Unyevu wa udongo: ${(situation.era5.era5_soil_moisture * 100).toFixed(0)}%.`
-                    : `Local temp anomaly vs ERA5: ${situation.era5.local_temp_anomaly_c >= 0 ? "+" : ""}${situation.era5.local_temp_anomaly_c}°C. Soil moisture: ${(situation.era5.era5_soil_moisture * 100).toFixed(0)}%.`}
-                </p>
+                {era5Ok ? (
+                  <>
+                    {typeof anomaly === "number" && (
+                      <p className="text-xs text-afya-muted">
+                        {fill(t("ops_regional_anomaly"), {
+                          value: fmtSigned(anomaly),
+                          time: era5?.valid_time ? fmtAsOf(era5.valid_time, lang) : "-",
+                        })}
+                      </p>
+                    )}
+                    {typeof soil === "number" && (
+                      <p className="text-xs text-afya-muted">
+                        {fill(t("ops_soil_moisture"), { value: (soil * 100).toFixed(0) })}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-xs text-afya-muted">{t("context_unavailable")}</p>
+                )}
                 <Link
                   href="/map"
                   className="inline-flex items-center gap-1.5 text-xs font-semibold text-afya-green hover:underline"
@@ -273,16 +287,16 @@ export default function OperationsPage() {
 
         {/* Right column */}
         <div className="space-y-5">
-          {/* Planned activities */}
+          {/* Planned activities, kept in this browser */}
           <Card>
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between gap-2 mb-3">
               <CardTitle className="mb-0">{t("planned_activities")}</CardTitle>
-              <span className="text-xs text-afya-muted">
-                {activities.length} {lang === "sw" ? "shughuli · mifano, ongeza zako" : "activities · examples, add your own"}
+              <span className="text-xs text-afya-muted text-right">
+                {fill(t("ops_activity_count"), { n: active.length })} · {t("ops_saved_here")}
               </span>
             </div>
             <div className="space-y-2.5">
-              {activities.map((act) => {
+              {active.map((act) => {
                 const check = situation ? assessActivity(act, situation.forecast_series, Date.parse(situation.generated_at)) : null;
                 return (
                 <div
@@ -295,7 +309,12 @@ export default function OperationsPage() {
                   <div className="flex items-start gap-3 flex-wrap">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-sm text-afya-charcoal">{act.name}</span>
+                        <span className="font-semibold text-sm text-afya-charcoal">{activityName(act)}</span>
+                        {act.example && (
+                          <span className="rounded-full border border-afya-border bg-afya-canvas text-afya-muted text-[10px] font-bold px-2 py-0.5">
+                            {t("ops_example")}
+                          </span>
+                        )}
                         {check?.affected && (
                           <span className="rounded-full bg-afya-orange/10 text-afya-orange text-[10px] font-bold px-2 py-0.5">
                             {lang === "sw" ? "INAATHIRIWA" : "AFFECTED"}
@@ -304,7 +323,7 @@ export default function OperationsPage() {
                       </div>
                       <div className="text-xs text-afya-muted mt-0.5 flex items-center gap-1">
                         <Clock className="w-3 h-3" strokeWidth={1.8} aria-hidden="true" />
-                        {String(act.start_hour).padStart(2, "0")}:00–{String(act.end_hour).padStart(2, "0")}:00
+                        {hourLabel(act.start_hour)}–{hourLabel(act.end_hour)}
                       </div>
                       <p className="text-xs text-afya-muted mt-1 leading-relaxed">
                         {check ? (lang === "sw" ? check.text_sw : check.text_en) : null}
@@ -312,16 +331,18 @@ export default function OperationsPage() {
                     </div>
                     <div className="flex gap-1 shrink-0">
                       <button
-                        onClick={() => archiveActivity(act.id)}
+                        onClick={() => updateActivities((list) => setActivityStatus(list, act.id, "archived"))}
                         className="p-1.5 rounded-lg text-afya-muted hover:bg-afya-canvas hover:text-afya-charcoal transition-colors"
-                        aria-label="Archive"
+                        aria-label={t("ops_archive")}
+                        title={t("ops_archive")}
                       >
                         <Archive className="w-4 h-4" strokeWidth={1.8} />
                       </button>
                       <button
-                        onClick={() => deleteActivity(act.id)}
+                        onClick={() => updateActivities((list) => removeActivity(list, act.id))}
                         className="p-1.5 rounded-lg text-afya-muted hover:bg-afya-red/10 hover:text-afya-red transition-colors"
                         aria-label={t("delete")}
+                        title={t("delete")}
                       >
                         <Trash2 className="w-4 h-4" strokeWidth={1.8} />
                       </button>
@@ -341,39 +362,90 @@ export default function OperationsPage() {
                 <input
                   value={newActivity}
                   onChange={(e) => setNewActivity(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") submitActivity(); }}
                   placeholder={lang === "sw" ? "Jina la shughuli" : "Activity name"}
+                  aria-label={lang === "sw" ? "Jina la shughuli" : "Activity name"}
                   className="flex-1 min-w-[120px] rounded-lg border border-afya-border bg-white px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-afya-green"
                 />
+                <select
+                  value={newType}
+                  onChange={(e) => setPickedType(e.target.value)}
+                  className="rounded-lg border border-afya-border bg-white px-2 py-1.5 text-xs"
+                  aria-label={t("ops_activity_type")}
+                >
+                  {ACTIVITY_PROFILES.map((p) => (
+                    <option key={p.key} value={p.key}>{lang === "sw" ? p.label_sw : p.label_en}</option>
+                  ))}
+                </select>
                 <select
                   value={newStart}
                   onChange={(e) => setNewStart(Number(e.target.value))}
                   className="rounded-lg border border-afya-border bg-white px-2 py-1.5 text-xs"
-                  aria-label="Start hour"
+                  aria-label={t("ch_from")}
                 >
                   {Array.from({ length: 16 }, (_, i) => i + 6).map((h) => (
-                    <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>
+                    <option key={h} value={h}>{hourLabel(h)}</option>
                   ))}
                 </select>
                 <select
                   value={newEnd}
                   onChange={(e) => setNewEnd(Number(e.target.value))}
                   className="rounded-lg border border-afya-border bg-white px-2 py-1.5 text-xs"
-                  aria-label="End hour"
+                  aria-label={t("ch_to")}
                 >
                   {Array.from({ length: 17 }, (_, i) => i + 7).map((h) => (
-                    <option key={h} value={h}>{String(Math.min(h, 22)).padStart(2, "0")}:00</option>
+                    <option key={h} value={h}>{hourLabel(h)}</option>
                   ))}
                 </select>
                 <button
-                  onClick={addActivity}
+                  onClick={submitActivity}
                   className="px-3 py-1.5 rounded-lg bg-afya-green text-white text-xs font-bold hover:bg-afya-green/90 transition-colors flex items-center gap-1"
-                  aria-label="Add activity"
                 >
-                  <Plus className="w-3 h-3" strokeWidth={2.5} />
+                  <Plus className="w-3 h-3" strokeWidth={2.5} aria-hidden="true" />
                   {lang === "sw" ? "Ongeza" : "Add"}
                 </button>
               </div>
             </div>
+
+            {/* Archived activities stay here until restored or deleted */}
+            {archived.length > 0 && (
+              <div className="mt-4 border-t border-afya-border pt-3">
+                <button
+                  onClick={() => setShowArchived((v) => !v)}
+                  aria-expanded={showArchived}
+                  className="flex w-full items-center justify-between text-xs font-semibold text-afya-muted"
+                >
+                  {t("ops_archived")} ({archived.length})
+                  <ChevronRight className={`w-3.5 h-3.5 transition-transform ${showArchived ? "rotate-90" : ""}`} strokeWidth={2} aria-hidden="true" />
+                </button>
+                {showArchived && (
+                  <ul className="mt-2 space-y-1.5">
+                    {archived.map((act) => (
+                      <li key={act.id} className="flex items-center gap-2 rounded-lg bg-afya-canvas/60 px-3 py-2 text-xs text-afya-muted">
+                        <span className="flex-1 min-w-0 truncate">
+                          {activityName(act)} · {hourLabel(act.start_hour)}–{hourLabel(act.end_hour)}
+                        </span>
+                        <button
+                          onClick={() => updateActivities((list) => setActivityStatus(list, act.id, "active"))}
+                          className="flex items-center gap-1 rounded-md px-2 py-1 font-semibold text-afya-green hover:bg-afya-green/10"
+                        >
+                          <ArchiveRestore className="w-3.5 h-3.5" strokeWidth={1.8} aria-hidden="true" />
+                          {t("ops_restore")}
+                        </button>
+                        <button
+                          onClick={() => updateActivities((list) => removeActivity(list, act.id))}
+                          className="p-1 rounded-md hover:bg-afya-red/10 hover:text-afya-red"
+                          aria-label={t("delete")}
+                          title={t("delete")}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" strokeWidth={1.8} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </Card>
 
           {/* State history */}

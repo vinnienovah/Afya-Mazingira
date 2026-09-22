@@ -6,18 +6,41 @@ import {
   Search, LayoutDashboard, TrendingUp, CalendarCheck, Map as MapIcon,
   BrainCircuit, Building2, History, Bell, User, Info, Printer,
   Languages, Sparkles, X, CornerDownLeft, Sprout, BookOpen,
- Activity,
+  Activity, LineChart, Waves,
 } from "lucide-react";
 import { useLanguage } from "@/lib/contexts/language";
+import { PALETTE_LINKS } from "./commands";
+
+type Icon = React.ComponentType<{ className?: string; strokeWidth?: number }>;
 
 interface CommandItem {
   id: string;
   group: "pages" | "actions";
   labelKey: string;
-  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  icon: Icon;
   keywords: string;
   run: () => void;
 }
+
+const ICONS: Record<string, Icon> = {
+  "p-situation": LayoutDashboard,
+  "p-forecast": TrendingUp,
+  "p-plan": CalendarCheck,
+  "p-farm": Sprout,
+  "p-map": MapIcon,
+  "p-climate": LineChart,
+  "p-intelligence": BrainCircuit,
+  "p-operations": Building2,
+  "p-flood": Waves,
+  "p-health": Activity,
+  "p-replay": History,
+  "p-stories": BookOpen,
+  "p-notifications": Bell,
+  "p-profile": User,
+  "p-about": Info,
+  "a-briefing": Printer,
+  "a-ask": Sparkles,
+};
 
 export default function CommandPalette() {
   const router = useRouter();
@@ -27,27 +50,17 @@ export default function CommandPalette() {
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const commands = useMemo<CommandItem[]>(() => {
-    const go = (href: string) => () => router.push(href);
-    return [
-      { id: "p-situation", group: "pages", labelKey: "nav_situation", icon: LayoutDashboard, keywords: "home dashboard current hali sasa", run: go("/situation") },
-      { id: "p-forecast", group: "pages", labelKey: "nav_forecast", icon: TrendingUp, keywords: "forecast wbgt chart utabiri", run: go("/forecast") },
-      { id: "p-plan", group: "pages", labelKey: "nav_plan", icon: CalendarCheck, keywords: "plan activity best time window panga shughuli", run: go("/plan") },
-      { id: "p-farm", group: "pages", labelKey: "nav_farm", icon: Sprout, keywords: "farm irrigation crop spray planting shamba kilimo mwagilia", run: go("/farm") },
-      { id: "p-stories", group: "pages", labelKey: "nav_stories", icon: BookOpen, keywords: "stories case studies impact hadithi matumizi", run: go("/stories") },
-      { id: "p-map", group: "pages", labelKey: "nav_map", icon: MapIcon, keywords: "map counties regional ramani hatari", run: go("/map") },
-      { id: "p-intelligence", group: "pages", labelKey: "nav_intelligence", icon: BrainCircuit, keywords: "why intelligence model contributors ujasusi", run: go("/intelligence") },
-      { id: "p-health", group: "pages", labelKey: "nav_health", icon: Activity, keywords: "station health quality sensors sentinel afya kituo", run: go("/health") },
-      { id: "p-operations", group: "pages", labelKey: "nav_operations", icon: Building2, keywords: "operations institutional command uendeshaji", run: go("/operations") },
-      { id: "p-replay", group: "pages", labelKey: "nav_replay", icon: History, keywords: "replay historical simulation marudio", run: go("/replay") },
-      { id: "p-notifications", group: "pages", labelKey: "nav_notifications", icon: Bell, keywords: "notifications alerts push arifa", run: go("/notifications") },
-      { id: "p-profile", group: "pages", labelKey: "nav_profile", icon: User, keywords: "profile settings account wasifu", run: go("/profile") },
-      { id: "p-about", group: "pages", labelKey: "about_title", icon: Info, keywords: "about provenance methodology kuhusu", run: go("/about") },
-      { id: "a-briefing", group: "actions", labelKey: "cmd_briefing", icon: Printer, keywords: "briefing print pdf report taarifa chapisha", run: go("/briefing") },
-      { id: "a-ask", group: "actions", labelKey: "cmd_ask_ai", icon: Sparkles, keywords: "ask ai why explanation gemini kwa nini eleza", run: go("/situation#ai-section") },
-      { id: "a-language", group: "actions", labelKey: "cmd_language", icon: Languages, keywords: "language english kiswahili lugha en sw badilisha", run: () => setLang(lang === "en" ? "sw" : "en") },
-    ];
-  }, [router, lang, setLang]);
+  const commands = useMemo<CommandItem[]>(() => [
+    ...PALETTE_LINKS.map((link) => ({
+      id: link.id,
+      group: link.group,
+      labelKey: link.labelKey,
+      icon: ICONS[link.id] ?? Search,
+      keywords: link.keywords,
+      run: () => router.push(link.href),
+    })),
+    { id: "a-language", group: "actions", labelKey: "cmd_language", icon: Languages, keywords: "language english kiswahili lugha en sw badilisha", run: () => setLang(lang === "en" ? "sw" : "en") },
+  ], [router, lang, setLang]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

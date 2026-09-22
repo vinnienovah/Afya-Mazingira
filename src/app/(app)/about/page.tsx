@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useLanguage } from "@/lib/contexts/language";
 import { Card, CardTitle } from "@/components/ui/Card";
-import { Globe, CloudRain, Satellite, Radio, Database, Shield, AlertTriangle } from "lucide-react";
+import { Globe, CloudRain, CloudSun, Satellite, Radio, Database, Shield, AlertTriangle, BookOpen, ChevronRight } from "lucide-react";
 
 export default function AboutPage() {
   const { t, lang } = useLanguage();
@@ -20,17 +21,24 @@ export default function AboutPage() {
     },
     {
       icon: <Globe className="w-5 h-5 text-afya-rain" />,
-      name: "ERA5-Land",
-      detail_en: "Regional atmospheric reanalysis · ECMWF / Copernicus",
-      detail_sw: "Uchambuzi upya wa anga ya kikanda · ECMWF / Copernicus",
-      type: { en: "REGIONAL MODEL · ~9 km · hourly", sw: "MFUMO WA KIKANDA · ~9 km · kila saa" },
+      name: "ERA5",
+      detail_en: "Regional atmospheric reanalysis · ECMWF / Copernicus, through the Open-Meteo archive",
+      detail_sw: "Uchambuzi upya wa anga ya kikanda · ECMWF / Copernicus, kupitia kumbukumbu ya Open-Meteo",
+      type: { en: "REGIONAL MODEL · ~28 km · hourly · about 5 days behind", sw: "MFUMO WA KIKANDA · ~km 28 · kila saa · huchelewa takriban siku 5" },
     },
     {
       icon: <CloudRain className="w-5 h-5 text-afya-rain" />,
-      name: "ERA5-Land rainfall",
-      detail_en: "7-day and 30-day rainfall totals from ERA5-Land, used in place of CHIRPS",
-      detail_sw: "Jumla ya mvua ya siku 7 na 30 kutoka ERA5-Land, badala ya CHIRPS",
-      type: { en: "REGIONAL MODEL · ~9 km · daily", sw: "MFUMO WA KIKANDA · ~9 km · kila siku" },
+      name: "Rainfall",
+      detail_en: "The station's own gauge 1, read from its daily running total, for the farm water budget; Open-Meteo's regional model for 7- and 30-day context and where the gauge is short of data",
+      detail_sw: "Kipima mvua 1 cha kituo, kinachosomwa kutoka jumla yake ya kila siku, kwa hesabu ya maji ya shamba; mfumo wa kikanda wa Open-Meteo kwa muktadha wa siku 7 na 30 na pale kipima kinapokosa data",
+      type: { en: "GROUND MEASUREMENT + REGIONAL MODEL · daily", sw: "KIPIMO CHA ARDHI + MFUMO WA KIKANDA · kila siku" },
+    },
+    {
+      icon: <CloudSun className="w-5 h-5 text-afya-rain" />,
+      name: "Open-Meteo forecast",
+      detail_en: "County outlook on the Risk Map, and plans for tomorrow",
+      detail_sw: "Utabiri wa kaunti kwenye Ramani ya Hatari, na mipango ya kesho",
+      type: { en: "REGIONAL FORECAST · hourly", sw: "UTABIRI WA KIKANDA · kila saa" },
     },
     {
       icon: <Satellite className="w-5 h-5 text-afya-teal" />,
@@ -51,7 +59,7 @@ export default function AboutPage() {
   const LIMITS = [
     { icon: <AlertTriangle className="w-4 h-4" />, en: "Does not provide medical diagnosis or clinical advice", sw: "Haitoi utambuzi wa matibabu au ushauri wa kliniki" },
     { icon: <AlertTriangle className="w-4 h-4" />, en: "Not a street-level flood predictor", sw: "Siyo utabiri wa mafuriko ya kiwango cha barabara" },
-    { icon: <AlertTriangle className="w-4 h-4" />, en: "Does not predict malaria, cholera, or asthma attacks", sw: "Haitabī malaria, kipindupindu, au mapigo ya pumu" },
+    { icon: <AlertTriangle className="w-4 h-4" />, en: "Does not predict malaria, cholera, or asthma attacks", sw: "Haitabiri malaria, kipindupindu, au mapigo ya pumu" },
     { icon: <AlertTriangle className="w-4 h-4" />, en: "One station does not represent all of Juja", sw: "Kituo kimoja hakimwakilishi Juja nzima" },
     { icon: <AlertTriangle className="w-4 h-4" />, en: "Does not use generative AI as a forecasting engine", sw: "Haitumii AI ya kizalishaji kama injini ya utabiri" },
   ];
@@ -145,9 +153,29 @@ export default function AboutPage() {
         </div>
       </Card>
 
-      {/* Version */}
+      {/* Example scenarios: illustrative, so labelled as such */}
+      <Link
+        href="/stories"
+        className="flex items-center gap-3 rounded-2xl border border-afya-border bg-white px-5 py-4 hover:border-afya-green/50 transition-colors group"
+      >
+        <BookOpen className="w-5 h-5 text-afya-muted shrink-0" strokeWidth={1.8} aria-hidden="true" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-afya-charcoal">{t("nav_stories")}</span>
+            <span className="rounded-full border border-afya-gold/40 bg-afya-gold/10 px-2 py-0.5 text-[9px] font-bold tracking-wide text-[#8a6d00]">
+              {t("illustrative")}
+            </span>
+          </div>
+          <p className="text-xs text-afya-muted mt-0.5">{t("about_examples_note")}</p>
+        </div>
+        <ChevronRight className="w-4 h-4 text-afya-muted group-hover:text-afya-green transition-colors shrink-0" strokeWidth={2} aria-hidden="true" />
+      </Link>
+
+      {/* Build note */}
       <div className="text-center text-xs text-afya-muted/50 space-y-1 pb-4">
-        <p>AFYA MAZINGIRA v1.0.0 · Hackathon Build · JKUAT/Juja POC · September 2026</p>
+        <p>{lang === "sw"
+          ? "AFYA MAZINGIRA · Toleo la hackathon · Uthibitisho wa dhana JKUAT/Juja · Septemba 2026"
+          : "AFYA MAZINGIRA · Hackathon build · JKUAT/Juja proof of concept · September 2026"}</p>
         <p>{lang === "sw"
           ? "Inaundwa na JHUB Africa na JKUAT Conduit"
           : "Built with JHUB Africa and the JKUAT Conduit station"}</p>

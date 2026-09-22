@@ -1,16 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MapContainer, TileLayer, GeoJSON, CircleMarker, Tooltip, useMap } from "react-leaflet";
 import type { Layer, PathOptions, LeafletKeyboardEvent } from "leaflet";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import { RISK_META } from "@/lib/afya/constants";
 import type { CountyFeature } from "@/lib/afya/map-data";
+import {
+  HOUR_SOURCE_LABEL_KEY, NO_DATA_COLOUR, ndviColour, outlookColour, rainColour, thermalColour,
+} from "@/lib/afya/map-scales";
 import "leaflet/dist/leaflet.css";
 
 const JKUAT: [number, number] = [-1.0931, 37.0149];
 
-export type MapLayerKey = "outlook" | "thermal" | "rain" | "vegetation" | "lst";
+export type MapLayerKey = "outlook" | "thermal" | "rain" | "vegetation";
 
 interface CountyProps {
   name: string;
@@ -31,38 +34,48 @@ interface Props {
   stationLabel: string;
   stationSubLabel: string;
   lang: string;
+  t: (key: string) => string;
 }
 
 function colourFor(layer: MapLayerKey, p: CountyFeature["properties"] | undefined, timeIdx: number): string {
-  if (!p) return "#c9d3cd";
+  if (!p) return NO_DATA_COLOUR;
+  const hour = p.outlook_hours?.[timeIdx];
+  if (layer === "outlook") return outlookColour(hour?.category);
+  if (layer === "thermal") return thermalColour(hour?.temp_c);
+  if (layer === "rain") return rainColour(p.rain_today_mm);
+  return ndviColour(p.ndvi_mean);
+}
 
-  if (layer === "outlook") {
-    const cat = p.outlook_hours?.[timeIdx]?.category ?? p.outlook_category;
-    return RISK_META[cat as keyof typeof RISK_META]?.color ?? "#9ca3af";
-  }
-  if (layer === "thermal" || layer === "lst") {
-    const t = p.lst_c ?? 30;
-    if (t < 28) return "#DBEAFE";
-    if (t < 31) return "#93C5FD";
-    if (t < 34) return "#F2B705";
-    if (t < 37) return "#E27832";
-    return "#C62828";
+/** The tooltip line for the selected layer and hour. */
+function tooltipDetail(
+  layer: MapLayerKey,
+  p: CountyFeature["properties"],
+  timeIdx: number,
+  lang: string,
+  t: (key: string) => string,
+): string {
+  const hour = p.outlook_hours?.[timeIdx];
+  const noData = t("no_data");
+  if (layer === "thermal" || layer === "outlook") {
+    if (!hour) return noData;
+    const parts: string[] = [`${hour.hour} EAT`];
+    if (layer === "outlook") {
+      parts.push(hour.category ? (lang === "sw" ? RISK_META[hour.category].sw : RISK_META[hour.category].en) : noData);
+    }
+    parts.push(
+      `${t("map_air_temp")} ${hour.temp_c != null ? `${hour.temp_c.toFixed(1)} °C` : noData}` +
+        (hour.temp_source ? ` (${t(HOUR_SOURCE_LABEL_KEY[hour.temp_source])})` : ""),
+    );
+    parts.push(
+      `${t("map_shade_wbgt")} ${hour.wbgt_c != null ? `${hour.wbgt_c.toFixed(1)} °C` : noData}` +
+        (hour.wbgt_source ? ` (${t(HOUR_SOURCE_LABEL_KEY[hour.wbgt_source])})` : ""),
+    );
+    return parts.join("<br/>");
   }
   if (layer === "rain") {
-    const r = p.rain_24h_mm;
-    if (r < 0.5) return "#EAF4FA";
-    if (r < 2) return "#93C5FD";
-    if (r < 6) return "#3786B5";
-    if (r < 12) return "#1E5A8A";
-    return "#0F3A5C";
+    return `${t("map_rain_today")}: ${p.rain_today_mm != null ? `${p.rain_today_mm.toFixed(1)} mm` : noData}`;
   }
-  // vegetation
-  const n = p.ndvi_mean ?? 0;
-  if (n < 0.2) return "#D4B896";
-  if (n < 0.35) return "#A8C686";
-  if (n < 0.5) return "#5B9E6B";
-  if (n < 0.65) return "#1A6B3C";
-  return "#0D4625";
+  return `NDVI: ${p.ndvi_mean != null ? p.ndvi_mean.toFixed(2) : noData}`;
 }
 
 /** Keeps Leaflet sized correctly inside responsive/flex layouts. */
@@ -83,31 +96,31 @@ function ResizeHandler() {
 export default function CountyLeafletMap({
   boundaries, indicators, layer, mode, timeIdx,
   selectedCounty, onSelectCounty, onSelectStation,
-  stationLabel, stationSubLabel, lang,
+  stationLabel, stationSubLabel, lang, t,
 }: Props) {
   const [hovered, setHovered] = useState<string | null>(null);
-  // Keep a ref so the style callback always sees current values
-  const stateRef = useRef({ layer, mode, timeIdx, selectedCounty, hovered });
-  useEffect(() => {
-    stateRef.current = { layer, mode, timeIdx, selectedCounty, hovered };
-  });
 
+  // Built from the current controls: the GeoJSON below is remounted whenever
+  // they change and styles its counties once, as it mounts.
   const styleFor = useMemo(
     () => (feature?: Feature<Geometry, CountyProps>): PathOptions => {
       const name = feature?.properties?.name ?? "";
       const p = indicators[name];
-      const s = stateRef.current;
-      const isSelected = s.selectedCounty === name;
-      const isHovered = s.hovered === name;
+      const isSelected = selectedCounty === name;
+      const isHovered = hovered === name;
+      const fillColor = colourFor(layer, p, timeIdx);
+      // A dashed outline marks no data as well as the grey, for readers who cannot tell the fills apart.
+      const noData = fillColor === NO_DATA_COLOUR;
       return {
-        fillColor: colourFor(s.layer, p, s.timeIdx),
-        fillOpacity: p ? (s.mode === "surface" ? 0.55 : isSelected ? 0.85 : isHovered ? 0.78 : 0.68) : 0.25,
-        color: isSelected ? "#17211C" : "#ffffff",
+        fillColor,
+        fillOpacity: noData ? 0.45 : mode === "surface" ? 0.55 : isSelected ? 0.85 : isHovered ? 0.78 : 0.68,
+        color: isSelected ? "#17211C" : noData ? "#68756F" : "#ffffff",
         weight: isSelected ? 2.5 : isHovered ? 2 : 1,
+        dashArray: noData && !isSelected ? "4 3" : undefined,
         opacity: 1,
       };
     },
-    [indicators],
+    [indicators, layer, mode, timeIdx, selectedCounty, hovered],
   );
 
   // Re-render styles when controls change
@@ -125,15 +138,13 @@ export default function CountyLeafletMap({
           if (e.originalEvent?.key === "Enter") onSelectCounty(name);
         },
       });
-      const cat = p
-        ? (p.outlook_hours?.[timeIdx]?.category ?? p.outlook_category)
-        : (lang === "sw" ? "hakuna data" : "no data");
+      const detail = p ? tooltipDetail(layer, p, timeIdx, lang, t) : t("no_data");
       lyr.bindTooltip(
-        `<strong>${name}</strong><br/><span style="font-size:11px">${cat}</span>`,
+        `<strong>${name}</strong><br/><span style="font-size:11px">${detail}</span>`,
         { sticky: true, direction: "top", className: "afya-tooltip" },
       );
     },
-    [indicators, onSelectCounty, selectedCounty, timeIdx, lang],
+    [indicators, onSelectCounty, selectedCounty, timeIdx, lang, layer, t],
   );
 
   return (
