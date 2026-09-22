@@ -85,7 +85,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     plan_day_today: "Today",
     plan_day_tomorrow: "Tomorrow",
     plan_day_tomorrow_note: "Tomorrow's plan uses the real regional forecast (Open-Meteo), not the ground station, the station's own forecast only looks ~9 hours ahead.",
-    plan_regional_notice: "This recommendation is based on the real regional forecast, not the JKUAT ground station, either because you're planning ahead, or because the station hasn't reported recently enough for its own forecast to reach this far.",
+    plan_regional_notice: "Judged on the Open-Meteo regional forecast (hourly model output for the area around JKUAT), not on the station: the station's forecast is too short or too old for this window. The regional forecast has no station quality check, so treat it as a rough guide.",
     find_best_time: "Find Best Time",
     best_window_result: "BEST AVAILABLE WINDOW",
     alternative_window: "ALTERNATIVE WINDOW",
@@ -105,6 +105,27 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     plan_deleted: "Activity plan deleted",
     plan_updated: "Activity plan updated",
     running_evaluation: "Analyzing environmental conditions…",
+    plan_name_label: "Plan name (optional)",
+    plan_name_placeholder: "e.g. my outdoor work",
+    plan_empty: "Select your activity, duration, and available window. AFYA MAZINGIRA will rank every candidate window.",
+    update_plan: "Update Plan",
+    cancel_edit: "Stop editing",
+    plan_editing: "Editing \"{name}\". Find the best time again, then update the plan.",
+    plan_save_failed: "The plan could not be saved.",
+    plan_searched_from: "Your window had already begun, so only the time from {time} was searched.",
+    plan_window_peak: "Forecast peak {wbgt}°C WBGT in the shade: {band} for this activity.",
+    plan_coverage_station: "Judged on {points} points of the station forecast, one every {step} minutes. The station forecast runs to {end}.",
+    plan_coverage_regional: "Judged on {points} hourly points of the regional forecast, which runs to {end}.",
+    plan_source_regional: "Regional forecast",
+    plan_error_window_past: "That time has already passed (it ended at {end}). Choose a later window, or tomorrow.",
+    plan_error_window_mostly_past: "Only {from}–{end} of that window is left, which is shorter than the activity.",
+    plan_error_window_order: "The end time must be after the start time.",
+    plan_error_window_too_short: "The available time is shorter than the activity.",
+    plan_error_window_too_long: "The available time can span at most 24 hours.",
+    plan_error_beyond_forecast: "No forecast reaches that far ahead.",
+    plan_error_no_daylight_window: "Outdoor activities are planned between sunrise ({sunrise}) and sunset ({sunset}), and no daylight window of that length is left in your range.",
+    plan_error_no_window: "No forecast covers a whole window of that length in your range. Try a wider range or a shorter activity.",
+    plan_error_invalid_plan: "This plan has an activity or time the planner no longer accepts. Edit it and save it again.",
 
     // Best-Time reasons (keys from engine)
     reason_lower_exposure: "Lower predicted thermal exposure",
@@ -614,10 +635,10 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     plan_day_today: "Leo",
     plan_day_tomorrow: "Kesho",
     plan_day_tomorrow_note: "Mpango wa kesho unatumia utabiri halisi wa kikanda (Open-Meteo), si kituo cha ardhini, utabiri wa kituo mwenyewe unaangalia karibu masaa 9 tu mbele.",
-    plan_regional_notice: "Pendekezo hili linatokana na utabiri halisi wa kikanda, si kituo cha ardhini cha JKUAT, ama kwa sababu unapanga mbeleni, au kwa sababu kituo hakijatoa taarifa hivi karibuni vya kutosha kwa utabiri wake mwenyewe kufika mbali hivi.",
+    plan_regional_notice: "Limetathminiwa kwa utabiri wa kikanda wa Open-Meteo (matokeo ya modeli ya kila saa kwa eneo linalozunguka JKUAT), si kwa kituo: utabiri wa kituo ni mfupi mno au ni wa zamani mno kwa dirisha hili. Utabiri wa kikanda haukaguliwi ubora kama kituo, kwa hivyo uchukue kama mwongozo wa jumla tu.",
     find_best_time: "Tafuta Wakati Bora",
     best_window_result: "DIRISHA BORA LA KUPATIKANA",
-    alternative_window: "DIRISHA M badala",
+    alternative_window: "DIRISHA MBADALA",
     why_this_time: "Kwa nini wakati huu?",
     save_plan: "Hifadhi Mpango",
     rerun_forecast: "Endesha tena dhidi ya utabiri mpya",
@@ -634,13 +655,34 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     plan_deleted: "Mpango wa shughuli umefutwa",
     plan_updated: "Mpango wa shughuli umesasishwa",
     running_evaluation: "Inachambua hali ya mazingira…",
+    plan_name_label: "Jina la mpango (hiari)",
+    plan_name_placeholder: "Mfano: kazi yangu ya nje",
+    plan_empty: "Chagua shughuli, muda, na kipindi chako kinachopatikana. AFYA MAZINGIRA italinganisha madirisha yote.",
+    update_plan: "Sasisha Mpango",
+    cancel_edit: "Acha kuhariri",
+    plan_editing: "Unahariri \"{name}\". Tafuta wakati bora tena, kisha sasisha mpango.",
+    plan_save_failed: "Mpango haukuweza kuhifadhiwa.",
+    plan_searched_from: "Muda wako ulikuwa umeshaanza, kwa hivyo ulitafutwa kuanzia saa {time} tu.",
+    plan_window_peak: "Kilele cha utabiri {wbgt}°C WBGT kivulini: {band} kwa shughuli hii.",
+    plan_coverage_station: "Limetathminiwa kwa vipimo {points} vya utabiri wa kituo, kimoja kila dakika {step}. Utabiri wa kituo unafika hadi saa {end}.",
+    plan_coverage_regional: "Limetathminiwa kwa vipimo {points} vya kila saa vya utabiri wa kikanda, unaofika hadi saa {end}.",
+    plan_source_regional: "Utabiri wa kikanda",
+    plan_error_window_past: "Muda huo umeshapita (uliisha saa {end}). Chagua muda wa baadaye, au kesho.",
+    plan_error_window_mostly_past: "Umebaki muda wa {from}–{end} tu, ambao ni mfupi kuliko shughuli.",
+    plan_error_window_order: "Muda wa mwisho lazima uwe baada ya muda wa kuanza.",
+    plan_error_window_too_short: "Muda uliopo ni mfupi kuliko shughuli.",
+    plan_error_window_too_long: "Muda uliopo hauwezi kuzidi saa 24.",
+    plan_error_beyond_forecast: "Hakuna utabiri unaofika mbali hivyo.",
+    plan_error_no_daylight_window: "Shughuli za nje hupangwa kati ya macheo ({sunrise}) na machweo ({sunset}), na hakuna muda wa mchana wa urefu huo uliobaki katika muda wako.",
+    plan_error_no_window: "Hakuna utabiri unaofunika dirisha zima la urefu huo katika muda wako. Jaribu muda mpana zaidi au shughuli fupi zaidi.",
+    plan_error_invalid_plan: "Shughuli au muda wa mpango huu haukubaliki tena. Hariri mpango kisha uuhifadhi tena.",
 
     reason_lower_exposure: "Utabiri wa kupatwa na joto wa chini",
     reason_radiation_declining: "Mionzi inapungua",
     reason_low_rain: "Ishara ya chini ya mvua",
     reason_uncertainty_ok: "Utata wa utabiri unakubalika",
     reason_quality_good: "Ubora wa data ni mzuri",
-    reason_avoids_peak: "Hauepuki kilele cha kupatwa",
+    reason_avoids_peak: "Linaepuka kilele cha kupatwa na joto",
     reason_early_morning: "Hali za asubuhi ni nzuri",
 
     forecast_title: "Utabiri wa Mazingira",
@@ -1056,6 +1098,11 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
 
 export function t(lang: Lang, key: string): string {
   return STRINGS[lang][key] ?? STRINGS.en[key] ?? key;
+}
+
+/** `t` with its {name} placeholders filled in. */
+export function tf(lang: Lang, key: string, values: Record<string, string | number>): string {
+  return t(lang, key).replace(/\{(\w+)\}/g, (match, name: string) => (name in values ? String(values[name]) : match));
 }
 
 export function getStrings(lang: Lang): Record<string, string> {
