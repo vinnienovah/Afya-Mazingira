@@ -7,10 +7,15 @@ import { shadeWbgt, stullWetBulb } from "./constants";
 
 export interface DemoObservation {
   ts: string; // ISO UTC
+  // Rain in this 15-minute slot, mm, one value per gauge.
   rg1: number;
   rg2: number;
   rg1tt: number;
   rg2tt: number;
+  // Each gauge's total for the previous rain day (06:00 to 06:00 UTC), as the
+  // station reported it in this slot. Absent when not reported.
+  rg1tp?: number;
+  rg2tp?: number;
   temp_bmx: number;
   press_bmx: number;
   temp_mcp: number;
@@ -31,6 +36,16 @@ export interface DemoObservation {
   // Fields in this slot that were carried forward or defaulted rather than
   // measured. Absent or empty when every value was observed.
   imputed?: string[];
+  // Channels whose reading here broke a hard limit (Sentinel R01 to R04). The
+  // reading was dropped and the slot filled like any other gap.
+  rejected?: string[];
+  // Minutes of this slot inside a gap between readings: time from 15 minutes
+  // after one reading to the next, when they are more than 20 minutes apart.
+  gap_minutes?: number;
+  // The gust-direction column, read only to check whether the export copies
+  // the gust speed into it (Sentinel R13). Never used as a direction.
+  wind_gust_dir?: number | null;
+  battery_v?: number | null;
 }
 
 // Seeded pseudo-random for reproducibility

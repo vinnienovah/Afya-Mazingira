@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import useSWR from "swr";
 import {
   ResponsiveContainer, LineChart, Line, AreaChart, Area, BarChart, Bar,
@@ -9,6 +10,7 @@ import { useLanguage } from "@/lib/contexts/language";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { fmtTimeShort, fmtDate } from "@/lib/afya/format";
+import { addDays, nairobiDate } from "@/lib/afya/nairobi-day";
 import RadialGauge from "./RadialGauge";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -21,7 +23,7 @@ interface ConduitPoint {
   wind_gust_ms: number;
   pressure_hpa: number;
   wbgt_c: number;
-  rain_mm: number;
+  rain_mm: number | null;
 }
 interface Era5Point {
   time: string;
@@ -39,6 +41,12 @@ interface SeriesResponse {
   era5: Era5Point[];
   daily_rainfall: RainPoint[];
 }
+interface StationRainResponse {
+  points: { time: string; rain_mm: number | null }[];
+}
+
+const REGIONAL_LABEL = "ERA5 · ~28 KM";
+const STATION_RAIN_DAYS = 20;
 
 const AXIS_STYLE = { fontSize: 10, fill: "#8a9691" };
 const GRID_STYLE = { stroke: "#e3e9e5" };
@@ -67,7 +75,13 @@ function TooltipBox({
   );
 }
 
-function MiniChart({ title, sourceLabel, children }: { title: string; sourceLabel: string; children: React.ReactNode }) {
+function MiniChart({ title, sourceLabel, placeholder, children }: {
+  title: string;
+  sourceLabel: string;
+  // Shown instead of the chart while there is nothing to plot.
+  placeholder?: string;
+  children: React.ReactNode;
+}) {
   return (
     <Card>
       <div className="flex items-center justify-between mb-3">
@@ -75,7 +89,11 @@ function MiniChart({ title, sourceLabel, children }: { title: string; sourceLabe
         <span className="text-[9px] font-semibold uppercase tracking-wide text-afya-muted/60">{sourceLabel}</span>
       </div>
       <div style={{ width: "100%", height: 180 }}>
-        <ResponsiveContainer>{children as React.ReactElement}</ResponsiveContainer>
+        {placeholder ? (
+          <p className="text-xs text-afya-muted text-center pt-16">{placeholder}</p>
+        ) : (
+          <ResponsiveContainer>{children as React.ReactElement}</ResponsiveContainer>
+        )}
       </div>
     </Card>
   );
@@ -86,6 +104,14 @@ export default function ClimateVariablesPanel() {
   const { data, isLoading } = useSWR<SeriesResponse>("/api/climate-series", fetcher, {
     refreshInterval: 5 * 60_000,
   });
+  // The station's own daily rain comes from its history, which can take a
+  // while to gather past the archive, so it loads on its own.
+  const today = useMemo(() => nairobiDate(new Date()), []);
+  const { data: stationRain } = useSWR<StationRainResponse>(
+    `/api/climate-history?dataset=conduit&granularity=daily&from=${addDays(today, -STATION_RAIN_DAYS)}&to=${today}`,
+    fetcher,
+    { refreshInterval: 15 * 60_000 },
+  );
 
   if (isLoading || !data) {
     return (
@@ -157,7 +183,7 @@ export default function ClimateVariablesPanel() {
         </MiniChart>
 
         {/* ERA5 regional temperature, 7 days */}
-        <MiniChart title={lang === "sw" ? "Joto la Kikanda (ERA5, siku 7)" : "Regional Temperature (ERA5, 7d)"} sourceLabel="ERA5-LAND">
+        <MiniChart title={lang === "sw" ? "Joto la Kikanda (ERA5, siku 7)" : "Regional Temperature (ERA5, 7d)"} sourceLabel={REGIONAL_LABEL}>
           <LineChart data={data.era5} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" {...GRID_STYLE} vertical={false} />
             <XAxis dataKey="time" tickFormatter={fmtDate} tick={AXIS_STYLE} minTickGap={50} />
@@ -167,8 +193,23 @@ export default function ClimateVariablesPanel() {
           </LineChart>
         </MiniChart>
 
-        {/* Rainfall, daily, real */}
-        <MiniChart title={lang === "sw" ? "Mvua ya Kila Siku" : "Daily Rainfall"} sourceLabel="ERA5-LAND">
+        {/* Rainfall at the station, daily, from gauge 1's running total */}
+        <MiniChart
+          title={t("cv_station_rain_title")}
+          sourceLabel="CONDUIT · GAUGE 1"
+          placeholder={stationRain?.points?.length ? undefined : stationRain ? t("ch_reason_no_station_data") : t("ch_loading")}
+        >
+          <BarChart data={stationRain?.points ?? []} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" {...GRID_STYLE} vertical={false} />
+            <XAxis dataKey="time" tickFormatter={fmtDate} tick={AXIS_STYLE} minTickGap={30} />
+            <YAxis tick={AXIS_STYLE} width={32} />
+            <Tooltip content={<TooltipBox unit=" mm" fmt={(l) => fmtDate(l)} />} />
+            <Bar dataKey="rain_mm" name={lang === "sw" ? "Mvua" : "Rain"} fill="#1F5F8B" radius={[3, 3, 0, 0]} />
+          </BarChart>
+        </MiniChart>
+
+        {/* Rainfall, regional, daily */}
+        <MiniChart title={t("cv_regional_rain_title")} sourceLabel={REGIONAL_LABEL}>
           <BarChart data={data.daily_rainfall} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" {...GRID_STYLE} vertical={false} />
             <XAxis dataKey="date" tickFormatter={fmtDate} tick={AXIS_STYLE} minTickGap={30} />
@@ -217,11 +258,7 @@ export default function ClimateVariablesPanel() {
         </div>
       )}
 
-      <p className="text-[10px] text-afya-muted/60">
-        {lang === "sw"
-          ? "Joto/Unyevu/Upepo/Shinikizo: Conduit (saa 30 zilizopita). Joto la kikanda na mvua: ERA5-Land, mfumo halisi wa hali ya hewa (siyo CHIRPS moja kwa moja, angalia maelezo)."
-          : "Temperature/Humidity/Wind/Pressure: Conduit station (last 30h). Regional temperature and rainfall: ERA5-Land reanalysis, a real precipitation product used in place of a direct CHIRPS point-extraction, which needs raster tooling this deployment doesn't run."}
-      </p>
+      <p className="text-[10px] text-afya-muted/60">{t("cv_footnote")}</p>
     </div>
   );
 }
