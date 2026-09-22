@@ -83,3 +83,14 @@ test("the current reading lists the fields that were filled in rather than measu
   const complete = await situationAt("2026-07-15T06:00:00Z");
   assert.deepEqual(complete.current.imputed, []);
 });
+
+test("a replayed window never starts before the replay's own clock", async () => {
+  for (const anchorIso of ["2026-09-01T03:00:00Z", "2026-09-01T06:00:00Z", "2026-03-10T09:00:00Z"]) {
+    const s = await situationAt(anchorIso);
+    if (!s.best_time) continue;
+    assert.ok(
+      Date.parse(s.best_time.recommended.start) >= Date.parse(anchorIso),
+      `${anchorIso}: window starts ${s.best_time.recommended.start}`,
+    );
+  }
+});

@@ -49,8 +49,9 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
   // For anything standing in for "now" (live, or the CSV archive's latest
   // available row) the effective "now" is the real clock so observation age
   // is reported from the real clock; for a deliberate historical replay or synthetic
-  // demo it is the (possibly simulated) anchor itself.
-  const effectiveNow = bundle.realtime ? new Date().toISOString() : anchor;
+  // demo it is the simulated time asked for, not the latest observation before it,
+  // so a replayed window never starts before the replay's own clock.
+  const effectiveNow = bundle.realtime ? new Date().toISOString() : anchorIso;
   // The usual WBGT by time of day, from observations before the latest one.
   const climatology = getClimatology(series[series.length - 1].ts);
 
