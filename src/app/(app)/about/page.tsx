@@ -28,10 +28,10 @@ export default function AboutPage() {
     },
     {
       icon: <CloudRain className="w-5 h-5 text-afya-rain" />,
-      name: "ERA5 rainfall",
-      detail_en: "7-day and 30-day rainfall totals from ERA5, used in place of CHIRPS",
-      detail_sw: "Jumla ya mvua ya siku 7 na 30 kutoka ERA5, badala ya CHIRPS",
-      type: { en: "REGIONAL MODEL · ~28 km · daily", sw: "MFUMO WA KIKANDA · ~km 28 · kila siku" },
+      name: "Rainfall",
+      detail_en: "The station's own gauge 1, read from its daily running total, for the farm water budget; Open-Meteo's regional model for 7- and 30-day context and where the gauge is short of data",
+      detail_sw: "Kipima mvua 1 cha kituo, kinachosomwa kutoka jumla yake ya kila siku, kwa hesabu ya maji ya shamba; mfumo wa kikanda wa Open-Meteo kwa muktadha wa siku 7 na 30 na pale kipima kinapokosa data",
+      type: { en: "GROUND MEASUREMENT + REGIONAL MODEL · daily", sw: "KIPIMO CHA ARDHI + MFUMO WA KIKANDA · kila siku" },
     },
     {
       icon: <CloudSun className="w-5 h-5 text-afya-rain" />,
