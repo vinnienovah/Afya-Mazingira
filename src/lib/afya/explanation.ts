@@ -277,7 +277,7 @@ function getStateDescriptionEn(stateId: number): string {
     case 1:
       return "Temperature is rising rapidly while humidity falls and radiation increases.";
     case 2:
-      return "The environment is at its thermal peak with high radiation and elevated WBGT.";
+      return "It is the hottest, driest part of the day: temperature has levelled off near its peak while sunlight eases.";
     case 3:
       return "Temperature is declining, humidity is recovering, and radiation is falling.";
     default:
@@ -292,7 +292,7 @@ function getStateDescriptionSw(stateId: number): string {
     case 1:
       return "Joto linaongezeka haraka wakati unyevu unapungua na mionzi inaongezeka.";
     case 2:
-      return "Mazingira yako kwenye kilele cha joto chenye mionzi mikali na WBGT iliyoinuliwa.";
+      return "Huu ni wakati wa joto kali na ukavu zaidi wa siku: joto limetulia karibu na kilele chake huku mwanga wa jua ukipungua.";
     case 3:
       return "Joto linapungua, unyevu unarejea, na mionzi inapungua.";
     default:

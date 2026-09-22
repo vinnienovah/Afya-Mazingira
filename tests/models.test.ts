@@ -6,6 +6,8 @@ import evaluation from "../src/lib/afya/model/forecast-evaluation.json";
 import { STATE_FEATURES, type FeatureVector } from "../src/lib/afya/feature-engine";
 import { HORIZON_STEPS, horizonScores, type Horizon } from "../src/lib/afya/forecast-engine";
 import { classifyState } from "../src/lib/afya/state-engine";
+import { STATES } from "../src/lib/afya/constants";
+import { STRINGS } from "../src/lib/afya/i18n";
 
 const HORIZONS = Object.keys(HORIZON_STEPS) as Horizon[];
 
@@ -42,4 +44,13 @@ test("each state's own centre is classified as that state", () => {
     });
     assert.equal(classifyState(fv), state);
   });
+});
+
+test("the hot state is named for its heat: its light readings are below the warming state's", () => {
+  const [, warming, hot] = stateModel.summary;
+  assert.ok(hot.mean_temp_c > warming.mean_temp_c);
+  assert.ok(hot.mean_ir_counts < warming.mean_ir_counts);
+  assert.doesNotMatch(STATES[2].name, /radiation/i);
+  assert.equal(STATES[2].name, STRINGS.en.state_2);
+  assert.equal(STATES[2].name_sw, STRINGS.sw.state_2);
 });

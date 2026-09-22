@@ -47,7 +47,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     // Climate Reflex states
     state_0: "Cool & Humid Stable",
     state_1: "Rapid Warming",
-    state_2: "Hot / High-Radiation Exposure",
+    state_2: "Hot / Peak Heat",
     state_3: "Cooling / Recovery",
     state_since: "State active since",
     next_transition: "Expected next transition",
@@ -582,7 +582,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
 
     state_0: "Hali Baridi na Unyevu Imara",
     state_1: "Kuongezeka Haraka kwa Joto",
-    state_2: "Joto / Mionzi Mikali",
+    state_2: "Joto Kali / Kilele cha Joto",
     state_3: "Kupoa / Kupona",
     state_since: "Hali imeanza",
     next_transition: "Mabadiliko yanayotarajiwa",
