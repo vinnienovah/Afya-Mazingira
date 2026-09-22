@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@/db";
+import { db, hasDatabase } from "@/db";
 import { userPreferences, users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getSessionFromCookies } from "@/lib/auth/logic";
+import { databaseUnavailable, readJsonBody } from "@/lib/http";
 
 export async function GET() {
+  if (!hasDatabase()) return databaseUnavailable();
   const user = await getSessionFromCookies();
   if (!user) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
@@ -30,14 +32,14 @@ const UpdatePrefsSchema = z.object({
 });
 
 export async function PATCH(req: NextRequest) {
+  if (!hasDatabase()) return databaseUnavailable();
   const user = await getSessionFromCookies();
   if (!user) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
-  const body = await req.json();
-  const parsed = UpdatePrefsSchema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: "invalid_input" }, { status: 400 });
+  const body = await readJsonBody(req, UpdatePrefsSchema);
+  if ("response" in body) return body.response;
 
-  const { language, units, preferred_activities, notification_prefs } = parsed.data;
+  const { language, units, preferred_activities, notification_prefs } = body.data;
 
   // Update user language if provided
   if (language) {

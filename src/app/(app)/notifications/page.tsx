@@ -8,7 +8,7 @@ import { Card, CardTitle } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
   Bell, BellOff, Plus, Trash2, ToggleLeft, ToggleRight,
-  CheckCircle2, AlertTriangle, RefreshCw,
+  CheckCircle2, RefreshCw, Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +19,38 @@ interface NotifRule {
   activity_type?: string;
   enabled: boolean;
   created_at: string;
+}
+
+type PushState = "checking" | "unsupported" | "off" | "on" | "denied";
+
+interface DeliveryStatus {
+  email_configured: boolean;
+  push_configured: boolean;
+}
+
+/** The VAPID public key as the bytes pushManager.subscribe expects. */
+function applicationServerKey(base64url: string): Uint8Array<ArrayBuffer> {
+  const base64 = (base64url + "=".repeat((4 - (base64url.length % 4)) % 4)).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  const bytes = new Uint8Array(new ArrayBuffer(raw.length));
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+  return bytes;
+}
+
+// The service worker registers after page load; wait for it, but not forever:
+// if it cannot install, serviceWorker.ready never settles.
+async function readyRegistration(timeoutMs = 10_000): Promise<ServiceWorkerRegistration | null> {
+  if (!(await navigator.serviceWorker.getRegistration())) {
+    await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+  }
+  return Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+  ]);
+}
+
+function pushSupported(): boolean {
+  return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 }
 
 const RULE_TYPES = [
@@ -34,9 +66,10 @@ export default function NotificationsPage() {
   const { user } = useAuth();
   const [rules, setRules] = useState<NotifRule[]>([]);
   const [loading, setLoading] = useState(false);
-  const [pushEnabled, setPushEnabled] = useState(false);
-  const [pushLoading, setPushLoading] = useState(false);
-  const [demoPush, setDemoPush] = useState(false);
+  const [delivery, setDelivery] = useState<DeliveryStatus | null>(null);
+  const [pushState, setPushState] = useState<PushState>("checking");
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushMessage, setPushMessage] = useState<string | null>(null);
 
   // New rule form
   const [showForm, setShowForm] = useState(false);
@@ -49,6 +82,26 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     if (user) loadRules();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      const status = await fetch("/api/notifications/status")
+        .then((res) => (res.ok ? (res.json() as Promise<DeliveryStatus>) : null))
+        .catch(() => null);
+      let state: PushState = "unsupported";
+      if (pushSupported()) {
+        const registration = await navigator.serviceWorker.getRegistration().catch(() => undefined);
+        const subscription = await registration?.pushManager.getSubscription().catch(() => null);
+        state = subscription ? "on" : Notification.permission === "denied" ? "denied" : "off";
+      }
+      if (cancelled) return;
+      setDelivery(status);
+      setPushState(state);
+    })();
+    return () => { cancelled = true; };
   }, [user]);
 
   async function loadRules() {
@@ -119,51 +172,86 @@ export default function NotificationsPage() {
   }
 
   async function enablePush() {
-    setPushLoading(true);
+    setPushBusy(true);
+    setPushMessage(null);
     try {
-      if ("serviceWorker" in navigator && "PushManager" in window) {
-        const vapidRes = await fetch("/api/push/vapid-key");
-        const vapidData = await vapidRes.json();
-
-        if (vapidData.configured) {
-          // Real push (not demo)
-          try {
-            const reg = await navigator.serviceWorker.ready;
-            const sub = await reg.pushManager.subscribe({
-              userVisibleOnly: true,
-              applicationServerKey: vapidData.public_key,
-            });
-            const keyP256dh = sub.getKey("p256dh");
-            const keyAuth = sub.getKey("auth");
-            if (keyP256dh && keyAuth) {
-              await fetch("/api/push/subscribe", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  endpoint: sub.endpoint,
-                  keys: {
-                    p256dh: btoa(String.fromCharCode(...Array.from(new Uint8Array(keyP256dh)))),
-                    auth: btoa(String.fromCharCode(...Array.from(new Uint8Array(keyAuth)))),
-                  },
-                }),
-                credentials: "include",
-              });
-            }
-            setPushEnabled(true);
-          } catch {
-            // Permission denied or unavailable
-            setPushEnabled(false);
-          }
-        } else {
-          // Demo mode, simulate local push registration
-          setDemoPush(true);
-          setPushEnabled(true);
-        }
-      } else {
-        alert(t("push_not_supported"));
+      const key = await fetch("/api/push/vapid-key").then((res) => res.json());
+      if (!key.configured || !key.public_key) {
+        setDelivery((d) => (d ? { ...d, push_configured: false } : d));
+        return;
       }
+      const registration = await readyRegistration();
+      if (!registration) {
+        setPushMessage(t("push_sw_unavailable"));
+        return;
+      }
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        setPushState(permission === "denied" ? "denied" : "off");
+        return;
+      }
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: applicationServerKey(key.public_key),
+      });
+      const res = await fetch("/api/push/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(subscription.toJSON()),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        await subscription.unsubscribe();
+        setPushMessage(t("error_generic"));
+        return;
+      }
+      setPushState("on");
+    } catch {
+      setPushMessage(t("error_generic"));
     } finally {
-      setPushLoading(false);
+      setPushBusy(false);
+    }
+  }
+
+  async function disablePush() {
+    setPushBusy(true);
+    setPushMessage(null);
+    try {
+      const registration = await navigator.serviceWorker.getRegistration();
+      const subscription = await registration?.pushManager.getSubscription();
+      if (subscription) {
+        await fetch("/api/push/subscribe", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint: subscription.endpoint }),
+          credentials: "include",
+        });
+        await subscription.unsubscribe();
+      }
+      setPushState("off");
+    } catch {
+      setPushMessage(t("error_generic"));
+    } finally {
+      setPushBusy(false);
+    }
+  }
+
+  async function sendTestPush() {
+    setPushBusy(true);
+    setPushMessage(null);
+    try {
+      const res = await fetch("/api/push/send", { method: "POST", credentials: "include" });
+      setPushMessage(
+        res.ok ? t("push_test_sent")
+          : res.status === 429 ? t("error_rate_limited")
+            : res.status === 404 ? t("push_no_subscription")
+              : res.status === 503 ? t("push_not_configured")
+                : t("error_generic"),
+      );
+    } catch {
+      setPushMessage(t("error_generic"));
+    } finally {
+      setPushBusy(false);
     }
   }
 
@@ -189,38 +277,69 @@ export default function NotificationsPage() {
         <p className="text-sm text-afya-muted mt-0.5">{t("notif_subtitle")}</p>
       </div>
 
-      {/* Push enable */}
+      {/* How alerts are delivered */}
       <Card>
-        <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="space-y-4">
           <div className="flex items-start gap-3">
             <div className="w-9 h-9 rounded-xl bg-afya-green/10 flex items-center justify-center shrink-0" aria-hidden="true">
-              <Bell className="w-5 h-5 text-afya-green" strokeWidth={1.8} />
+              <Mail className="w-5 h-5 text-afya-green" strokeWidth={1.8} />
             </div>
-            <div>
-              <p className="font-semibold text-afya-charcoal text-sm">{t("enable_push")}</p>
-              <p className="text-xs text-afya-muted mt-0.5">
-                {pushEnabled
-                  ? demoPush ? t("demo_push_notice") : t("push_enabled")
-                  : lang === "sw"
-                    ? "Arifa za mazingira zinatumwa moja kwa moja kwenye kivinjari chako"
-                    : "Environmental alerts are pushed directly to your browser"}
-              </p>
+            <div className="text-sm text-afya-charcoal pt-2">
+              {delivery === null
+                ? <Skeleton className="h-4 w-64 rounded" />
+                : delivery.email_configured ? t("notif_delivery_email") : t("notif_delivery_email_off")}
             </div>
           </div>
-          <button
-            onClick={enablePush}
-            disabled={pushEnabled || pushLoading}
-            className={cn(
-              "inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors",
-              pushEnabled
-                ? "bg-afya-green/10 text-afya-green"
-                : "bg-afya-deep text-white hover:bg-afya-deep/90",
+
+          <div className="flex items-start justify-between gap-4 flex-wrap border-t border-afya-border pt-4">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-xl bg-afya-green/10 flex items-center justify-center shrink-0" aria-hidden="true">
+                <Bell className="w-5 h-5 text-afya-green" strokeWidth={1.8} />
+              </div>
+              <div>
+                <p className="font-semibold text-afya-charcoal text-sm">{t("push_title")}</p>
+                <p className="text-xs text-afya-muted mt-0.5">
+                  {delivery && !delivery.push_configured ? t("push_not_configured")
+                    : pushState === "unsupported" ? t("push_not_supported")
+                      : pushState === "denied" ? t("push_denied")
+                        : pushState === "on" ? t("push_on_hint")
+                          : t("push_available_hint")}
+                </p>
+              </div>
+            </div>
+            {delivery?.push_configured && pushState === "off" && (
+              <button
+                onClick={enablePush}
+                disabled={pushBusy}
+                className="inline-flex items-center gap-2 rounded-xl bg-afya-deep px-4 py-2.5 text-sm font-semibold text-white hover:bg-afya-deep/90 disabled:opacity-50 transition-colors"
+              >
+                {pushBusy && <RefreshCw className="w-4 h-4 animate-spin" strokeWidth={2} aria-hidden="true" />}
+                {t("enable_push")}
+              </button>
             )}
-          >
-            {pushLoading && <RefreshCw className="w-4 h-4 animate-spin" strokeWidth={2} aria-hidden="true" />}
-            {pushEnabled && <CheckCircle2 className="w-4 h-4" strokeWidth={2} aria-hidden="true" />}
-            {(pushEnabled && !demoPush) ? t("push_enabled") : t("enable_push")}
-          </button>
+            {delivery?.push_configured && pushState === "on" && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={sendTestPush}
+                  disabled={pushBusy}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-afya-border px-3 py-2 text-sm font-semibold text-afya-charcoal hover:bg-afya-canvas disabled:opacity-50 transition-colors"
+                >
+                  {pushBusy && <RefreshCw className="w-4 h-4 animate-spin" strokeWidth={2} aria-hidden="true" />}
+                  {t("push_send_test")}
+                </button>
+                <button
+                  onClick={disablePush}
+                  disabled={pushBusy}
+                  className="rounded-xl px-3 py-2 text-sm font-semibold text-afya-muted hover:bg-afya-canvas disabled:opacity-50 transition-colors"
+                >
+                  {t("push_turn_off")}
+                </button>
+              </div>
+            )}
+          </div>
+          {pushMessage && (
+            <p className="text-xs text-afya-charcoal" role="status">{pushMessage}</p>
+          )}
         </div>
       </Card>
 

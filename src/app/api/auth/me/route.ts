@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { hasDatabase } from "@/db";
 import { getSessionFromCookies } from "@/lib/auth/logic";
 
 export async function GET() {
-  const user = await getSessionFromCookies();
+  // Without a database no session can be checked, which is the same as signed out.
+  const user = hasDatabase() ? await getSessionFromCookies() : null;
   // Signed out is a normal answer here, not an error.
   if (!user) return NextResponse.json(null);
   return NextResponse.json({

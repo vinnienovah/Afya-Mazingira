@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { runPipeline } from "@/lib/afya/pipeline";
-import { generateExplanation, buildExplanationFacts, buildFarmExplanationFacts } from "@/lib/afya/explanation";
+import { generateExplanation, buildFarmExplanationFacts, type FarmFacts } from "@/lib/afya/explanation";
 import { buildFarmAdvisory, findCropProfile, type GrowthStage } from "@/lib/afya/farm-engine";
 import { loadFarmInputs } from "@/lib/afya/farm-inputs";
-import type { Lang } from "@/lib/afya/types";
+import type { Lang, SituationResult } from "@/lib/afya/types";
+import { readJsonBody } from "@/lib/http";
+import { rateLimit } from "@/lib/rate-limit";
 
 // Safety net for the (usually much faster) real ERA5/Sentinel fetches in
-// runPipeline, plus the LLM call itself, Vercel's default function timeout
-// is short.
+// runPipeline; the model calls themselves stop after about 8 seconds.
 export const maxDuration = 30;
 
 const ExplainSchema = z.object({
@@ -21,45 +22,76 @@ const ExplainSchema = z.object({
   // Which page is asking, lets the AI draw on that page's own facts (e.g.
   // the Farm Advisory page's irrigation decision) instead of only the
   // general situation/forecast facts, which have nothing about crops.
-  context: z.string().optional(),
-  crop: z.string().optional(),
+  context: z.string().max(40).optional(),
+  crop: z.string().max(40).optional(),
   stage: z.enum(["establishment", "vegetative", "flowering", "maturity"]).optional(),
+  // A plan's own recommended window, so its "Why?" is answered about that
+  // window and not the situation's default one-hour window.
+  window_start: z.iso.datetime().optional(),
+  window_end: z.iso.datetime().optional(),
+  activity: z.string().max(40).optional(),
+  duration_minutes: z.number().int().min(5).max(720).optional(),
+  reasons: z.array(z.string().max(60)).max(8).optional(),
 });
 
-export async function POST(req: NextRequest) {
+async function farmFacts(situation: SituationResult, cropKey: string, stage: GrowthStage, lang: Lang): Promise<FarmFacts | null> {
+  // An unknown crop gets no farm facts rather than another crop's.
+  const crop = findCropProfile(cropKey);
+  if (!crop) return null;
+  // Water advice needs the station's (or the regional model's) rain and
+  // temperatures; without them it is left out rather than built on
+  // placeholders, as on the Farm page.
   try {
-    const body = await req.json();
-    const parsed = ExplainSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json({ error: "invalid_input" }, { status: 400 });
-    }
+    const inputs = await loadFarmInputs();
+    if (!inputs) return buildFarmExplanationFacts(null, { waterAvailable: false, lang });
+    return buildFarmExplanationFacts(buildFarmAdvisory(situation, crop, stage, inputs), { lang });
+  } catch (err) {
+    console.warn("[afya-ai] farm advisory unavailable:", err instanceof Error ? err.message : err);
+    return buildFarmExplanationFacts(null, { waterAvailable: false, lang });
+  }
+}
 
-    const { lang, question, force_fallback, mode, context, crop, stage } = parsed.data;
+export async function POST(req: NextRequest) {
+  const limited = rateLimit(req, "aiExplain");
+  if (limited) return limited;
 
-    const situation = await runPipeline();
-    const facts = buildExplanationFacts(situation);
-    // An unknown crop gets no farm facts rather than another crop's.
-    const farmCrop = context === "farm" ? findCropProfile(crop ?? "maize") : null;
-    const farmInputs = farmCrop ? await loadFarmInputs() : null;
-    const extraFacts = farmCrop && farmInputs
-      ? buildFarmExplanationFacts(buildFarmAdvisory(situation, farmCrop, (stage ?? "vegetative") as GrowthStage, farmInputs))
-      : undefined;
-    const result = await generateExplanation(
+  const body = await readJsonBody(req, ExplainSchema);
+  if ("response" in body) return body.response;
+  const {
+    lang, question, force_fallback, mode, context, crop, stage,
+    window_start, window_end, activity, duration_minutes, reasons,
+  } = body.data;
+
+  try {
+    const isFarm = context === "farm";
+    // The Farm page plans field work over a longer window than the default call.
+    const situation = await runPipeline(isFarm ? { activityKey: "field_work", durationMinutes: 120 } : {});
+    const plan = window_start && window_end && Date.parse(window_end) > Date.parse(window_start)
+      ? { start: window_start, end: window_end, activity, duration_minutes, reasons }
+      : null;
+    const farm = isFarm
+      ? await farmFacts(situation, crop ?? "maize", stage ?? "vegetative", lang)
+      : null;
+
+    const result = await generateExplanation({
       situation,
-      lang as Lang,
+      lang,
       question,
-      force_fallback,
       mode,
-      extraFacts,
-    );
+      context: plan ? "plan" : context,
+      forceFallback: force_fallback,
+      farm,
+      plan,
+    });
 
     return NextResponse.json({
       explanation: result.text,
       source: result.source,
       provider: result.provider,
       mode: result.mode,
+      intent: result.intent,
       lang,
-      facts,
+      facts: result.facts,
     });
   } catch (err) {
     console.error("Explain API error:", err);

@@ -5,6 +5,7 @@ import { getStationHistory } from "@/lib/afya/station-history";
 import { aggregateStation, fetchEra5History } from "@/lib/afya/climate-history";
 import { addDays, nairobiDate, nairobiDayStart } from "@/lib/afya/nairobi-day";
 import { CLIMATE_LOCATIONS } from "@/lib/afya/constants";
+import { rateLimit } from "@/lib/rate-limit";
 
 // Climate History dashboard: an arbitrary date range at daily or hourly
 // granularity, separate from the always-"now" Climate Variables panel
@@ -32,6 +33,8 @@ const QuerySchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
+  const limited = rateLimit(req, "climateHistory");
+  if (limited) return limited;
   try {
     const sp = req.nextUrl.searchParams;
     const parsed = QuerySchema.safeParse({

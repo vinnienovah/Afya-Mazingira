@@ -2,11 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { runHistoricalReplay } from "@/lib/afya/pipeline";
 import { getObservationSeries } from "@/lib/afya/sources";
 import { buildReplayFrames, replayDateProblem, summariseHorizons } from "@/lib/afya/replay";
+import { rateLimit } from "@/lib/rate-limit";
 
 // Safety net, a replay runs the pipeline for 13 simulated hours.
 export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
+  const limited = rateLimit(req, "replay");
+  if (limited) return limited;
   let body: unknown;
   try {
     body = await req.json();

@@ -725,6 +725,12 @@ function PlanWhySection({ result, lang, t }: {
           question: lang === "sw"
             ? `Kwa nini ${win} ndio dirisha bora?`
             : `Why is ${win} the recommended window?`,
+          context: "plan",
+          window_start: result.recommended.start,
+          window_end: result.recommended.end,
+          activity: result.activity,
+          duration_minutes: result.duration_minutes,
+          reasons: result.recommended.reasons,
         }),
       });
       const data = await res.json();
