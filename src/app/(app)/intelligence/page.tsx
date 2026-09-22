@@ -4,10 +4,10 @@ import Link from "next/link";
 import { useSituation } from "@/lib/contexts/situation";
 import { useLanguage } from "@/lib/contexts/language";
 import { STATES, RISK_META } from "@/lib/afya/constants";
-import { horizonScores, FORECAST_PERIODS } from "@/lib/afya/forecast-engine";
+import { horizonScores, FORECAST_METHOD, FORECAST_MODEL_KIND, FORECAST_PERIODS } from "@/lib/afya/forecast-engine";
 import evaluation from "@/lib/afya/model/forecast-evaluation.json";
 import type { Lang } from "@/lib/afya/types";
-import { fill, fmtAsOf, fmtDate, fmtDayMonth, fmtSigned, MONTH_NAMES } from "@/lib/afya/format";
+import { fill, fmtAsOf, fmtDate, fmtDayMonth, fmtSigned, fmtTime, MONTH_NAMES } from "@/lib/afya/format";
 import {
   contributorLabel, currentBand, nextStateNote, rainWindows, timeOfDayGapHours,
 } from "@/lib/afya/display";
@@ -256,8 +256,8 @@ export default function IntelligencePage() {
         </div>
         <p className="mt-3 text-xs text-afya-muted">
           {lang === "sw"
-            ? `Regresheni ya ridge kwa kila hatua ya dakika 15, iliyofunzwa kwa data ya Conduit ${FORECAST_PERIODS.train[0]} hadi ${FORECAST_PERIODS.train[1]}. Bendi imewekwa kutoka ${FORECAST_PERIODS.calibration[0]} hadi ${FORECAST_PERIODS.calibration[1]}, na alama zote zimetoka ${FORECAST_PERIODS.test[0]} hadi ${FORECAST_PERIODS.test[1]}, miezi ambayo modeli haikuiona. Lengo ni WBGT kivulini.`
-            : `Ridge regression for each 15-minute step, fitted on Conduit data from ${FORECAST_PERIODS.train[0]} to ${FORECAST_PERIODS.train[1]}. The band is set from ${FORECAST_PERIODS.calibration[0]} to ${FORECAST_PERIODS.calibration[1]}, and every score comes from ${FORECAST_PERIODS.test[0]} to ${FORECAST_PERIODS.test[1]}, months the model never saw. The target is WBGT in shade.`}
+            ? `${FORECAST_MODEL_KIND === "seasonal" ? t("forecast_method_seasonal") : FORECAST_METHOD}. Imefunzwa kwa data ya Conduit ${FORECAST_PERIODS.train[0]} hadi ${FORECAST_PERIODS.train[1]}. Bendi imewekwa kutoka ${FORECAST_PERIODS.calibration[0]} hadi ${FORECAST_PERIODS.calibration[1]}, na alama zote zimetoka ${FORECAST_PERIODS.test[0]} hadi ${FORECAST_PERIODS.test[1]}, miezi ambayo modeli haikuiona. Lengo ni WBGT kivulini.`
+            : `${FORECAST_METHOD}. Fitted on Conduit data from ${FORECAST_PERIODS.train[0]} to ${FORECAST_PERIODS.train[1]}. The band is set from ${FORECAST_PERIODS.calibration[0]} to ${FORECAST_PERIODS.calibration[1]}, and every score comes from ${FORECAST_PERIODS.test[0]} to ${FORECAST_PERIODS.test[1]}, months the model never saw. The target is WBGT in shade.`}
         </p>
       </Card>
 
@@ -417,7 +417,9 @@ export default function IntelligencePage() {
         </div>
         {rainOk ? (
           <>
-            <p className="text-xs text-afya-muted mb-4">{fill(t("rain_lag_note"), { day: fmtDayMonth(rain.day, lang) })}</p>
+            {chirps.through && (
+              <p className="text-xs text-afya-muted mb-4">{fill(t("rain_model_note"), { time: fmtTime(chirps.through) })}</p>
+            )}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {[
                 { l: fill(t("rain_on_day"), { day: fmtDayMonth(rain.day, lang) }), v: isNum(chirps.chirps_mm) ? `${chirps.chirps_mm.toFixed(1)} mm` : "-" },
@@ -439,7 +441,7 @@ export default function IntelligencePage() {
                   <div className="text-[10px] text-afya-muted">{item.l}</div>
                   <div className="text-sm font-bold text-afya-charcoal">{item.v}</div>
                   {item.sub && <div className="text-[10px] text-afya-muted">{item.sub}</div>}
-                  <div className="text-[9px] text-afya-muted/60 font-semibold uppercase">{t("historical_label")} · ERA5</div>
+                  <div className="text-[9px] text-afya-muted/60 font-semibold uppercase">{t("regional_model_label")} · OPEN-METEO</div>
                 </div>
               ))}
             </div>

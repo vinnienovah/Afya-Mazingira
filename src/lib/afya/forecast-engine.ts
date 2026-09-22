@@ -51,6 +51,7 @@ export type Horizon = keyof typeof HORIZON_STEPS;
 export const SEASONAL_INPUTS = ["usual_now", "usual_at_target", "departure_now"];
 
 export const FORECAST_MODEL_NAME = model.name;
+export const FORECAST_MODEL_KIND = model.kind;
 export const FORECAST_METHOD = model.method;
 export const FORECAST_PERIODS = model.periods;
 
