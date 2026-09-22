@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useLanguage } from "@/lib/contexts/language";
+import { t as translate } from "@/lib/afya/i18n";
+import type { Lang } from "@/lib/afya/types";
 import { Sparkles, Send, Loader2, BookOpen, GraduationCap } from "lucide-react";
 
 interface AiPanelProps {
@@ -35,6 +37,7 @@ interface Message {
   source?: "llm" | "deterministic";
   provider?: "gemini" | "groq" | "openai" | "anthropic" | "deterministic";
   mode?: Mode;
+  lang?: Lang; // language the answer was written in
   question?: string; // the question that produced this answer (for re-asking)
 }
 
@@ -44,6 +47,9 @@ export default function AiPanel({ context = "situation", initialQuestions, extra
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<Mode>("standard");
+  // Answers follow the page language until EN or SW is picked here.
+  const [chosenLang, setChosenLang] = useState<Lang | null>(null);
+  const answerLang: Lang = chosenLang ?? lang;
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const suggested = initialQuestions ?? (lang === "sw" ? SUGGESTED_SW : SUGGESTED_EN);
@@ -52,7 +58,7 @@ export default function AiPanel({ context = "situation", initialQuestions, extra
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  async function ask(question: string, askMode: Mode = mode, showUserMessage = true) {
+  async function ask(question: string, askMode: Mode = mode, showUserMessage = true, askLang: Lang = answerLang) {
     if (!question.trim() || loading) return;
     if (showUserMessage) {
       setMessages((m) => [...m, { role: "user", text: question }]);
@@ -64,19 +70,21 @@ export default function AiPanel({ context = "situation", initialQuestions, extra
       const res = await fetch("/api/ai/explain", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lang, question, context, mode: askMode, ...extraParams }),
+        body: JSON.stringify({ lang: askLang, question, context, mode: askMode, ...extraParams }),
       });
       const data = await res.json();
+      const failed = res.status === 429 ? translate(askLang, "ai_rate_limited") : translate(askLang, "error_generic");
       setMessages((m) => [...m, {
         role: "assistant",
-        text: data.explanation ?? t("error_generic"),
+        text: data.explanation ?? failed,
         source: data.source,
         provider: data.provider,
         mode: data.mode ?? askMode,
+        lang: askLang,
         question,
       }]);
     } catch {
-      setMessages((m) => [...m, { role: "assistant", text: t("no_ai"), mode: askMode }]);
+      setMessages((m) => [...m, { role: "assistant", text: translate(askLang, "no_ai"), mode: askMode, lang: askLang }]);
     } finally {
       setLoading(false);
     }
@@ -84,20 +92,21 @@ export default function AiPanel({ context = "situation", initialQuestions, extra
 
   // Re-ask the same question in plain language, without duplicating the user bubble
   function explainSimply(msg: Message) {
-    const q = msg.question ?? (lang === "sw" ? "Eleza hali ya sasa" : "Explain the current situation");
-    ask(q, "plain", false);
+    const msgLang = msg.lang ?? answerLang;
+    const q = msg.question ?? (msgLang === "sw" ? "Eleza hali ya sasa" : "Explain the current situation");
+    ask(q, "plain", false, msgLang);
   }
 
-  function switchLang(newLang: "en" | "sw") {
+  // Answers the last question again in the chosen language.
+  function switchLang(newLang: Lang) {
+    if (newLang === answerLang || loading) return;
+    setChosenLang(newLang);
     const lastQ = messages.filter((m) => m.role === "user").pop();
     if (lastQ) {
-      setMessages([]);
-      setTimeout(() => ask(lastQ.text, mode), 50);
+      setMessages([{ role: "user", text: lastQ.text }]);
+      ask(lastQ.text, mode, false, newLang);
     } else {
-      setTimeout(
-        () => ask(newLang === "en" ? "Summarize the current situation" : "Fupisha hali ya sasa", mode),
-        50,
-      );
+      ask(newLang === "en" ? "Summarize the current situation" : "Fupisha hali ya sasa", mode, true, newLang);
     }
   }
 
@@ -143,18 +152,24 @@ export default function AiPanel({ context = "situation", initialQuestions, extra
         </div>
 
         {/* Language toggle for explanation */}
-        <div className="flex items-center rounded-lg border border-afya-border overflow-hidden text-[11px] font-semibold">
+        <div
+          className="flex items-center rounded-lg border border-afya-border overflow-hidden text-[11px] font-semibold"
+          role="group"
+          aria-label={t("ai_answer_language")}
+        >
           <button
             onClick={() => switchLang("en")}
-            className={`px-2 py-1.5 transition-colors ${lang === "en" ? "bg-afya-deep text-white" : "text-afya-muted hover:text-afya-charcoal"}`}
-            aria-pressed={lang === "en"}
+            disabled={loading}
+            className={`px-2 py-1.5 transition-colors ${answerLang === "en" ? "bg-afya-deep text-white" : "text-afya-muted hover:text-afya-charcoal"}`}
+            aria-pressed={answerLang === "en"}
           >
             EN
           </button>
           <button
             onClick={() => switchLang("sw")}
-            className={`px-2 py-1.5 transition-colors ${lang === "sw" ? "bg-afya-deep text-white" : "text-afya-muted hover:text-afya-charcoal"}`}
-            aria-pressed={lang === "sw"}
+            disabled={loading}
+            className={`px-2 py-1.5 transition-colors ${answerLang === "sw" ? "bg-afya-deep text-white" : "text-afya-muted hover:text-afya-charcoal"}`}
+            aria-pressed={answerLang === "sw"}
           >
             SW
           </button>
@@ -209,7 +224,7 @@ export default function AiPanel({ context = "situation", initialQuestions, extra
                     <span>Anthropic · {t("ai_disclaimer")}</span>
                   )}
                   {msg.source === "deterministic" && (
-                    <span className="italic">{t("no_ai")}</span>
+                    <span className="italic">{translate(msg.lang ?? lang, "no_ai")}</span>
                   )}
 
                   {/* Explain simply, only offered on standard answers */}
@@ -231,7 +246,7 @@ export default function AiPanel({ context = "situation", initialQuestions, extra
           <div className="flex justify-start">
             <div className="bg-afya-canvas border border-afya-border rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2">
               <Loader2 className="w-4 h-4 text-afya-muted animate-spin" aria-hidden="true" />
-              <span className="text-sm text-afya-muted">{lang === "sw" ? "Inaandika…" : "Writing…"}</span>
+              <span className="text-sm text-afya-muted">{answerLang === "sw" ? "Inaandika…" : "Writing…"}</span>
             </div>
           </div>
         )}
