@@ -9,10 +9,16 @@ export function hasResendConfigured(): boolean {
   return !!process.env.RESEND_API_KEY;
 }
 
+/** Text made safe to place inside the email's HTML. */
+export function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+}
+
 export async function sendAlertEmail(
   to: string,
   name: string,
   subject: string,
+  // Paragraphs of HTML; any user-written text in them must already be escaped.
   bodyLines: string[],
   ctaHref: string,
   ctaLabel: string,
@@ -20,7 +26,7 @@ export async function sendAlertEmail(
 ): Promise<void> {
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
   const link = `${appUrl}${ctaHref}`;
-  const greeting = lang === "sw" ? `Habari ${name},` : `Hi ${name},`;
+  const greeting = lang === "sw" ? `Habari ${escapeHtml(name)},` : `Hi ${escapeHtml(name)},`;
   const bodyHtml = bodyLines.map((l) => `<p style="font-size:14px;color:#4a4a4a;line-height:1.6;margin:0 0 12px;">${l}</p>`).join("");
 
   const html = `<!doctype html>
@@ -54,7 +60,7 @@ export async function sendAlertEmail(
     body: JSON.stringify({
       from: process.env.RESEND_FROM_EMAIL ?? "AFYA MAZINGIRA <onboarding@resend.dev>",
       to: [to],
-      subject,
+      subject: subject.replace(/[\r\n]+/g, " "),
       html,
     }),
     signal: AbortSignal.timeout(15_000),
