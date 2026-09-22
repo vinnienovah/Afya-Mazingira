@@ -446,7 +446,7 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
                   {sw ? "tofauti ya wastani" : "mean difference"} {a02.mae_c?.toFixed(3) ?? "-"} °C
                   {"; "}
                   {sw
-                    ? `kuanzia ${a02.hot_from_c} °C ${a02.mae_hot_c?.toFixed(3) ?? "-"} °C`
+                    ? `kuanzia ${a02.hot_from_c} °C kwenda juu, ${a02.mae_hot_c?.toFixed(3) ?? "-"} °C`
                     : `from ${a02.hot_from_c} °C up, ${a02.mae_hot_c?.toFixed(3) ?? "-"} °C`}
                 </td>
                 <td className="py-2 text-xs text-afya-muted">{sw ? "taarifa tu" : "report only"}</td>

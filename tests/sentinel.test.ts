@@ -237,13 +237,13 @@ test("the audits recognise a Stull wet bulb and a firmware WBGT below it", () =>
 test("the NWS heat index keeps its two branches and both humidity adjustments", () => {
   const near = (got: number, want: number, what: string) =>
     assert.ok(Math.abs(got - want) < 1e-6, `${what}: ${got}`);
-  near(nwsHeatIndex(20, 60), 19.622222, "Steadman's simple form, below 80 degF");
+  near(nwsHeatIndex(20, 60), 19.622222, "Steadman's simple form, below 80 °F");
   near(nwsHeatIndex(35, 40), 37.216351, "the Rothfusz regression");
   // The adjustments are worth more than a degree in dry air and three
   // quarters of one in saturated air, so dropping either would show here.
   near(nwsHeatIndex(35, 5), 31.209325, "the regression less the dry adjustment");
   near(nwsHeatIndex(28, 100), 36.378836, "the regression plus the humid adjustment");
-  // The switch at 80 degF is a step between two formulas, not a blend.
+  // The switch at 80 °F is a step between two formulas, not a blend.
   assert.ok(nwsHeatIndex(26.53, 60) - nwsHeatIndex(26.52, 60) > 0.7);
 });
 
