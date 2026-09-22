@@ -531,8 +531,6 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     error_email_taken: "This email is already registered.",
     password_min: "Password must be at least 8 characters.",
     email_invalid: "Please enter a valid email address.",
-    demo_account: "Demo Account",
-    use_demo: "Use Demo Account",
     or_label: "or",
     continue_with_google: "Continue with Google",
     error_google_auth: "Google sign-in failed. Please try again.",
@@ -564,7 +562,6 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     go_to_sign_in: "Go to sign in",
     field_required: "This field is required.",
     email_invalid_format: "Enter a valid email address.",
-    notifications_demo: "Demo: Notification rules configured",
 
     // Act-based section headers
     act_situation: "Situation",
@@ -1235,8 +1232,6 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     error_email_taken: "Barua pepe hii tayari imesajiliwa.",
     password_min: "Nywila lazima iwe na angalau herufi 8.",
     email_invalid: "Tafadhali ingiza barua pepe sahihi.",
-    demo_account: "Akaunti ya Onyo",
-    use_demo: "Tumia Akaunti ya Onyo",
     or_label: "au",
     continue_with_google: "Endelea na Google",
     error_google_auth: "Kuingia na Google kumeshindikana. Tafadhali jaribu tena.",
@@ -1268,7 +1263,6 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     go_to_sign_in: "Nenda kuingia",
     field_required: "Sehemu hii inahitajika.",
     email_invalid_format: "Ingiza anwani sahihi ya barua pepe.",
-    notifications_demo: "Onyo: Kanuni za arifa zimesanidiwa",
 
     // Act-based section headers
     act_situation: "Hali",
