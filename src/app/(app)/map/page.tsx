@@ -574,7 +574,7 @@ function ExplainOutlookWidget({ lang, t, county }: {
       const data = await res.json();
       setAnswer(data.explanation);
     } catch {
-      setAnswer(t("no_ai"));
+      setAnswer(t("error_generic"));
     } finally {
       setLoading(false);
     }
