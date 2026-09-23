@@ -279,7 +279,7 @@ Open the app and start at **Situation**. Choose an activity to see its risk and 
 | Command | What it does |
 |---|---|
 | `npm run dev` | Development server on http://localhost:3000 |
-| `npm test` | 335 tests, no network |
+| `npm test` | 448 tests, no network |
 | `npm run typecheck` / `npm run lint` | Type check and lint |
 | `npm run fit` | Refit the forecast, the states and the rain chance from the archive |
 | `npm run evaluate` | Test the four forecasts month by month |
