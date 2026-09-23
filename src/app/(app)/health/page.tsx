@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Activity, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useLanguage } from "@/lib/contexts/language";
-import { fmtAgo, fmtAsOf } from "@/lib/afya/format";
+import { fmtAgo, fmtAsOf, MONTH_NAMES } from "@/lib/afya/format";
 import { STRINGS } from "@/lib/afya/i18n";
 import { QUALITY_LIMITS } from "@/lib/afya/data-quality";
 import type { LiveWindow } from "@/lib/afya/display";
@@ -61,6 +61,8 @@ interface Archive {
 interface HealthResponse {
   // Null for any station but Conduit@Empathy1, the only one with an archive.
   archive: Archive | null;
+  // First and last day the archive holds, whichever station is shown.
+  archive_span: { first: string; last: string };
   live: {
     source: "live" | "csv" | "demo";
     feed: "jhub" | "chords" | null;
@@ -150,6 +152,11 @@ const RULES: [string, string, string][] = [
 ];
 
 const pct = (v: number | null) => (v === null ? "-" : `${v.toFixed(1)} %`);
+// An archive day as its own timestamps record it, UTC: "8 Sep 2026".
+const archiveDay = (iso: string, sw: boolean) => {
+  const [y, m, d] = iso.slice(0, 10).split("-");
+  return `${Number(d)} ${MONTH_NAMES[sw ? "sw" : "en"][Number(m) - 1]} ${y}`;
+};
 // A gap's own times, to the minute, as the readings recorded them.
 const utc = (iso: string | undefined) => (iso ? iso.slice(0, 16).replace("T", " ") : "-");
 const signed = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(2)} °C`;
@@ -193,6 +200,7 @@ export default function StationHealthPage() {
   const silent = !!live && live.age_minutes !== null && live.age_minutes > QUALITY_LIMITS.degraded_max_age_minutes;
   const silentHours = Math.round((live?.age_minutes ?? 0) / 60);
   const span = live?.window ?? null;
+  const archiveSpan = data?.archive_span ?? null;
   const rainNotJudged = !!live?.groups.some((g) => g.group.startsWith("rain_gauge") && g.status === "not_judged");
   const batteryMissing = !!live?.groups.some((g) => g.group === "battery" && g.status === "not_reported");
   const codesMissing = !!live?.groups.some((g) => g.group === "device_code" && g.status === "not_reported");
@@ -340,9 +348,11 @@ export default function StationHealthPage() {
       ) : (
         <Card>
           <p className="text-sm text-afya-muted">
-            {sw
-              ? "Alama za kila siku tangu Juni 2025, ukaguzi, matokeo na kanuni zinatoka kwenye kumbukumbu ya Conduit@Empathy1, hivyo zinaonyeshwa kwa kituo hicho tu."
-              : "The daily scores since June 2025, the audits, the findings and the rules come from the Conduit@Empathy1 archive, so they show for that station only."}
+            {archiveSpan &&
+              fill(t("health_archive_conduit_only"), {
+                from: archiveDay(archiveSpan.first, sw),
+                to: archiveDay(archiveSpan.last, sw),
+              })}
           </p>
         </Card>
       )}
@@ -434,7 +444,12 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
   return (
     <>
       <Card>
-        <CardTitle>{sw ? "Kila siku tangu Juni 2025" : "Every day since June 2025"}</CardTitle>
+        <CardTitle>
+          {fill(text.health_archive_span, {
+            from: archiveDay(archive.first, sw),
+            to: archiveDay(archive.last, sw),
+          })}
+        </CardTitle>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-2 mb-4">
           {[
             [sw ? "Siku" : "Days", String(archive.summary.days)],

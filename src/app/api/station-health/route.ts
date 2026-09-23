@@ -22,6 +22,9 @@ const CACHE_HEADERS = { "Cache-Control": "s-maxage=300, stale-while-revalidate=6
 const ALL_GROUPS: Record<string, readonly string[]> = { ...CHANNEL_GROUPS, ...EXPORT_GROUPS };
 const LIVE_WINDOW_HOURS = 24;
 const LIVE_SLOTS = (LIVE_WINDOW_HOURS * 3600_000) / SLOT_MS;
+// The days the archive really holds, sent with every station: the note that
+// says the archive belongs to Conduit@Empathy1 has to date it too.
+const ARCHIVE_SPAN = { first: archive.first.slice(0, 10), last: archive.last.slice(0, 10) };
 
 function liveChecks(
   series: DemoObservation[],
@@ -69,7 +72,7 @@ export async function GET(req: NextRequest) {
   if (!station || station.id === CONDUIT_INSTRUMENT_ID) {
     const bundle = await getObservationSeries(new Date().toISOString(), 30);
     return NextResponse.json(
-      { archive, live: liveChecks(bundle.series, bundle.source, bundle.feed, bundle.channels) },
+      { archive, archive_span: ARCHIVE_SPAN, live: liveChecks(bundle.series, bundle.source, bundle.feed, bundle.channels) },
       { headers: CACHE_HEADERS },
     );
   }
@@ -77,7 +80,7 @@ export async function GET(req: NextRequest) {
   try {
     const { series, channels } = await getChordsSeries(station.id);
     return NextResponse.json(
-      { archive: null, station, live: liveChecks(series, "live", "chords", channels) },
+      { archive: null, archive_span: ARCHIVE_SPAN, station, live: liveChecks(series, "live", "chords", channels) },
       { headers: CACHE_HEADERS },
     );
   } catch (err) {

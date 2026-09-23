@@ -60,3 +60,18 @@ test("every health string the page fills exists in both languages with the same 
   assert.deepEqual(placeholders(STRINGS.en.health_finding_battery), ["below", "best", "days", "mean"]);
   assert.deepEqual(placeholders(STRINGS.en.health_finding_gaps), ["days", "from", "hours", "minutes", "to"]);
 });
+
+test("the archive is dated by the days it holds, not by a month written into the page", () => {
+  for (const key of ["health_archive_span", "health_archive_conduit_only"]) {
+    assert.deepEqual(placeholders(STRINGS.en[key]), ["from", "to"], key);
+  }
+  // The report ends well before the day it is read on, so the span may not be
+  // written out as the month it opens in: a stale end date is what goes wrong.
+  for (const lang of ["en", "sw"] as const) {
+    for (const [key, value] of Object.entries(STRINGS[lang])) {
+      if (key.startsWith("health_")) assert.ok(!/(June|Juni) 2025/.test(value), `${lang}.${key} dates the archive by its first month alone`);
+    }
+  }
+  assert.equal(archive.first.slice(0, 10), "2025-06-01");
+  assert.ok(archive.last.slice(0, 10) > "2026-06-01", "the last day comes from the report, whatever it is");
+});
