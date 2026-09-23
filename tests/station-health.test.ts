@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import archive from "../src/lib/afya/model/station-health.json";
 import { STRINGS } from "../src/lib/afya/i18n";
+import { SENTINEL_LIMITS } from "../src/lib/afya/sentinel";
 
 // What the Station Health page reads out of the published report. The report
 // is written by `npm run station-report`; these hold its shape and the
@@ -59,6 +60,64 @@ test("every health string the page fills exists in both languages with the same 
   // The findings the page fills need every value the report can give them.
   assert.deepEqual(placeholders(STRINGS.en.health_finding_battery), ["below", "best", "days", "mean"]);
   assert.deepEqual(placeholders(STRINGS.en.health_finding_gaps), ["days", "from", "hours", "minutes", "to"]);
+});
+
+// What the page fills into each rule, so a rule that spells a threshold out
+// again rather than taking it from the report fails here.
+const RULE_PLACEHOLDERS: Record<string, string[]> = {
+  health_rule_r01: ["high", "low"],
+  health_rule_r02: ["high", "low"],
+  health_rule_r03: ["high", "low"],
+  health_rule_r04: ["gust", "wind"],
+  health_rule_r05: ["high", "low"],
+  health_rule_r06: ["floor"],
+  health_rule_r07: ["step"],
+  health_rule_r08: ["long", "move", "short"],
+  health_rule_r09: ["spread"],
+  health_rule_r10: [],
+  health_rule_r11: ["mm"],
+  health_rule_r12: [],
+  health_rule_r13: ["share"],
+  health_rule_r14: [],
+  health_rule_r15: [],
+  health_rule_r16: ["margin"],
+};
+
+test("the rules table reads its numbers from the limits the report was run with", () => {
+  assert.deepEqual(archive.limits, SENTINEL_LIMITS, "the report ships the limits it scored with");
+  for (const [key, expected] of Object.entries(RULE_PLACEHOLDERS)) {
+    for (const lang of ["en", "sw"] as const) {
+      assert.ok(STRINGS[lang][key], `${lang}.${key} is missing`);
+      assert.deepEqual(placeholders(STRINGS[lang][key]), expected, `${lang}.${key}`);
+    }
+  }
+  // The values behind the four the page used to spell out.
+  const l = archive.limits;
+  assert.deepEqual(l.temperature_c, [-5, 45]);
+  assert.deepEqual(l.pressure_hpa, [800, 900]);
+  assert.equal(l.light_dark_floor_counts, 240);
+  assert.equal(l.max_thermometer_spread_c, 2);
+  // R08 and R13 are stated in hours and per cent, not in the slots and share
+  // the limits hold, so the page derives them.
+  assert.equal((l.flat_slots.temp_sht * 15) / 60, 2);
+  assert.equal((l.flat_slots.press_bmx * 15) / 60, 3);
+  assert.equal(Math.round(l.gust_direction_copy_share * 100), 99);
+});
+
+test("the score and its findings quote the penalties the report scored with", () => {
+  const expected: Record<string, string[]> = {
+    health_score_rule: ["bad", "bad", "minutes", "suspect"],
+    health_suspect_tier: ["bad", "suspect"],
+  };
+  for (const [key, names] of Object.entries(expected)) {
+    for (const lang of ["en", "sw"] as const) {
+      assert.deepEqual(placeholders(STRINGS[lang][key]), names, `${lang}.${key}`);
+    }
+  }
+  assert.deepEqual(placeholders(STRINGS.en.health_finding_gauges), ["g1", "g2", "mm"]);
+  assert.equal(archive.limits.bad_group_penalty, 10);
+  assert.equal(archive.limits.suspect_group_penalty, 2);
+  assert.equal(archive.limits.missing_minutes_per_point, 14.4);
 });
 
 test("the archive is dated by the days it holds, not by a month written into the page", () => {
