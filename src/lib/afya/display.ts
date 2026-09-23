@@ -93,6 +93,9 @@ export function bandGeometry(
 }
 
 export const SLOT_MS = 15 * 60_000;
+// The grace sources.ts allows a feed past its own cadence before it charges
+// the time as missing.
+const GAP_GRACE_MINUTES = 4;
 
 export interface StateSpan {
   state_id: StateId;
@@ -197,19 +200,23 @@ export function liveWindow(
   const from = series[0].ts;
   const to = series[series.length - 1].ts;
   const toMs = Date.parse(to);
-  const slotMinutes = SLOT_MS / 60_000;
   // Each reading stands for the quarter hour around it, so a full run of
   // `n` slots covers one slot more than its first and last are apart.
   const hours = Math.max(1, Math.round((toMs - Date.parse(from) + SLOT_MS) / 3600_000));
-  const silent = Math.max(0, Math.round((nowMs - toMs) / 60_000 - slotMinutes));
-  const start = nowMs - windowHours * 3600_000;
+  // Silence runs from one slot after the last reading, and is charged only
+  // once it is further past that than the cadence grace the feed allows, so
+  // ordinary jitter between readings is not reported as missing time.
+  const overdue = (nowMs - toMs) / 60_000 - SLOT_MS / 60_000;
+  const silent = overdue > GAP_GRACE_MINUTES ? Math.round(overdue) : 0;
+  // On the slot grid, so a feed that is up to date reads as a full window.
+  const start = Math.floor((nowMs - windowHours * 3600_000) / SLOT_MS) * SLOT_MS;
   return {
     from,
     to,
     hours,
     silent_minutes: silent,
     missing_minutes: Math.round(series.reduce((s, o) => s + (o.gap_minutes ?? 0), 0) + silent),
-    read_slots: series.filter((o) => Date.parse(o.ts) > start).length,
+    read_slots: series.filter((o) => Date.parse(o.ts) >= start).length,
     of_slots: Math.round((windowHours * 3600_000) / SLOT_MS),
     of_hours: windowHours,
   };

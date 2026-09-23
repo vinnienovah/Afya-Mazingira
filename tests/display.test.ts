@@ -154,8 +154,18 @@ test("a station that stopped reporting counts the silence since its last reading
   // The silence runs from one slot after the last reading.
   assert.equal(w.silent_minutes, 596 - 15);
   assert.equal(w.missing_minutes, 581, "trailing silence is missing time, not a full window");
-  assert.equal(w.read_slots, 57, "only these slots fall inside the last twenty-four hours");
+  assert.equal(w.read_slots, 58, "only these slots fall inside the last twenty-four hours");
   assert.ok(w.read_slots < w.of_slots);
+});
+
+test("a reading a few minutes past its cadence is jitter, not silence", () => {
+  // Eighteen minutes on from a quarter-hour cadence, inside the grace the feed
+  // itself allows: nothing missing, and the window still reads as full.
+  const w = liveWindow(slots("2026-09-23T20:45:00Z", 96), Date.parse("2026-09-23T21:03:00Z"));
+  assert.ok(w);
+  assert.equal(w.silent_minutes, 0);
+  assert.equal(w.missing_minutes, 0);
+  assert.equal(w.read_slots, 96);
 });
 
 test("gaps inside the window are counted alongside the silence after it", () => {
