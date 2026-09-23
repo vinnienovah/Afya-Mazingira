@@ -88,7 +88,6 @@ test("the test-push route needs a database, and the status route does not", asyn
 
     const status = await import("../src/app/api/notifications/status/route");
     assert.deepEqual(await (await status.GET()).json(), {
-      database_configured: false,
       email_configured: false,
       push_configured: false,
       // With no database there is no record of the daily check to report.

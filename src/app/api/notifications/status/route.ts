@@ -6,11 +6,11 @@ import { hasResendConfigured } from "@/lib/auth/verification";
 import { hasPushConfigured } from "@/lib/push";
 
 // What this server can actually deliver, so the Notifications page can say so.
+// Whether it has a database at all is /api/health's answer, not repeated here.
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   return NextResponse.json({
-    database_configured: hasDatabase(),
     email_configured: hasResendConfigured(),
     push_configured: hasPushConfigured(),
     last_checked_at: await lastAlertRun(),
@@ -28,7 +28,7 @@ async function lastAlertRun(): Promise<string | null> {
       .limit(1);
     return run ? new Date(run.ran_at).toISOString() : null;
   } catch {
-    // A database from before the alert_runs table simply has no run to report.
+    // A database from before the alert_runs table has no run to report.
     return null;
   }
 }

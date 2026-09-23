@@ -27,7 +27,6 @@ interface NotifRule {
 type PushState = "checking" | "unsupported" | "off" | "on" | "denied";
 
 interface DeliveryStatus {
-  database_configured: boolean;
   email_configured: boolean;
   push_configured: boolean;
   /** When the daily cron job last ran, ISO, or null if it never has here. */
