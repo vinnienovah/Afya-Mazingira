@@ -795,9 +795,10 @@ export function evaluateSprayWindow(situation: SituationResult): FieldWindow {
 
   let score: WindowQuality = "GOOD";
 
-  // The verdict answers "spray now", so the hour that has to be in daylight is
-  // the one the advisory was built at, not the timestamp of the reading behind
-  // it, which can be well behind the clock when the station is stale.
+  // The verdict answers "spray now", so the hour it is judged on is the one
+  // the whole situation is stated for. generated_at is that instant, and the
+  // rain probability below is already read at it; the current reading's own
+  // timestamp can trail it where the series was padded from another feed.
   if (!isDaylight(situation.generated_at)) {
     score = worseOf(score, "AVOID");
     limits.push("farm_reason_outside_daylight");
