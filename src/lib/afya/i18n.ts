@@ -463,7 +463,6 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     default_activity: "Default activity",
     default_activity_note: "The Situation page and the briefing plan their recommended window for this activity.",
     prefs_saved: "Preferences saved",
-    notification_prefs: "Notification preferences",
     sign_out: "Sign Out",
     member_since: "Member since",
 
@@ -1226,7 +1225,6 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     default_activity: "Shughuli yako kuu",
     default_activity_note: "Ukurasa wa Hali ya Sasa na taarifa hupanga dirisha linalopendekezwa kwa shughuli hii.",
     prefs_saved: "Mapendeleo yamehifadhiwa",
-    notification_prefs: "Mapendeleo ya arifa",
     sign_out: "Ondoka",
     member_since: "Mwanachama tangu",
 
