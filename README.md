@@ -194,7 +194,7 @@ On a single split (fitted to May 2026, tested on June to September 2026, which t
 | **Notifications** | Alert rules checked once a day at 08:00 EAT: the day's forecast heat peak for the rule's activity, a hot state ahead, or a saved plan moving into a higher band. Sent by email, and by browser push where the server has VAPID keys |
 | **Briefing** | A printable one-page summary, rendered on the server |
 
-Also: sign-in with email and password or Google, email verification, rate limits on sign-in, sign-up and the AI, a ⌘K command palette, and an installable app that shows the last known situation offline.
+Also: sign-in with email and password or Google, email verification, rate limits on sign-in, sign-up and the AI, a ⌘K command palette, and an installable app that, with no network, opens on the last station reading it cached and the time that reading was taken.
 
 ## 6. Technology stack
 
