@@ -94,7 +94,8 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     end_time: "Available until",
     plan_day_today: "Today",
     plan_day_tomorrow: "Tomorrow",
-    plan_day_tomorrow_note: "Tomorrow's plan uses the real regional forecast (Open-Meteo), not the ground station, the station's own forecast only looks ~9 hours ahead.",
+    plan_day_after: "Day after",
+    plan_day_ahead_note: "Any day past today is judged on the real regional forecast (Open-Meteo), not the ground station, the station's own forecast only looks ~9 hours ahead. The regional forecast ends early on the third morning, so a late day may have no window left.",
     plan_regional_notice: "Judged on the Open-Meteo regional forecast (hourly model output for the area around JKUAT), not on the station: the station's forecast is too short or too old for this window. The regional forecast has no station quality check, so treat it as a rough guide.",
     find_best_time: "Find Best Time",
     best_window_result: "BEST AVAILABLE WINDOW",
@@ -124,6 +125,8 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     plan_save_failed: "The plan could not be saved.",
     plan_searched_from: "Your window had already begun, so only the time from {time} was searched.",
     plan_window_peak: "Forecast peak {wbgt}°C WBGT in the shade: {band} for this activity.",
+    plan_window_band_station: "80% band ±{spread}°C, averaged across the window",
+    plan_window_band_regional: "Regional judgement band ±{spread}°C, averaged across the window",
     plan_coverage_station: "Judged on {points} points of the station forecast, one every {step} minutes. The station forecast runs to {end}.",
     plan_coverage_regional: "Judged on {points} hourly points of the regional forecast, which runs to {end}.",
     plan_source_regional: "Regional forecast",
@@ -132,7 +135,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     plan_error_window_order: "The end time must be after the start time.",
     plan_error_window_too_short: "The available time is shorter than the activity.",
     plan_error_window_too_long: "The available time can span at most 24 hours.",
-    plan_error_beyond_forecast: "No forecast reaches that far ahead.",
+    plan_error_beyond_forecast: "No forecast reaches that far ahead. The last one ends at {reach}.",
     plan_error_no_daylight_window: "Outdoor activities are planned between sunrise ({sunrise}) and sunset ({sunset}), and no daylight window of that length is left in your range.",
     plan_error_no_window: "No forecast covers a whole window of that length in your range. Try a wider range or a shorter activity.",
     plan_error_invalid_plan: "This plan has an activity or time the planner no longer accepts. Edit it and save it again.",
@@ -149,9 +152,14 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     // Forecast page
     forecast_title: "Environmental Forecast",
     forecast_subtitle: "WBGT in shade · +1h / +3h / +6h / +9h horizons",
+    wbgt_shade: "WBGT (shade)",
+    forecast_chart_title: "WBGT forecast (shade)",
+    forecast_model_seasonal: "Seasonal anomaly",
+    forecast_model_no_change: "No change",
     measured: "Measured",
     predicted: "Predicted",
     uncertainty: "Uncertainty",
+    avg_error: "avg error",
     chart_aria: "Environmental exposure forecast chart showing measured and predicted WBGT values with uncertainty interval",
     peak_marker: "Predicted peak",
     now: "Now",
@@ -168,8 +176,10 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     contributor_departure_from_usual: "Return toward the usual level",
     contributor_values_note: "Each bar is that input's effect on the +3 h forecast, in °C. These are model signals, not causes.",
     contributor_list_note: "Signals in the latest readings, not causes. They are listed, not ranked by size.",
+    band_80: "80% band",
+    band_80_measured: "{pct}% of test-month readings fell inside",
     uncertainty_by_horizon: "Uncertainty by Horizon",
-    uncertainty_by_horizon_note: "How the forecast's confidence band widens the further ahead it looks, a shorter bar means a tighter, more confident range.",
+    uncertainty_by_horizon_note: "The range under each forecast is an 80% band: it was built to hold four readings in five. It widens the further ahead the forecast looks, and beside each width is how often a held-out reading actually fell inside it.",
     explore_climate_history: "Explore Climate History",
     explore_climate_history_note: "Pick any date range up to a year back, daily or hourly, and compare against ERA5 for any location.",
     explore_dashboard: "Open the Dashboard",
@@ -243,6 +253,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     rain_model_note: "Rain from Open-Meteo's regional forecast model at the station, up to {time} today. It is modelled, not measured; the station's own gauge is on the Farm page and the Dashboard.",
     forecast_method_seasonal: "The usual WBGT for the target's 15-minute time of day (its mean over the 30 days before the forecast), plus the current departure from usual times a factor fitted for each 15-minute step ahead",
     context_unavailable: "Regional context could not be fetched right now.",
+    source_not_configured: "Not configured",
     ndvi_unavailable: "NDVI not available",
     lst_unavailable: "Land surface temperature is not available: it is not computed from Sentinel-3 here.",
     latest_scene: "Latest scene",
@@ -500,6 +511,22 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     quality_degraded_message: "Some environmental signals are temporarily unavailable. Forecast uncertainty has been widened.",
     quality_suppressed: "Strong recommendations suppressed due to data quality.",
     last_reliable: "Last reliable observation:",
+
+    // What the quality checks found, in words someone can act on
+    flag_no_observations: "The station sent no readings at all, so nothing on this page is measured.",
+    flag_stale_data: "No new reading has arrived for over three hours. Treat everything here as out of date.",
+    flag_observation_age_elevated: "The latest reading is more than an hour old.",
+    flag_missing_fields: "Sensors that sent nothing in the latest reading: {value}. Their values were filled in from nearby readings.",
+    flag_gaps_filled_recently: "{value} of the last six hours' readings were filled in rather than measured.",
+    flag_temp_sensor_disagreement: "The station's three thermometers disagree by more than they should. Treat the temperature here as approximate.",
+    flag_humidity_out_of_range: "The humidity sensor reported a value outside 0 to 100%, so it is faulty.",
+    flag_temp_out_of_range: "The thermometer reported a temperature the station cannot see, so it is faulty.",
+    flag_firmware_wbgt_below_wet_bulb: "The station's own heat reading sits below its wet bulb, which is not physically possible. This page works out WBGT from the raw sensors instead, so what you see is unaffected, but the station firmware needs looking at.",
+    flag_duplicate_timestamps_removed: "{value} repeated readings arrived from the feed and were dropped.",
+    flag_station_health_bad: "A sensor group failed its health checks over the last 24 hours: {value}. Readings that lean on it are less reliable.",
+    flag_forecast_horizon_elapsed: "The forecast behind this page has run out. Reload for a fresh one before acting on it.",
+    flag_forecast_fell_back_to_no_change: "There is too little recent history to know the usual level for this time of day, so the forecast holds the current reading steady.",
+    flag_regional_context_unavailable: "Regional context could not be fetched, so the ground station alone is behind this page.",
 
     // Generic
     save: "Save",
@@ -866,7 +893,8 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     end_time: "Hadi",
     plan_day_today: "Leo",
     plan_day_tomorrow: "Kesho",
-    plan_day_tomorrow_note: "Mpango wa kesho unatumia utabiri halisi wa kikanda (Open-Meteo), si kituo cha ardhini, utabiri wa kituo mwenyewe unaangalia karibu masaa 9 tu mbele.",
+    plan_day_after: "Kesho kutwa",
+    plan_day_ahead_note: "Siku yoyote baada ya leo hutathminiwa kwa utabiri halisi wa kikanda (Open-Meteo), si kituo cha ardhini, utabiri wa kituo mwenyewe unaangalia karibu masaa 9 tu mbele. Utabiri wa kikanda unaishia asubuhi na mapema ya siku ya tatu, kwa hivyo siku ya mwisho inaweza kukosa dirisha.",
     plan_regional_notice: "Limetathminiwa kwa utabiri wa kikanda wa Open-Meteo (matokeo ya modeli ya kila saa kwa eneo linalozunguka JKUAT), si kwa kituo: utabiri wa kituo ni mfupi mno au ni wa zamani mno kwa dirisha hili. Utabiri wa kikanda haukaguliwi ubora kama kituo, kwa hivyo uchukue kama mwongozo wa jumla tu.",
     find_best_time: "Tafuta Wakati Bora",
     best_window_result: "DIRISHA BORA LA KUPATIKANA",
@@ -896,6 +924,8 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     plan_save_failed: "Mpango haukuweza kuhifadhiwa.",
     plan_searched_from: "Muda wako ulikuwa umeshaanza, kwa hivyo ulitafutwa kuanzia saa {time} tu.",
     plan_window_peak: "Kilele cha utabiri {wbgt}°C WBGT kivulini: {band} kwa shughuli hii.",
+    plan_window_band_station: "Bendi ya 80% ±{spread}°C, wastani katika dirisha zima",
+    plan_window_band_regional: "Bendi ya makadirio ya kikanda ±{spread}°C, wastani katika dirisha zima",
     plan_coverage_station: "Limetathminiwa kwa vipimo {points} vya utabiri wa kituo, kimoja kila dakika {step}. Utabiri wa kituo unafika hadi saa {end}.",
     plan_coverage_regional: "Limetathminiwa kwa vipimo {points} vya kila saa vya utabiri wa kikanda, unaofika hadi saa {end}.",
     plan_source_regional: "Utabiri wa kikanda",
@@ -904,7 +934,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     plan_error_window_order: "Muda wa mwisho lazima uwe baada ya muda wa kuanza.",
     plan_error_window_too_short: "Muda uliopo ni mfupi kuliko shughuli.",
     plan_error_window_too_long: "Muda uliopo hauwezi kuzidi saa 24.",
-    plan_error_beyond_forecast: "Hakuna utabiri unaofika mbali hivyo.",
+    plan_error_beyond_forecast: "Hakuna utabiri unaofika mbali hivyo. Wa mwisho unaishia {reach}.",
     plan_error_no_daylight_window: "Shughuli za nje hupangwa kati ya macheo ({sunrise}) na machweo ({sunset}), na hakuna muda wa mchana wa urefu huo uliobaki katika muda wako.",
     plan_error_no_window: "Hakuna utabiri unaofunika dirisha zima la urefu huo katika muda wako. Jaribu muda mpana zaidi au shughuli fupi zaidi.",
     plan_error_invalid_plan: "Shughuli au muda wa mpango huu haukubaliki tena. Hariri mpango kisha uuhifadhi tena.",
@@ -918,10 +948,15 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     reason_early_morning: "Hali za asubuhi ni nzuri",
 
     forecast_title: "Utabiri wa Mazingira",
-    forecast_subtitle: "Utabiri wa WBGT · +1h / +3h / +6h / +9h",
+    forecast_subtitle: "Utabiri wa WBGT kivulini · +1h / +3h / +6h / +9h",
+    wbgt_shade: "WBGT (kivulini)",
+    forecast_chart_title: "Chati ya utabiri wa WBGT kivulini",
+    forecast_model_seasonal: "Tofauti ya msimu",
+    forecast_model_no_change: "Hakuna mabadiliko",
     measured: "Ilipimwa",
     predicted: "Ilitabiriwa",
     uncertainty: "Utata",
+    avg_error: "kosa la wastani",
     chart_aria: "Chati ya utabiri wa kupatwa na mazingira inayoonyesha thamani za WBGT zilizopimwa na kutabiriwa na kipindi cha utata",
     peak_marker: "Kilele kilichotabiriwa",
     now: "Sasa",
@@ -938,8 +973,10 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     contributor_departure_from_usual: "Kurudi kwenye kiwango cha kawaida",
     contributor_values_note: "Kila mstari ni athari ya kipimo hicho kwenye utabiri wa +saa 3, kwa °C. Hizi ni ishara za mfumo, si sababu.",
     contributor_list_note: "Ishara katika vipimo vya hivi punde, si sababu. Zimeorodheshwa bila kupangwa kwa ukubwa.",
+    band_80: "Bendi ya 80%",
+    band_80_measured: "{pct}% ya vipimo vya miezi ya majaribio vilikuwa ndani",
     uncertainty_by_horizon: "Utata kwa Kipindi",
-    uncertainty_by_horizon_note: "Jinsi kipimo cha uhakika wa utabiri kinavyopanuka kadri kinavyoangalia mbali zaidi, mstari mfupi unamaanisha uhakika zaidi.",
+    uncertainty_by_horizon_note: "Kipimo kilicho chini ya kila utabiri ni bendi ya 80%: ilijengwa kushikilia vipimo vinne kati ya vitano. Hupanuka kadri utabiri unavyoangalia mbali zaidi, na kando ya kila upana kuna mara ngapi kipimo kisichoonwa na modeli kilikuwa ndani yake.",
     explore_climate_history: "Chunguza Historia ya Hali ya Hewa",
     explore_climate_history_note: "Chagua kipindi chochote hadi mwaka mmoja uliopita, kila siku au kila saa, na linganisha na ERA5 kwa eneo lolote.",
     explore_dashboard: "Fungua Dashibodi",
@@ -1012,6 +1049,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     rain_model_note: "Mvua kutoka mfumo wa utabiri wa kikanda wa Open-Meteo kwenye kituo, hadi saa {time} leo. Imekadiriwa na mfumo, haijapimwa; kipima mvua cha kituo chenyewe kiko kwenye ukurasa wa Shamba na kwenye Dashibodi.",
     forecast_method_seasonal: "WBGT ya kawaida kwa wakati huo wa siku katika hatua za dakika 15 (wastani wake katika siku 30 kabla ya utabiri), pamoja na tofauti ya sasa na kawaida ikizidishwa kwa kipengele kilichofunzwa kwa kila hatua ya dakika 15 mbele",
     context_unavailable: "Muktadha wa kikanda haukuweza kupatikana kwa sasa.",
+    source_not_configured: "Haijasanidiwa",
     ndvi_unavailable: "NDVI haipatikani",
     lst_unavailable: "Joto la uso wa ardhi halipatikani: halikokotolewi kutoka Sentinel-3 hapa.",
     latest_scene: "Picha ya hivi punde",
@@ -1258,6 +1296,22 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     quality_degraded_message: "Baadhi ya ishara za mazingira hazipatikani kwa muda. Utata wa utabiri umeongezwa.",
     quality_suppressed: "Mapendekezo madhubuti yamesitishwa kutokana na ubora wa data.",
     last_reliable: "Uchunguzi wa mwisho wa kuaminika:",
+
+    // Ukaguzi wa ubora uligundua nini, kwa maneno ya kutendea kazi
+    flag_no_observations: "Kituo hakikutuma kipimo chochote, kwa hivyo hakuna kilichopimwa kwenye ukurasa huu.",
+    flag_stale_data: "Hakuna kipimo kipya kilichofika kwa zaidi ya saa tatu. Chukua yote yaliyo hapa kama ya zamani.",
+    flag_observation_age_elevated: "Kipimo cha mwisho kina zaidi ya saa moja.",
+    flag_missing_fields: "Vitambuzi visivyotuma chochote katika kipimo cha mwisho: {value}. Thamani zake zilijazwa kutoka vipimo vya jirani.",
+    flag_gaps_filled_recently: "Vipimo {value} kati ya vya saa sita zilizopita vilijazwa badala ya kupimwa.",
+    flag_temp_sensor_disagreement: "Vipimajoto vitatu vya kituo vinatofautiana zaidi ya inavyopaswa. Chukua joto lililo hapa kama la takribani.",
+    flag_humidity_out_of_range: "Kitambuzi cha unyevu kilitoa thamani nje ya 0 hadi 100%, kwa hivyo kina hitilafu.",
+    flag_temp_out_of_range: "Kipimajoto kilitoa joto ambalo kituo haliwezi kuliona, kwa hivyo kina hitilafu.",
+    flag_firmware_wbgt_below_wet_bulb: "Kipimo cha joto cha kituo chenyewe kiko chini ya bulbu yake iliyonyevunyevu, jambo lisilowezekana kimaumbile. Ukurasa huu huhesabu WBGT kutoka vitambuzi vyenyewe, kwa hivyo unachokiona hakiathiriki, lakini programu ya kituo inahitaji kuangaliwa.",
+    flag_duplicate_timestamps_removed: "Vipimo {value} vilivyojirudia vilifika kutoka mkondo na viliondolewa.",
+    flag_station_health_bad: "Kundi la vitambuzi lilishindwa ukaguzi wa afya katika saa 24 zilizopita: {value}. Vipimo vinavyotegemea kundi hilo si vya kuaminika sana.",
+    flag_forecast_horizon_elapsed: "Utabiri ulio nyuma ya ukurasa huu umeisha. Pakia upya ili kupata mpya kabla ya kuutendea kazi.",
+    flag_forecast_fell_back_to_no_change: "Historia ya hivi karibuni ni finyu mno kujua kiwango cha kawaida cha wakati huu wa siku, kwa hivyo utabiri unashikilia kipimo cha sasa.",
+    flag_regional_context_unavailable: "Muktadha wa kikanda haukupatikana, kwa hivyo kituo cha ardhini pekee ndicho kilicho nyuma ya ukurasa huu.",
 
     save: "Hifadhi",
     cancel: "Ghairi",
@@ -1550,4 +1604,29 @@ export function tf(lang: Lang, key: string, values: Record<string, string | numb
 
 export function getStrings(lang: Lang): Record<string, string> {
   return STRINGS[lang];
+}
+
+// The forecast engine names its models for the record; the interface shows
+// them in the reader's language. A model with no entry is shown as it is.
+const MODEL_KEYS: Record<string, string> = {
+  "Seasonal anomaly": "forecast_model_seasonal",
+  "No change": "forecast_model_no_change",
+};
+
+export function modelName(lang: Lang, name: string): string {
+  const key = MODEL_KEYS[name];
+  return key ? t(lang, key) : name;
+}
+
+/**
+ * A data-quality flag as a sentence the reader can act on. Flags carry their
+ * value after a colon. Null for a flag with no sentence yet: a raw key on the
+ * page would tell the reader nothing.
+ */
+export function flagText(lang: Lang, flag: string): string | null {
+  const separator = flag.indexOf(":");
+  const name = separator === -1 ? flag : flag.slice(0, separator);
+  const key = `flag_${name}`;
+  if (t(lang, key) === key) return null;
+  return separator === -1 ? t(lang, key) : tf(lang, key, { value: flag.slice(separator + 1) });
 }

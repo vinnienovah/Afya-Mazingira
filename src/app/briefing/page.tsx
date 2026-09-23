@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { runPipeline } from "@/lib/afya/pipeline";
-import { t as tr } from "@/lib/afya/i18n";
+import { flagText, modelName, t as tr } from "@/lib/afya/i18n";
 import { STATES } from "@/lib/afya/constants";
 import { fill, fmtAsOf, fmtTime, fmtWindow, fmtDate, fmtAgo, fmtDayMonth, fmtSigned } from "@/lib/afya/format";
 import {
@@ -60,6 +60,10 @@ export default async function BriefingPage() {
   // ERA5 runs days behind, so each regional figure carries the time it is for.
   const era5Ok = era5.available !== false && num(era5.era5_temp_c);
   const rainOk = chirps.available && rain !== null;
+  const satellite = [
+    sentinel.sentinel2_acquired ? `Sentinel-2 ${fmtDate(sentinel.sentinel2_acquired)}` : null,
+    sentinel.sentinel3_acquired ? `Sentinel-3 ${fmtDate(sentinel.sentinel3_acquired)}` : null,
+  ].filter((s): s is string => s !== null);
   const provenance = [
     {
       name: "Conduit · JKUAT/Juja",
@@ -93,11 +97,15 @@ export default async function BriefingPage() {
     {
       name: "Sentinel-2 / Sentinel-3",
       tag: t("satellite_label"),
-      detail: `${sentinel.sentinel2_acquired ? fmtDate(sentinel.sentinel2_acquired) : "-"} · ${sentinel.sentinel3_acquired ? fmtDate(sentinel.sentinel3_acquired) : "-"}`,
+      // Without Copernicus credentials neither scene is fetched. A dash for
+      // each would read as a source that was consulted and had nothing.
+      detail: satellite.length ? satellite.join(" · ") : t("source_not_configured"),
       color: "#68756F",
       icon: <Satellite className="h-4 w-4" strokeWidth={1.8} />,
     },
   ];
+
+  const flags = quality.flags.map((f) => flagText(lang, f)).filter((f): f is string => f !== null);
 
   return (
     <div className="min-h-screen bg-[#e9e8e3] px-3 py-6 sm:px-6">
@@ -231,6 +239,22 @@ export default async function BriefingPage() {
           </div>
         )}
 
+        {/* What the quality checks found. Some of these leave the status GOOD
+            and would otherwise never reach the person holding the printout. */}
+        {flags.length > 0 && (
+          <section aria-label={t("quality_warning_title")} className="print-avoid-break border-b border-afya-border px-7 py-4">
+            <h2 className="text-xs font-bold uppercase tracking-[0.16em] text-afya-muted">{t("quality_warning_title")}</h2>
+            <ul className="mt-2 space-y-1">
+              {flags.map((flag) => (
+                <li key={flag} className="flex items-start gap-2 text-sm text-afya-charcoal">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-afya-gold" strokeWidth={1.8} aria-hidden="true" />
+                  {flag}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         {/* Forecast table */}
         <section aria-label={t("view_forecast")} className="print-avoid-break px-7 py-5">
           <h2 className="text-xs font-bold uppercase tracking-[0.16em] text-afya-muted">{t("forecast_title")}</h2>
@@ -240,7 +264,7 @@ export default async function BriefingPage() {
                 <th className="pb-2 pr-3 font-semibold">{lang === "sw" ? "Kipindi" : "Horizon"}</th>
                 <th className="pb-2 pr-3 font-semibold">{t("model")}</th>
                 <th className="pb-2 pr-3 font-semibold">WBGT</th>
-                <th className="pb-2 font-semibold">{t("uncertainty")}</th>
+                <th className="pb-2 font-semibold">{t("band_80")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-afya-border/50">
@@ -252,7 +276,7 @@ export default async function BriefingPage() {
               ].filter((r) => r.f).map((r) => (
                 <tr key={r.label} className="text-afya-charcoal">
                   <td className="py-2.5 pr-3 font-medium">{r.label}</td>
-                  <td className="py-2.5 pr-3 text-afya-muted">{r.f!.model}</td>
+                  <td className="py-2.5 pr-3 text-afya-muted">{modelName(lang, r.f!.model)}</td>
                   <td className="py-2.5 pr-3 font-bold tabular-nums">{r.f!.value.toFixed(1)}°C</td>
                   <td className="py-2.5 tabular-nums text-afya-muted">{r.f!.lower.toFixed(1)}–{r.f!.upper.toFixed(1)}°C</td>
                 </tr>

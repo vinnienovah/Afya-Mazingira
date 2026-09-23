@@ -46,6 +46,23 @@ export function computeRainProbability(inputs: RainInputs | null, atIso: string)
   return rainModel.month_hour[local.getUTCMonth()][local.getUTCHours()];
 }
 
+/** How far past its reading the rain model above speaks for. */
+export const RAIN_VALID_HOURS = 3;
+
+/**
+ * The rain chance as the Best-Time engine takes it: `probability` for the
+ * hours the model covers from the reading it was computed on, and null for
+ * every time past them, so no window outside its reach is called dry on it.
+ */
+export function rainProbabilityAt(probability: number, computedAtIso: string): (iso: string) => number | null {
+  const from = Date.parse(computedAtIso);
+  const until = from + RAIN_VALID_HOURS * 3600_000;
+  return (iso) => {
+    const at = Date.parse(iso);
+    return at >= from && at <= until ? probability : null;
+  };
+}
+
 /**
  * Rank comparison between two risk levels.
  * Returns negative if a < b, positive if a > b.

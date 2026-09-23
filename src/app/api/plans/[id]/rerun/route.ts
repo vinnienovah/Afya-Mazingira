@@ -50,7 +50,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const outcome = planActivity(parsed.data, {
     station: situation.forecast_series,
     quality: situation.quality,
-    rainProbability: situation.risk.rain_probability,
+    rain: { probability: situation.risk.rain_probability, at: situation.current.time },
     regional: situation.regional_outlook,
   }, Date.now());
   if (!outcome.ok) {
