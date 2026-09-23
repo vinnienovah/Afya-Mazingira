@@ -9,7 +9,9 @@
 //   · Irrigation need, the root-zone water balance of FAO-56 chapter 8: the
 //     depletion Dr is carried day by day and irrigation is due when it reaches
 //     the readily available water RAW = p × TAW (eqs. 82 and 83)
-//   · Spray suitability, wind drift + evaporation + wash-off risk windows
+//
+// Spray suitability is outside that: wind drift, evaporation and wash-off are
+// weighed against the project's own working limits, stated where they are set.
 //
 // This produces AGRONOMIC DECISION SUPPORT ONLY. It does not predict yield,
 // diagnose plant disease, or replace extension-officer judgement.
@@ -17,6 +19,7 @@
 import type { SituationResult } from "./types";
 import type { RegionalSoilMoisture } from "./sources-external";
 import { appliedByDate, normaliseLog, totalAppliedMm, type IrrigationEntry } from "./irrigation-log";
+import { isDaylight } from "./best-time-engine";
 import { JKUAT_COORDS } from "./constants";
 import { datesEnding, dayOfYear, nairobiDate } from "./nairobi-time";
 
@@ -61,10 +64,12 @@ export interface CropProfile {
 // sooner and in smaller doses than the entry would suggest. planting_rain_mm
 // is the project's own throughout.
 //
-// Cardinal temperatures are set from each species' optimum range in FAO
+// The heat-stress thresholds are set from each species' optimum range in FAO
 // EcoCrop: the mild step sits at or just above the top of that range, and the
-// two above it mark failing pollen and visible damage. Where a crop has a
-// heat-sensitive reproductive stage the thresholds drop by
+// two above it mark failing pollen and visible damage. They are damage
+// thresholds, not the base, optimum and maximum that govern developmental rate
+// and that an agronomist would call the crop's cardinal temperatures.
+// Where a crop has a heat-sensitive reproductive stage the thresholds drop by
 // HEAT_SENSITIVE_STAGE_SHIFT_C: pollen viability and fruit set fail a few
 // degrees below the temperature that harms vegetative growth. Kale, napier and
 // coffee carry none: the page offers "flowering" for every crop, but for a leaf
@@ -219,6 +224,40 @@ export function measuredTempRange(series: TempSlot[], endIso: string, hours = 24
   return { tmax_c: round1(tmax), tmin_c: round1(tmin), measured_hours: hoursSeen.size };
 }
 
+/** The station's own 15-minute slots and the instant a 24-hour window ends. */
+export interface MeasuredDay {
+  /** Slots oldest first, the same series the temperature range is read from */
+  series: TempSlot[];
+  /** ISO instant the window ends at */
+  end: string;
+}
+
+/** Measured hours of the `hours` up to `day.end` at or above `thresholdC`,
+ * to a tenth of an hour. Each slot stands for the spacing of the series, so on
+ * the station's quarter hours an hour above the threshold is four slots and
+ * not a curve fitted between them. Null when the window holds too little to
+ * count over. */
+export function measuredHoursAbove(
+  day: MeasuredDay,
+  thresholdC: number,
+  hours = 24,
+): number | null {
+  const end = Date.parse(day.end);
+  const start = end - hours * 3600_000;
+  const window = day.series.filter((o) => {
+    const t = Date.parse(o.ts);
+    return t > start && t <= end && isMeasured(o);
+  });
+  let step = Infinity;
+  for (let i = 1; i < window.length; i++) {
+    const gap = Date.parse(window[i].ts) - Date.parse(window[i - 1].ts);
+    if (gap > 0 && gap < step) step = gap;
+  }
+  if (!Number.isFinite(step)) return null;
+  const above = window.filter((o) => o.temp_sht >= thresholdC).length;
+  return round1((above * step) / 3600_000);
+}
+
 /** Measured Tmax and Tmin for each Nairobi calendar day in the series. */
 export function measuredDailyRanges(series: TempSlot[]): Map<string, TempRange> {
   const byDay = new Map<string, { tmax: number; tmin: number; hours: Set<number> }>();
@@ -360,6 +399,9 @@ export interface FarmInputs {
   regional_et0_mm_day: number | null;
   /** Rain in the regional forecast for the next 48 hours */
   forecast_rain_48h_mm: number | null;
+  /** The slots behind the ET₀ range, for the hours a crop spent above its
+   * stress threshold; absent when the station covered none of the window */
+  measured_day?: MeasuredDay;
   soil: RegionalSoilMoisture | null;
   /** Irrigation the farmer recorded, normalised to the balance window */
   applied?: IrrigationEntry[];
@@ -717,46 +759,79 @@ export interface FieldWindow {
 }
 
 /**
- * Spray suitability. Deterministic rules based on documented agronomic practice:
+ * Spray suitability. The wind, temperature and rain-probability limits below
+ * are the project's own working limits, not figures from a published table:
  *   · wind > 4 m/s        → drift risk
  *   · wind < 0.4 m/s      → inversion / poor deposition
  *   · temperature > 28 °C → rapid evaporation of droplets
  *   · rain probability    → wash-off before uptake
+ * The daylight gate is not one of those judgement calls: the two hazards the
+ * wind rules guard against, drift and a surface inversion holding the spray
+ * cloud, are both at their worst in the still air after sunset, and nothing in
+ * the four rules sees the hour.
+ *
+ * This is a rule set of its own, not the Best-Time engine that picks the
+ * field-work window. It borrows only that engine's sun times.
  */
 const WINDOW_RANK: Record<WindowQuality, number> = { GOOD: 0, MARGINAL: 1, AVOID: 2 };
 
 /** The worse of two verdicts. Every rule below can only take the window down. */
 const worseOf = (a: WindowQuality, b: WindowQuality): WindowQuality => (WINDOW_RANK[b] > WINDOW_RANK[a] ? b : a);
 
+// Readings of the current observation the spray rules read directly. Either one
+// filled in rather than measured is a reading the verdict cannot lean on.
+const SPRAY_INPUTS = ["wind_spd", "temp_sht"];
+
+// The card shows a short list, and a limit that took the window down matters
+// more to the decision than a condition that was met, so limits are listed first.
+const MAX_SPRAY_REASONS = 5;
+
 export function evaluateSprayWindow(situation: SituationResult): FieldWindow {
-  const reasons: string[] = [];
+  const limits: string[] = [];
+  const met: string[] = [];
   const wind = situation.current.wind_speed_ms;
   const temp = situation.current.temperature_c;
   const rainProb = situation.risk.rain_probability;
 
   let score: WindowQuality = "GOOD";
 
-  if (wind > 4.0) { score = worseOf(score, "AVOID"); reasons.push("farm_reason_wind_drift"); }
-  else if (wind < 0.4) { score = worseOf(score, "MARGINAL"); reasons.push("farm_reason_wind_too_calm"); }
-  else reasons.push("farm_reason_wind_suitable");
+  // The verdict answers "spray now", so the hour it is judged on is the one
+  // the whole situation is stated for. generated_at is that instant, and the
+  // rain probability below is already read at it; the current reading's own
+  // timestamp can trail it where the series was padded from another feed.
+  if (!isDaylight(situation.generated_at)) {
+    score = worseOf(score, "AVOID");
+    limits.push("farm_reason_outside_daylight");
+  }
 
-  if (rainProb >= 0.5) { score = worseOf(score, "AVOID"); reasons.push("farm_reason_washoff"); }
-  else if (rainProb >= 0.25) { score = worseOf(score, "MARGINAL"); reasons.push("farm_reason_rain_possible"); }
-  else reasons.push("farm_reason_low_rain_risk");
+  if (wind > 4.0) { score = worseOf(score, "AVOID"); limits.push("farm_reason_wind_drift"); }
+  else if (wind < 0.4) { score = worseOf(score, "MARGINAL"); limits.push("farm_reason_wind_too_calm"); }
+  else met.push("farm_reason_wind_suitable");
+
+  if (rainProb >= 0.5) { score = worseOf(score, "AVOID"); limits.push("farm_reason_washoff"); }
+  else if (rainProb >= 0.25) { score = worseOf(score, "MARGINAL"); limits.push("farm_reason_rain_possible"); }
+  else met.push("farm_reason_low_rain_risk");
 
   if (temp > 28) {
     score = worseOf(score, "MARGINAL");
-    reasons.push("farm_reason_evaporation");
+    limits.push("farm_reason_evaporation");
+  }
+
+  // A filled-in wind speed or temperature is a value the rules above read as
+  // though it were measured. The window can still be refused on it, never passed.
+  if (SPRAY_INPUTS.some((f) => situation.current.imputed?.includes(f))) {
+    score = worseOf(score, "MARGINAL");
+    limits.push("farm_reason_spray_inputs_filled");
   }
 
   // Thin data is a reason to trust the window less, never a reason to spray
   // into conditions the rules already ruled out.
   if (situation.quality.status === "POOR") {
     score = worseOf(score, "MARGINAL");
-    reasons.push("farm_reason_data_limited");
+    limits.push("farm_reason_data_limited");
   }
 
-  return { operation: "spraying", quality: score, reason_keys: reasons.slice(0, 4) };
+  return { operation: "spraying", quality: score, reason_keys: [...limits, ...met].slice(0, MAX_SPRAY_REASONS) };
 }
 
 // Planting outlook (rain-fed), from the same rain record as the water balance
@@ -772,6 +847,8 @@ export interface PlantingOutlook {
   wetting_mm: number;
   wetting_required_mm: number;
   dry_spell_days: number;
+  /** Rain in the regional forecast for the next 48 hours, shown beside the verdict */
+  forecast_rain_48h_mm: number | null;
   message_key: string;
 }
 
@@ -813,6 +890,10 @@ export function evaluatePlantingOutlook(
   // that zone is at or past the refill point the two must not disagree.
   const inDeficit = wb.balance_available && wb.depletion_mm >= wb.readily_available_mm;
 
+  // The 48-hour forecast is carried for the farmer to read, not for this test.
+  // Every term of the test is a seedbed that is already wet; rain still in a
+  // regional model has wet nothing, and a seed committed on it is committed
+  // whether or not the rain arrives.
   const favourable =
     rain30 >= required && wetting >= PLANTING_WETTING_MM && dry <= LONG_DRY_SPELL_DAYS && !inDeficit;
 
@@ -833,6 +914,7 @@ export function evaluatePlantingOutlook(
     wetting_mm: wetting,
     wetting_required_mm: PLANTING_WETTING_MM,
     dry_spell_days: dry,
+    forecast_rain_48h_mm: wb.forecast_rain_48h_mm,
     message_key: key,
   };
 }
@@ -849,6 +931,9 @@ export interface CropStressSignal {
   peak_source: Et0Source;
   /** The peak temperature at which this crop, at this stage, first shows stress */
   mild_threshold_c: number;
+  /** Measured hours of the last 24 at or above that threshold; null unless the
+   * station measured enough of the window for the count to stand for the day */
+  hours_above_mild: number | null;
   reason_keys: string[];
 }
 
@@ -859,10 +944,21 @@ export const HEAT_SENSITIVE_STAGE_SHIFT_C = 3;
 
 /**
  * Crop heat-stress signal from the day's peak air temperature, the same Tmax
- * the ET₀ uses, against the crop's own cardinal temperatures (see
+ * the ET₀ uses, against the crop's own heat-stress thresholds (see
  * CROP_PROFILES). Advisory signals, not yield predictions.
+ *
+ * The level is the peak alone. The signal also carries how long the day held
+ * at or above the first threshold, which separates a minute at the peak from
+ * an afternoon at it; the level itself does not move on that figure. Hours are
+ * only counted where the station measured enough of the window to stand for
+ * the day, since a count over a part of it can only understate.
  */
-export function evaluateCropStress(et0: Et0Estimate, crop: CropProfile, stage: GrowthStage): CropStressSignal {
+export function evaluateCropStress(
+  et0: Et0Estimate,
+  crop: CropProfile,
+  stage: GrowthStage,
+  day?: MeasuredDay,
+): CropStressSignal {
   const peakTemp = et0.tmax_c;
   const reasons: string[] = [];
   let level: HeatStress = "NONE";
@@ -878,7 +974,14 @@ export function evaluateCropStress(et0: Et0Estimate, crop: CropProfile, stage: G
 
   if (sensitive && level !== "NONE") reasons.push("farm_reason_flowering_sensitive");
 
-  return { level, peak_temp_c: peakTemp, peak_source: et0.source, mild_threshold_c: mild, reason_keys: reasons };
+  return {
+    level,
+    peak_temp_c: peakTemp,
+    peak_source: et0.source,
+    mild_threshold_c: mild,
+    hours_above_mild: day && et0.station_hours >= MIN_MEASURED_HOURS ? measuredHoursAbove(day, mild) : null,
+    reason_keys: reasons,
+  };
 }
 
 // Full farm advisory bundle
@@ -912,7 +1015,7 @@ export function buildFarmAdvisory(
     irrigation: computeIrrigationAdvice(wb, crop, stage),
     spray_window: evaluateSprayWindow(situation),
     planting: evaluatePlantingOutlook(inputs.rain, inputs.today, crop, wb),
-    stress: evaluateCropStress(inputs.et0, crop, stage),
+    stress: evaluateCropStress(inputs.et0, crop, stage, inputs.measured_day),
     field_work_window: situation.best_time
       ? {
           start: situation.best_time.recommended.start,

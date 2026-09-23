@@ -663,13 +663,21 @@ export default function FarmPage() {
                 <Thermometer className="w-4 h-4 text-afya-muted" strokeWidth={1.8} aria-hidden="true" />
                 <CardTitle className="mb-0">{t("farm_crop_stress")}</CardTitle>
               </div>
-              <div className="flex items-baseline gap-3 mb-3">
+              <div className="flex items-baseline gap-3 flex-wrap mb-3">
                 <span className="text-2xl font-bold" style={{ color: STRESS_STYLE[adv.stress.level] }}>
                   {t(`farm_stress_${adv.stress.level.toLowerCase()}`)}
                 </span>
                 <span className="text-sm tabular-nums text-afya-muted">
                   {t("farm_peak_temp")} {adv.stress.peak_temp_c}°C
                 </span>
+                {adv.stress.hours_above_mild != null && (
+                  <span className="text-sm tabular-nums text-afya-muted">
+                    {tf(lang, "farm_stress_hours_above", {
+                      hours: adv.stress.hours_above_mild,
+                      temp: adv.stress.mild_threshold_c,
+                    })}
+                  </span>
+                )}
               </div>
               <p className="text-[10px] uppercase tracking-wide text-afya-muted/60 -mt-2 mb-1">
                 {t(adv.stress.peak_source === "station" ? "farm_peak_src_station" : "farm_peak_src_regional")}
@@ -702,12 +710,17 @@ export default function FarmPage() {
                 </span>
               </div>
               <p className="text-sm text-afya-muted mb-3">{t(adv.planting.message_key)}</p>
-              <div className="grid grid-cols-4 gap-2 text-center">
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 text-center">
                 {[
                   { v: `${adv.planting.rain_30d_mm}`, l: t("farm_rain_30d"), u: "mm" },
                   { v: `${adv.planting.required_mm}`, l: t("farm_required"), u: "mm" },
                   { v: `${adv.planting.wetting_mm}`, l: t("farm_wetting"), u: "mm" },
                   { v: `${adv.planting.dry_spell_days}`, l: t("farm_dry_spell"), u: lang === "sw" ? "siku" : "days" },
+                  {
+                    v: adv.planting.forecast_rain_48h_mm != null ? `${adv.planting.forecast_rain_48h_mm}` : unavailable,
+                    l: t("farm_next_48h"),
+                    u: adv.planting.forecast_rain_48h_mm != null ? "mm" : "",
+                  },
                 ].map((s, i) => (
                   <div key={i} className="rounded-lg border border-afya-border bg-afya-canvas/50 px-2 py-2">
                     <div className="text-base font-bold tabular-nums text-afya-charcoal">{s.v}</div>
@@ -719,6 +732,7 @@ export default function FarmPage() {
               <p className="text-[10px] text-afya-muted/80 mt-2">
                 {t("farm_wetting")}: {t("farm_wetting_hint")} ({adv.planting.wetting_required_mm} mm)
               </p>
+              <p className="text-[10px] text-afya-muted/80 mt-1">{t("farm_plant_basis_note")}</p>
               <p className="text-[9px] uppercase tracking-wide text-afya-muted/60 mt-1">
                 {t(RAIN_SOURCE_KEY[adv.planting.rain_source])} · {adv.planting.rain_days_with_data}/30 {t("farm_days_with_data")}
               </p>
