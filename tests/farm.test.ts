@@ -219,7 +219,7 @@ test("every crop's Kc, root depth and p match the table they came from", () => {
     assert.equal(crop.depletion_fraction, want.p, `${where}: p`);
     assert.equal(crop.planting_rain_mm, want.planting_rain_mm, `${where}: planting rain`);
     assert.deepEqual(
-      [crop.heat.mild, crop.heat.moderate, crop.heat.severe], want.heat, `${where}: cardinal temperatures`,
+      [crop.heat.mild, crop.heat.moderate, crop.heat.severe], want.heat, `${where}: heat-stress thresholds`,
     );
     assert.equal(crop.heat_sensitive_stage, want.heat_sensitive_stage, `${where}: heat-sensitive stage`);
     assert.equal(driesDownAtMaturity(crop), want.dries_down, `${where}: dry-down at maturity`);
@@ -522,7 +522,7 @@ test("the inputs fall back to the regional model and say so", () => {
   assert.equal(assembleFarmInputs(now, { station: null, stationRain: null, regional: null, soil: null }), null);
 });
 
-test("heat stress reads the crop's own cardinal temperatures, not one set for all", () => {
+test("heat stress reads the crop's own thresholds, not one set for all", () => {
   const at = (tmax: number) => estimateEt0("2026-09-21", { tmax_c: tmax, tmin_c: 15, measured_hours: 24 }, null)!;
   // 29 °C: nothing for a C4 fodder grass, mild for maize in flower, moderate
   // for potato, which sets tubers below it.

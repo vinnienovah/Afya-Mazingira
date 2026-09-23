@@ -64,10 +64,12 @@ export interface CropProfile {
 // sooner and in smaller doses than the entry would suggest. planting_rain_mm
 // is the project's own throughout.
 //
-// Cardinal temperatures are set from each species' optimum range in FAO
+// The heat-stress thresholds are set from each species' optimum range in FAO
 // EcoCrop: the mild step sits at or just above the top of that range, and the
-// two above it mark failing pollen and visible damage. Where a crop has a
-// heat-sensitive reproductive stage the thresholds drop by
+// two above it mark failing pollen and visible damage. They are damage
+// thresholds, not the base, optimum and maximum that govern developmental rate
+// and that an agronomist would call the crop's cardinal temperatures.
+// Where a crop has a heat-sensitive reproductive stage the thresholds drop by
 // HEAT_SENSITIVE_STAGE_SHIFT_C: pollen viability and fruit set fail a few
 // degrees below the temperature that harms vegetative growth. Kale, napier and
 // coffee carry none: the page offers "flowering" for every crop, but for a leaf
