@@ -4,6 +4,7 @@
 
 import crypto from "crypto";
 import { secureAttribute } from "@/lib/auth/cookies";
+import { appUrl } from "@/lib/app-url";
 
 const AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
@@ -16,8 +17,7 @@ export function hasGoogleCreds(): boolean {
 }
 
 function redirectUri(): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  return `${base.replace(/\/$/, "")}/api/auth/google/callback`;
+  return `${appUrl()}/api/auth/google/callback`;
 }
 
 export function generateState(): string {

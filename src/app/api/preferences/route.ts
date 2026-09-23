@@ -24,11 +24,12 @@ export async function GET() {
   });
 }
 
+// Only what the app reads back. user_preferences also carries units and
+// notification_prefs, which nothing reads; the columns keep their defaults
+// rather than accepting values that would never be used.
 const UpdatePrefsSchema = z.object({
   language: z.enum(["en", "sw"]).optional(),
-  units: z.enum(["C", "F"]).optional(),
   preferred_activities: z.array(z.string()).optional(),
-  notification_prefs: z.record(z.string(), z.boolean()).optional(),
 });
 
 export async function PATCH(req: NextRequest) {
@@ -39,7 +40,7 @@ export async function PATCH(req: NextRequest) {
   const body = await readJsonBody(req, UpdatePrefsSchema);
   if ("response" in body) return body.response;
 
-  const { language, units, preferred_activities, notification_prefs } = body.data;
+  const { language, preferred_activities } = body.data;
 
   // Update user language if provided
   if (language) {
@@ -49,9 +50,7 @@ export async function PATCH(req: NextRequest) {
   // Upsert preferences
   const updateData: Record<string, unknown> = { updated_at: new Date() };
   if (language) updateData.language = language;
-  if (units) updateData.units = units;
   if (preferred_activities) updateData.preferred_activities = preferred_activities;
-  if (notification_prefs) updateData.notification_prefs = notification_prefs;
 
   const [existing] = await db
     .select({ id: userPreferences.id })
@@ -64,9 +63,7 @@ export async function PATCH(req: NextRequest) {
     await db.insert(userPreferences).values({
       user_id: user.id,
       language: language ?? "en",
-      units: units ?? "C",
       preferred_activities: preferred_activities ?? [],
-      notification_prefs: notification_prefs ?? {},
     });
   }
 

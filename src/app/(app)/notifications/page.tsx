@@ -4,8 +4,11 @@ import { useState, useEffect } from "react";
 import { useLanguage } from "@/lib/contexts/language";
 import { useAuth } from "@/lib/contexts/auth";
 import { ACTIVITY_PROFILES } from "@/lib/afya/constants";
+import { tf } from "@/lib/afya/i18n";
+import { fmtAsOf } from "@/lib/afya/format";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { DatabaseNotice } from "@/components/auth/DatabaseNotice";
 import {
   Bell, BellOff, Plus, Trash2, ToggleLeft, ToggleRight,
   CheckCircle2, RefreshCw, Mail,
@@ -26,6 +29,8 @@ type PushState = "checking" | "unsupported" | "off" | "on" | "denied";
 interface DeliveryStatus {
   email_configured: boolean;
   push_configured: boolean;
+  /** When the daily cron job last ran, ISO, or null if it never has here. */
+  last_checked_at: string | null;
 }
 
 /** The VAPID public key as the bytes pushManager.subscribe expects. */
@@ -79,6 +84,9 @@ export default function NotificationsPage() {
   const [saving, setSaving] = useState(false);
   const [testSending, setTestSending] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
+  // The rule whose delete has been asked for but not yet confirmed. A rule is
+  // easy to lose to one stray tap on a phone and there is no undo.
+  const [confirmingDelete, setConfirmingDelete] = useState<number | null>(null);
 
   useEffect(() => {
     if (user) loadRules();
@@ -143,6 +151,7 @@ export default function NotificationsPage() {
   }
 
   async function deleteRule(id: number) {
+    setConfirmingDelete(null);
     await fetch(`/api/notifications/${id}`, { method: "DELETE", credentials: "include" });
     loadRules();
   }
@@ -257,7 +266,8 @@ export default function NotificationsPage() {
 
   if (!user) {
     return (
-      <div className="max-w-md mx-auto mt-8">
+      <div className="max-w-md mx-auto mt-8 space-y-4">
+        <DatabaseNotice />
         <Card>
           <div className="text-center py-8 space-y-3">
             <Bell className="w-10 h-10 text-afya-muted/40 mx-auto" strokeWidth={1.5} aria-hidden="true" />
@@ -277,6 +287,8 @@ export default function NotificationsPage() {
         <p className="text-sm text-afya-muted mt-0.5">{t("notif_subtitle")}</p>
       </div>
 
+      <DatabaseNotice />
+
       {/* How alerts are delivered */}
       <Card>
         <div className="space-y-4">
@@ -285,9 +297,18 @@ export default function NotificationsPage() {
               <Mail className="w-5 h-5 text-afya-green" strokeWidth={1.8} />
             </div>
             <div className="text-sm text-afya-charcoal pt-2">
-              {delivery === null
-                ? <Skeleton className="h-4 w-64 rounded" />
-                : delivery.email_configured ? t("notif_delivery_email") : t("notif_delivery_email_off")}
+              {delivery === null ? (
+                <Skeleton className="h-4 w-64 rounded" />
+              ) : (
+                <>
+                  <p>{delivery.email_configured ? t("notif_delivery_email") : t("notif_delivery_email_off")}</p>
+                  <p className="text-xs text-afya-muted mt-1">
+                    {delivery.last_checked_at
+                      ? tf(lang, "notif_last_checked", { time: fmtAsOf(delivery.last_checked_at, lang) })
+                      : t("notif_never_checked")}
+                  </p>
+                </>
+              )}
             </div>
           </div>
 
@@ -498,13 +519,31 @@ export default function NotificationsPage() {
                         : <ToggleLeft className="w-7 h-7" strokeWidth={1.8} />
                       }
                     </button>
-                    <button
-                      onClick={() => deleteRule(rule.id)}
-                      className="p-1.5 rounded-lg text-afya-muted hover:bg-afya-red/10 hover:text-afya-red transition-colors"
-                      aria-label={t("delete_rule")}
-                    >
-                      <Trash2 className="w-4 h-4" strokeWidth={1.8} />
-                    </button>
+                    {confirmingDelete === rule.id ? (
+                      <div className="flex items-center gap-1.5" role="group" aria-label={t("delete_rule")}>
+                        <span className="text-xs text-afya-muted">{t("confirm")}</span>
+                        <button
+                          onClick={() => deleteRule(rule.id)}
+                          className="rounded-lg bg-afya-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-afya-red/90 transition-colors"
+                        >
+                          {t("yes")}
+                        </button>
+                        <button
+                          onClick={() => setConfirmingDelete(null)}
+                          className="rounded-lg border border-afya-border px-2.5 py-1 text-xs font-semibold text-afya-muted hover:bg-afya-canvas transition-colors"
+                        >
+                          {t("no")}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmingDelete(rule.id)}
+                        className="p-1.5 rounded-lg text-afya-muted hover:bg-afya-red/10 hover:text-afya-red transition-colors"
+                        aria-label={t("delete_rule")}
+                      >
+                        <Trash2 className="w-4 h-4" strokeWidth={1.8} />
+                      </button>
+                    )}
                   </div>
                 </div>
               </Card>

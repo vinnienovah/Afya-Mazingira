@@ -1,12 +1,18 @@
 // AFYA MAZINGIRA Service Worker
 // Cache-first for static shell assets; network-first for API calls with
-// last-known-good fallback for /api/situation (offline resilience).
+// last-known-good fallback for /api/situation (offline resilience), and for
+// navigations, which fall back to the offline document.
 // Also shows the daily alerts sent by web push.
 
-const SHELL_CACHE = "afya-shell-v2";
+const SHELL_CACHE = "afya-shell-v3";
+// Not versioned with the shell: a new worker must not throw away the last
+// situation this device stored, that reading is what /offline.html renders.
 const DATA_CACHE = "afya-data-v1";
 
+const OFFLINE_DOCUMENT = "/offline.html";
+
 const SHELL_ASSETS = [
+  OFFLINE_DOCUMENT,
   "/manifest.json",
   "/favicon.ico",
   "/icons/icon-192.png",
@@ -38,6 +44,20 @@ self.addEventListener("fetch", (event) => {
 
   // Only handle same-origin GET requests
   if (request.method !== "GET" || url.origin !== self.location.origin) return;
+
+  // Pages: network-first. A cold launch with no network has no document to
+  // render otherwise, so the offline page is served in place of the browser's
+  // own error page; it shows the last situation this device cached.
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request).catch(async () => {
+        const offline = await caches.match(OFFLINE_DOCUMENT);
+        if (offline) return offline;
+        return new Response("", { status: 503, statusText: "Offline" });
+      })
+    );
+    return;
+  }
 
   // API: network-first, fall back to last cached response
   if (url.pathname === "/api/situation") {

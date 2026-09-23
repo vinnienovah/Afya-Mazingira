@@ -57,6 +57,10 @@ export default function AiPanel({ context = "situation", initialQuestions, extra
   // Answers follow the page language until EN or SW is picked here.
   const [chosenLang, setChosenLang] = useState<Lang | null>(null);
   const answerLang: Lang = chosenLang ?? lang;
+  // Whether this server has a model at all, from /api/ai/status. A server with
+  // none is a permanent state, not a passing one, and the panel has to say so
+  // rather than promising the model will be back.
+  const [modelConfigured, setModelConfigured] = useState<boolean | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const { situation } = useSituation();
@@ -69,6 +73,22 @@ export default function AiPanel({ context = "situation", initialQuestions, extra
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/ai/status")
+      .then((res) => res.json())
+      .catch(() => null)
+      .then((status: { preferred_provider?: string } | null) => {
+        if (!cancelled && status) setModelConfigured(status.preferred_provider !== "deterministic");
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  /** Why an answer came from the templates: no model here, or none this time. */
+  function fallbackReason(msgLang: Lang): string {
+    return translate(msgLang, modelConfigured === false ? "ai_no_model" : "ai_model_silent");
+  }
 
   async function ask(question: string, askMode: Mode = mode, showUserMessage = true, askLang: Lang = answerLang) {
     if (!question.trim() || loading) return;
@@ -96,7 +116,8 @@ export default function AiPanel({ context = "situation", initialQuestions, extra
         question,
       }]);
     } catch {
-      setMessages((m) => [...m, { role: "assistant", text: translate(askLang, "no_ai"), mode: askMode, lang: askLang }]);
+      // The request itself did not complete, so nothing was answered at all.
+      setMessages((m) => [...m, { role: "assistant", text: translate(askLang, "error_generic"), mode: askMode, lang: askLang }]);
     } finally {
       setLoading(false);
     }
@@ -193,6 +214,11 @@ export default function AiPanel({ context = "situation", initialQuestions, extra
         <p className="text-[11px] text-afya-muted">
           {mode === "plain" ? t("ai_mode_plain_hint") : t("ai_mode_standard_hint")}
         </p>
+        {modelConfigured === false && (
+          <p className="text-[11px] text-afya-charcoal mt-1.5 rounded-lg bg-afya-canvas px-2.5 py-2" role="status">
+            {t("ai_no_model")}
+          </p>
+        )}
       </div>
 
       {/* Messages */}
@@ -236,7 +262,7 @@ export default function AiPanel({ context = "situation", initialQuestions, extra
                     <span>Anthropic · {t("ai_disclaimer")}</span>
                   )}
                   {msg.source === "deterministic" && (
-                    <span className="italic">{translate(msg.lang ?? lang, "no_ai")}</span>
+                    <span className="italic">{fallbackReason(msg.lang ?? lang)}</span>
                   )}
 
                   {/* Explain simply, only offered on standard answers */}
