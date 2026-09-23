@@ -222,6 +222,40 @@ export function measuredTempRange(series: TempSlot[], endIso: string, hours = 24
   return { tmax_c: round1(tmax), tmin_c: round1(tmin), measured_hours: hoursSeen.size };
 }
 
+/** The station's own 15-minute slots and the instant a 24-hour window ends. */
+export interface MeasuredDay {
+  /** Slots oldest first, the same series the temperature range is read from */
+  series: TempSlot[];
+  /** ISO instant the window ends at */
+  end: string;
+}
+
+/** Measured hours of the `hours` up to `day.end` at or above `thresholdC`,
+ * to a tenth of an hour. Each slot stands for the spacing of the series, so on
+ * the station's quarter hours an hour above the threshold is four slots and
+ * not a curve fitted between them. Null when the window holds too little to
+ * count over. */
+export function measuredHoursAbove(
+  day: MeasuredDay,
+  thresholdC: number,
+  hours = 24,
+): number | null {
+  const end = Date.parse(day.end);
+  const start = end - hours * 3600_000;
+  const window = day.series.filter((o) => {
+    const t = Date.parse(o.ts);
+    return t > start && t <= end && isMeasured(o);
+  });
+  let step = Infinity;
+  for (let i = 1; i < window.length; i++) {
+    const gap = Date.parse(window[i].ts) - Date.parse(window[i - 1].ts);
+    if (gap > 0 && gap < step) step = gap;
+  }
+  if (!Number.isFinite(step)) return null;
+  const above = window.filter((o) => o.temp_sht >= thresholdC).length;
+  return round1((above * step) / 3600_000);
+}
+
 /** Measured Tmax and Tmin for each Nairobi calendar day in the series. */
 export function measuredDailyRanges(series: TempSlot[]): Map<string, TempRange> {
   const byDay = new Map<string, { tmax: number; tmin: number; hours: Set<number> }>();
@@ -363,6 +397,9 @@ export interface FarmInputs {
   regional_et0_mm_day: number | null;
   /** Rain in the regional forecast for the next 48 hours */
   forecast_rain_48h_mm: number | null;
+  /** The slots behind the ET₀ range, for the hours a crop spent above its
+   * stress threshold; absent when the station covered none of the window */
+  measured_day?: MeasuredDay;
   soil: RegionalSoilMoisture | null;
   /** Irrigation the farmer recorded, normalised to the balance window */
   applied?: IrrigationEntry[];
@@ -807,6 +844,8 @@ export interface PlantingOutlook {
   wetting_mm: number;
   wetting_required_mm: number;
   dry_spell_days: number;
+  /** Rain in the regional forecast for the next 48 hours, shown beside the verdict */
+  forecast_rain_48h_mm: number | null;
   message_key: string;
 }
 
@@ -848,6 +887,10 @@ export function evaluatePlantingOutlook(
   // that zone is at or past the refill point the two must not disagree.
   const inDeficit = wb.balance_available && wb.depletion_mm >= wb.readily_available_mm;
 
+  // The 48-hour forecast is carried for the farmer to read, not for this test.
+  // Every term of the test is a seedbed that is already wet; rain still in a
+  // regional model has wet nothing, and a seed committed on it is committed
+  // whether or not the rain arrives.
   const favourable =
     rain30 >= required && wetting >= PLANTING_WETTING_MM && dry <= LONG_DRY_SPELL_DAYS && !inDeficit;
 
@@ -868,6 +911,7 @@ export function evaluatePlantingOutlook(
     wetting_mm: wetting,
     wetting_required_mm: PLANTING_WETTING_MM,
     dry_spell_days: dry,
+    forecast_rain_48h_mm: wb.forecast_rain_48h_mm,
     message_key: key,
   };
 }
@@ -884,6 +928,9 @@ export interface CropStressSignal {
   peak_source: Et0Source;
   /** The peak temperature at which this crop, at this stage, first shows stress */
   mild_threshold_c: number;
+  /** Measured hours of the last 24 at or above that threshold; null unless the
+   * station measured enough of the window for the count to stand for the day */
+  hours_above_mild: number | null;
   reason_keys: string[];
 }
 
@@ -894,10 +941,21 @@ export const HEAT_SENSITIVE_STAGE_SHIFT_C = 3;
 
 /**
  * Crop heat-stress signal from the day's peak air temperature, the same Tmax
- * the ET₀ uses, against the crop's own cardinal temperatures (see
+ * the ET₀ uses, against the crop's own heat-stress thresholds (see
  * CROP_PROFILES). Advisory signals, not yield predictions.
+ *
+ * The level is the peak alone. The signal also carries how long the day held
+ * at or above the first threshold, which separates a minute at the peak from
+ * an afternoon at it; the level itself does not move on that figure. Hours are
+ * only counted where the station measured enough of the window to stand for
+ * the day, since a count over a part of it can only understate.
  */
-export function evaluateCropStress(et0: Et0Estimate, crop: CropProfile, stage: GrowthStage): CropStressSignal {
+export function evaluateCropStress(
+  et0: Et0Estimate,
+  crop: CropProfile,
+  stage: GrowthStage,
+  day?: MeasuredDay,
+): CropStressSignal {
   const peakTemp = et0.tmax_c;
   const reasons: string[] = [];
   let level: HeatStress = "NONE";
@@ -913,7 +971,14 @@ export function evaluateCropStress(et0: Et0Estimate, crop: CropProfile, stage: G
 
   if (sensitive && level !== "NONE") reasons.push("farm_reason_flowering_sensitive");
 
-  return { level, peak_temp_c: peakTemp, peak_source: et0.source, mild_threshold_c: mild, reason_keys: reasons };
+  return {
+    level,
+    peak_temp_c: peakTemp,
+    peak_source: et0.source,
+    mild_threshold_c: mild,
+    hours_above_mild: day && et0.station_hours >= MIN_MEASURED_HOURS ? measuredHoursAbove(day, mild) : null,
+    reason_keys: reasons,
+  };
 }
 
 // Full farm advisory bundle
@@ -947,7 +1012,7 @@ export function buildFarmAdvisory(
     irrigation: computeIrrigationAdvice(wb, crop, stage),
     spray_window: evaluateSprayWindow(situation),
     planting: evaluatePlantingOutlook(inputs.rain, inputs.today, crop, wb),
-    stress: evaluateCropStress(inputs.et0, crop, stage),
+    stress: evaluateCropStress(inputs.et0, crop, stage, inputs.measured_day),
     field_work_window: situation.best_time
       ? {
           start: situation.best_time.recommended.start,

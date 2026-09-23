@@ -17,6 +17,7 @@ import {
   findCropProfile,
   floorToFiveMm,
   measuredDailyRanges,
+  measuredHoursAbove,
   measuredTempRange,
   rootDepthM,
   runRootZoneBalance,
@@ -700,6 +701,62 @@ test("the planting outlook uses the same rain record, and a missing day ends a d
   assert.equal(outlook.dry_spell_days, 10);
   assert.equal(outlook.favourable, false);
   assert.equal(outlook.message_key, "farm_plant_dryspell");
+});
+
+test("the planting outlook carries the 48-hour forecast without letting it decide", () => {
+  // Drizzle every day of the month: 75 mm in total and nothing that wet the
+  // seedbed, whatever the next two days are forecast to bring.
+  const drizzle = Object.fromEntries(datesEnding(TODAY, 30).map((d) => [d, 2.5]));
+  const outlook = (forecast48h: number | null) => {
+    const i = inputs({ et0: 5, rain: drizzle, forecast48h });
+    return evaluatePlantingOutlook(i.rain, TODAY, maize, computeWaterBalance(i, maize, "establishment"));
+  };
+
+  assert.equal(outlook(60).forecast_rain_48h_mm, 60);
+  assert.equal(outlook(null).forecast_rain_48h_mm, null);
+  // 60 mm on the way is more than a seedbed needs, and it has wet nothing yet.
+  for (const forecast of [null, 0, 60]) {
+    assert.equal(outlook(forecast).favourable, false, `${forecast}`);
+    assert.equal(outlook(forecast).message_key, "farm_plant_no_wetting", `${forecast}`);
+  }
+});
+
+test("the stress signal counts the hours the day held above the threshold", () => {
+  // The fixture day peaks at 26.0 °C at 15:00 EAT, on quarter-hour slots: it
+  // crosses 25.0 °C at 14:18 and falls back through it at 16:09.
+  const series = diurnalSeries("2026-09-20T12:15:00Z", 24);
+  const day = { series, end: "2026-09-21T12:00:00Z" };
+  const et0 = estimateEt0("2026-09-21", measuredTempRange(series, day.end), null)!;
+
+  // One quarter-hour slot at the peak, stated to a tenth of an hour.
+  assert.equal(measuredHoursAbove(day, 26), 0.3);
+  assert.equal(measuredHoursAbove(day, 25), 1.8);
+  assert.equal(measuredHoursAbove(day, 13), 24);
+  assert.equal(measuredHoursAbove(day, 40), 0);
+
+  // Coffee at 26 °C: the peak just reaches the mild threshold, and the count
+  // says it was the one quarter hour rather than the afternoon.
+  const coffee = evaluateCropStress(et0, findCropProfile("coffee")!, "vegetative", day);
+  assert.equal(coffee.level, "MILD");
+  assert.equal(coffee.mild_threshold_c, 26);
+  assert.equal(coffee.hours_above_mild, 0.3);
+
+  // The level is the peak alone, and the count never moves it.
+  assert.equal(evaluateCropStress(et0, findCropProfile("coffee")!, "vegetative").level, "MILD");
+  assert.equal(evaluateCropStress(et0, maize, "vegetative", day).hours_above_mild, 0);
+
+  // Filled-in slots do not count, and a day the station barely covered gets no
+  // figure at all rather than one that can only understate. Five hours carried
+  // forward leave 19 measured, under the 20 the ET₀ range asks for.
+  const filled = series.map((o, i) => (i < 20 ? { ...o, imputed: ["temp_sht"] } : o));
+  assert.equal(measuredHoursAbove({ series: filled, end: day.end }, 13), 19);
+  const thin = estimateEt0("2026-09-21", measuredTempRange(filled, day.end), { tmax_c: 26, tmin_c: 13 })!;
+  assert.equal(thin.source, "regional_forecast");
+  assert.equal(evaluateCropStress(thin, findCropProfile("coffee")!, "vegetative", day).hours_above_mild, null);
+
+  // Nothing to count over is not zero hours.
+  assert.equal(measuredHoursAbove({ series: [], end: day.end }, 20), null);
+  assert.equal(measuredHoursAbove({ series, end: "2026-09-19T00:00:00Z" }, 20), null);
 });
 
 test("an unknown crop is refused with the list of crops", async () => {

@@ -49,12 +49,9 @@ export function assembleFarmInputs(nowMs: number, sources: FarmSources): FarmInp
   const today = nairobiDate(nowMs);
   const regionalByDate = new Map((sources.regional?.days ?? []).map((d) => [d.date, d]));
   const station = sources.station ?? [];
+  const nowIso = new Date(nowMs).toISOString();
 
-  const et0 = estimateEt0(
-    today,
-    measuredTempRange(station, new Date(nowMs).toISOString()),
-    regionalByDate.get(today) ?? null,
-  );
+  const et0 = estimateEt0(today, measuredTempRange(station, nowIso), regionalByDate.get(today) ?? null);
 
   const stationDays = measuredDailyRanges(station);
   const pastEt0: Record<string, DayEt0> = {};
@@ -81,6 +78,9 @@ export function assembleFarmInputs(nowMs: number, sources: FarmSources): FarmInp
     rain,
     regional_et0_mm_day: regionalByDate.get(today)?.et0_mm ?? null,
     forecast_rain_48h_mm: sources.regional ? regionalRainAhead(sources.regional, nowMs) : null,
+    // The same slots the temperature range came from, so the hours above a
+    // stress threshold are counted over the window the peak was read from.
+    measured_day: sources.station ? { series: sources.station, end: nowIso } : undefined,
     soil: sources.soil,
   };
 }
