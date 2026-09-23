@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import {
-  buildReplayFrames, lastReplayDay, replayDateProblem, summariseHorizons, type ReplayFrame,
+  buildReplayFrames, isInTrainingPeriod, lastReplayDay, replayDateProblem, summariseHorizons,
+  REPLAY_FIRST_DAY, TRAINING_PERIOD, type ReplayFrame,
 } from "../src/lib/afya/replay";
 import { getCsvRange } from "../src/lib/afya/csv-source";
 import type { DemoObservation } from "../src/lib/afya/demo-observations";
@@ -24,12 +25,13 @@ function obs(ms: number, wbgt: number, imputed: string[] = []): DemoObservation 
   };
 }
 
-// A step issued at `anchor` whose forecasts are all `forecast`, and whose newest observation is at `observed`.
-function step(anchor: number, forecast: number, observed = anchor, best?: [string, string]): ReplayStep {
+// A step issued at `anchor` whose forecasts are all `forecast`, and whose
+// newest observation is at `observed`, reading `measured` degC.
+function step(anchor: number, forecast: number, observed = anchor, best?: [string, string], measured = forecast): ReplayStep {
   const situation = {
     generated_at: iso(observed),
     demo_mode: false,
-    current: { time: iso(observed) },
+    current: { time: iso(observed), wbgt_c: measured },
     forecast: (["1h", "3h", "6h", "9h"] as const).map((horizon) => ({
       horizon, value: forecast, lower: forecast - 1, upper: forecast + 1, model: "Ridge regression", model_version: "x",
     })),
@@ -96,6 +98,40 @@ test("the day's errors are summarised per horizon", () => {
   assert.equal(one.n, 2);
   assert.equal(one.mae, 1.25); // |20 - 18| and |18.5 - 18|
   assert.equal(one.within_band, 0.5);
+});
+
+test("each forecast carries the error of holding the reading it was issued from", () => {
+  // Issued at 09:00 from a reading of 19 degC, forecasting 20 degC throughout.
+  const [f] = buildReplayFrames([step(eat("09:00"), 20, eat("09:00"), undefined, 19)], day());
+  const byHorizon = Object.fromEntries(f.checks.map((c) => [c.horizon, c]));
+  assert.equal(byHorizon["1h"].persistence_error, 1); // 19 held against 18 recorded
+  assert.equal(byHorizon["3h"].persistence_error, -3); // 19 held against 22 recorded
+  assert.equal(byHorizon["1h"].error, 2);
+});
+
+test("the day's panel sets the model against doing nothing over the same checks", () => {
+  const frames = buildReplayFrames(
+    [step(eat("09:00"), 20, eat("09:00"), undefined, 19), step(eat("10:00"), 18.5, eat("10:00"), undefined, 18)],
+    day(),
+  );
+  const three = summariseHorizons(frames).find((s) => s.horizon === "3h")!;
+  assert.equal(three.n, 2);
+  assert.equal(three.mae, 2.75); // |20 - 22| and |18.5 - 22|
+  assert.equal(three.persistence_mae, 3.5); // |19 - 22| and |18 - 22|
+  // A horizon nothing was recorded for has neither figure rather than a zero.
+  const none = summariseHorizons(buildReplayFrames([step(eat("20:00"), 20)], day())).find((s) => s.horizon === "9h")!;
+  assert.equal(none.mae, null);
+  assert.equal(none.persistence_mae, null);
+});
+
+test("a replay date the coefficients were fitted on is known for one", () => {
+  const [from, to] = TRAINING_PERIOD;
+  assert.equal(from, REPLAY_FIRST_DAY, "the picker opens on the first day of the fit");
+  assert.ok(isInTrainingPeriod(from));
+  assert.ok(isInTrainingPeriod(to));
+  assert.ok(isInTrainingPeriod("2026-01-15"));
+  assert.equal(isInTrainingPeriod("2026-06-01"), false);
+  assert.equal(isInTrainingPeriod("2026-09-01"), false);
 });
 
 test("replay dates run from the archive's first day to yesterday in Nairobi", () => {

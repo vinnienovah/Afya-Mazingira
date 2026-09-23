@@ -1,3 +1,4 @@
+import { FORECAST_PERIODS } from "./forecast-engine";
 import type { DemoObservation } from "./demo-observations";
 import type { HorizonForecast } from "./types";
 import type { ReplayStep } from "./pipeline";
@@ -29,6 +30,17 @@ function isCalendarDay(value: unknown): value is string {
   return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 10) === value;
 }
 
+/**
+ * The days the forecast coefficients were fitted on, and whether `date` is one
+ * of them. Most of the range the picker offers is, and a replay of a day the
+ * fit has already seen flatters it, so the page has to say which it is.
+ */
+export const TRAINING_PERIOD = FORECAST_PERIODS.train as [string, string];
+
+export function isInTrainingPeriod(date: string): boolean {
+  return date >= TRAINING_PERIOD[0] && date <= TRAINING_PERIOD[1];
+}
+
 /** Null when `date` is a real calendar day from the archive's first day to yesterday. */
 export function replayDateProblem(date: unknown, nowMs: number): string | null {
   if (!isCalendarDay(date)) return "Give the date as YYYY-MM-DD.";
@@ -49,6 +61,9 @@ export interface HorizonCheck {
   recorded: number | null;
   // Forecast minus recorded.
   error: number | null;
+  // What holding the reading the frame started from would have got wrong: the
+  // no-change baseline, on the same reading the forecast was issued from.
+  persistence_error: number | null;
 }
 
 /** The recorded peak over a window; null unless every quarter hour of it was recorded. */
@@ -73,6 +88,8 @@ export interface HorizonSummary {
   horizon: HorizonForecast["horizon"];
   n: number;
   mae: number | null;
+  // The same error for doing nothing, over the same checks.
+  persistence_mae: number | null;
   // Share of recorded values inside the forecast's 80 % band.
   within_band: number | null;
 }
@@ -115,6 +132,8 @@ export function buildReplayFrames(steps: ReplayStep[], observations: DemoObserva
   return steps.map((step) => {
     const available = frameIsReal(step);
     const issued = Date.parse(step.situation.generated_at);
+    // What the frame knew when it forecast: holding it is the baseline.
+    const held = step.situation.current.wbgt_c;
     const checks: HorizonCheck[] = available
       ? step.situation.forecast.map((f) => {
           const target = issued + HOURS_AHEAD[f.horizon] * 3600_000;
@@ -128,6 +147,7 @@ export function buildReplayFrames(steps: ReplayStep[], observations: DemoObserva
             upper: f.upper,
             recorded: actual,
             error: actual === null ? null : round1(f.value - actual),
+            persistence_error: actual === null ? null : round1(held - actual),
           };
         })
       : [];
@@ -147,13 +167,24 @@ export function buildReplayFrames(steps: ReplayStep[], observations: DemoObserva
   });
 }
 
-/** Mean absolute error per horizon over a day's frames. */
+/**
+ * Mean absolute error per horizon over a day's frames, beside the error of
+ * holding each frame's own reading: the same checks, so the two can be read
+ * against each other.
+ */
 export function summariseHorizons(frames: ReplayFrame[]): HorizonSummary[] {
+  const round2 = (v: number) => Math.round(v * 100) / 100;
   return (Object.keys(HOURS_AHEAD) as HorizonForecast["horizon"][]).map((horizon) => {
     const checks = frames.flatMap((f) => f.checks).filter((c) => c.horizon === horizon && c.error !== null);
-    if (!checks.length) return { horizon, n: 0, mae: null, within_band: null };
-    const mae = checks.reduce((a, c) => a + Math.abs(c.error!), 0) / checks.length;
+    if (!checks.length) return { horizon, n: 0, mae: null, persistence_mae: null, within_band: null };
+    const mean = (of: (c: HorizonCheck) => number) => round2(checks.reduce((a, c) => a + of(c), 0) / checks.length);
     const inside = checks.filter((c) => c.recorded! >= c.lower && c.recorded! <= c.upper).length;
-    return { horizon, n: checks.length, mae: Math.round(mae * 100) / 100, within_band: Math.round((inside / checks.length) * 100) / 100 };
+    return {
+      horizon,
+      n: checks.length,
+      mae: mean((c) => Math.abs(c.error!)),
+      persistence_mae: mean((c) => Math.abs(c.persistence_error!)),
+      within_band: round2(inside / checks.length),
+    };
   });
 }
