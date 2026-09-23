@@ -26,7 +26,6 @@ interface Props {
   /** Indicator data keyed by county name */
   indicators: Record<string, CountyFeature["properties"]>;
   layer: MapLayerKey;
-  mode: "summary" | "surface";
   timeIdx: number;
   selectedCounty: string | null;
   onSelectCounty: (name: string | null) => void;
@@ -94,7 +93,7 @@ function ResizeHandler() {
 }
 
 export default function CountyLeafletMap({
-  boundaries, indicators, layer, mode, timeIdx,
+  boundaries, indicators, layer, timeIdx,
   selectedCounty, onSelectCounty, onSelectStation,
   stationLabel, stationSubLabel, lang, t,
 }: Props) {
@@ -113,18 +112,18 @@ export default function CountyLeafletMap({
       const noData = fillColor === NO_DATA_COLOUR;
       return {
         fillColor,
-        fillOpacity: noData ? 0.45 : mode === "surface" ? 0.55 : isSelected ? 0.85 : isHovered ? 0.78 : 0.68,
+        fillOpacity: noData ? 0.45 : isSelected ? 0.85 : isHovered ? 0.78 : 0.68,
         color: isSelected ? "#17211C" : noData ? "#68756F" : "#ffffff",
         weight: isSelected ? 2.5 : isHovered ? 2 : 1,
         dashArray: noData && !isSelected ? "4 3" : undefined,
         opacity: 1,
       };
     },
-    [indicators, layer, mode, timeIdx, selectedCounty, hovered],
+    [indicators, layer, timeIdx, selectedCounty, hovered],
   );
 
   // Re-render styles when controls change
-  const geoKey = `${layer}-${mode}-${timeIdx}-${selectedCounty ?? "none"}-${hovered ?? "none"}`;
+  const geoKey = `${layer}-${timeIdx}-${selectedCounty ?? "none"}-${hovered ?? "none"}`;
 
   const onEachFeature = useMemo(
     () => (feature: Feature<Geometry, CountyProps>, lyr: Layer) => {
