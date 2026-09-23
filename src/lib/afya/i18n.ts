@@ -508,6 +508,22 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     quality_suppressed: "Strong recommendations suppressed due to data quality.",
     last_reliable: "Last reliable observation:",
 
+    // What the quality checks found, in words someone can act on
+    flag_no_observations: "The station sent no readings at all, so nothing on this page is measured.",
+    flag_stale_data: "No new reading has arrived for over three hours. Treat everything here as out of date.",
+    flag_observation_age_elevated: "The latest reading is more than an hour old.",
+    flag_missing_fields: "Sensors that sent nothing in the latest reading: {value}. Their values were filled in from nearby readings.",
+    flag_gaps_filled_recently: "{value} of the last six hours' readings were filled in rather than measured.",
+    flag_temp_sensor_disagreement: "The station's three thermometers disagree by more than they should. Treat the temperature here as approximate.",
+    flag_humidity_out_of_range: "The humidity sensor reported a value outside 0 to 100%, so it is faulty.",
+    flag_temp_out_of_range: "The thermometer reported a temperature the station cannot see, so it is faulty.",
+    flag_firmware_wbgt_below_wet_bulb: "The station's own heat reading sits below its wet bulb, which is not physically possible. This page works out WBGT from the raw sensors instead, so what you see is unaffected, but the station firmware needs looking at.",
+    flag_duplicate_timestamps_removed: "{value} repeated readings arrived from the feed and were dropped.",
+    flag_station_health_bad: "A sensor group failed its health checks over the last 24 hours: {value}. Readings that lean on it are less reliable.",
+    flag_forecast_horizon_elapsed: "The forecast behind this page has run out. Reload for a fresh one before acting on it.",
+    flag_forecast_fell_back_to_no_change: "There is too little recent history to know the usual level for this time of day, so the forecast holds the current reading steady.",
+    flag_regional_context_unavailable: "Regional context could not be fetched, so the ground station alone is behind this page.",
+
     // Generic
     save: "Save",
     cancel: "Cancel",
@@ -1267,6 +1283,22 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     quality_degraded_message: "Baadhi ya ishara za mazingira hazipatikani kwa muda. Utata wa utabiri umeongezwa.",
     quality_suppressed: "Mapendekezo madhubuti yamesitishwa kutokana na ubora wa data.",
     last_reliable: "Uchunguzi wa mwisho wa kuaminika:",
+
+    // Ukaguzi wa ubora uligundua nini, kwa maneno ya kutendea kazi
+    flag_no_observations: "Kituo hakikutuma kipimo chochote, kwa hivyo hakuna kilichopimwa kwenye ukurasa huu.",
+    flag_stale_data: "Hakuna kipimo kipya kilichofika kwa zaidi ya saa tatu. Chukua yote yaliyo hapa kama ya zamani.",
+    flag_observation_age_elevated: "Kipimo cha mwisho kina zaidi ya saa moja.",
+    flag_missing_fields: "Vitambuzi visivyotuma chochote katika kipimo cha mwisho: {value}. Thamani zake zilijazwa kutoka vipimo vya jirani.",
+    flag_gaps_filled_recently: "Vipimo {value} kati ya vya saa sita zilizopita vilijazwa badala ya kupimwa.",
+    flag_temp_sensor_disagreement: "Vipimajoto vitatu vya kituo vinatofautiana zaidi ya inavyopaswa. Chukua joto lililo hapa kama la takribani.",
+    flag_humidity_out_of_range: "Kitambuzi cha unyevu kilitoa thamani nje ya 0 hadi 100%, kwa hivyo kina hitilafu.",
+    flag_temp_out_of_range: "Kipimajoto kilitoa joto ambalo kituo haliwezi kuliona, kwa hivyo kina hitilafu.",
+    flag_firmware_wbgt_below_wet_bulb: "Kipimo cha joto cha kituo chenyewe kiko chini ya bulbu yake iliyonyevunyevu, jambo lisilowezekana kimaumbile. Ukurasa huu huhesabu WBGT kutoka vitambuzi vyenyewe, kwa hivyo unachokiona hakiathiriki, lakini programu ya kituo inahitaji kuangaliwa.",
+    flag_duplicate_timestamps_removed: "Vipimo {value} vilivyojirudia vilifika kutoka mkondo na viliondolewa.",
+    flag_station_health_bad: "Kundi la vitambuzi lilishindwa ukaguzi wa afya katika saa 24 zilizopita: {value}. Vipimo vinavyotegemea kundi hilo si vya kuaminika sana.",
+    flag_forecast_horizon_elapsed: "Utabiri ulio nyuma ya ukurasa huu umeisha. Pakia upya ili kupata mpya kabla ya kuutendea kazi.",
+    flag_forecast_fell_back_to_no_change: "Historia ya hivi karibuni ni finyu mno kujua kiwango cha kawaida cha wakati huu wa siku, kwa hivyo utabiri unashikilia kipimo cha sasa.",
+    flag_regional_context_unavailable: "Muktadha wa kikanda haukupatikana, kwa hivyo kituo cha ardhini pekee ndicho kilicho nyuma ya ukurasa huu.",
 
     save: "Hifadhi",
     cancel: "Ghairi",

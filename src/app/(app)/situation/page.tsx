@@ -6,7 +6,8 @@ import { useSituation, useStationWbgt } from "@/lib/contexts/situation";
 import { useLanguage } from "@/lib/contexts/language";
 import { STATES } from "@/lib/afya/constants";
 import { horizonScores } from "@/lib/afya/forecast-engine";
-import { fill, fmtAsOf, fmtTime, fmtWindow } from "@/lib/afya/format";
+import { fill, fmtAsOf, fmtSigned, fmtTime, fmtWindow } from "@/lib/afya/format";
+import { flagText } from "@/lib/afya/i18n";
 import {
   activityName, bandGeometry, bandScale, currentBand, exposureTrend, nextStateNote, TREND_KEYS,
 } from "@/lib/afya/display";
@@ -75,9 +76,28 @@ export default function SituationPage() {
     );
   }
 
-  const { state, current, forecast, quality, risk, best_time, expected_peak, state_history_24h, forecast_series, contributors } = situation;
+  const {
+    state, current, forecast, quality, risk, best_time, expected_peak,
+    state_history_24h, forecast_series, contributors, era5,
+  } = situation;
   const stateMeta = STATES[state.state_id];
   const stateName = lang === "sw" ? stateMeta.name_sw : stateMeta.name;
+
+  // What the "ground + regional" badge stands on, in one line: the regional
+  // reanalysis reading and how the station sits against it.
+  const regionalLine = era5.available !== false && Number.isFinite(era5.era5_temp_c)
+    ? [
+        `ERA5 ${era5.era5_temp_c.toFixed(1)}°C`,
+        Number.isFinite(era5.local_temp_anomaly_c)
+          ? `${t("local_vs_regional")} ${fmtSigned(era5.local_temp_anomaly_c)}°C`
+          : null,
+        era5.valid_time ? fill(t("era5_valid"), { time: fmtAsOf(era5.valid_time, lang) }) : null,
+      ].filter(Boolean).join(" · ")
+    : t("context_unavailable");
+
+  // Flags are computed on every reading, including when quality is still GOOD:
+  // a firmware fault that the pipeline works around is still worth saying.
+  const flags = quality.flags.map((f) => flagText(lang, f)).filter((f): f is string => f !== null);
 
   const f1h = forecast.find((f) => f.horizon === "1h");
   const f3h = forecast.find((f) => f.horizon === "3h");
@@ -107,9 +127,12 @@ export default function SituationPage() {
           {/* Ground + Regional Intelligence tier, JKUAT/Juja is the flagship
               ground-intelligence site (real Conduit station), distinct from
               the regional-only intelligence available elsewhere (see /map). */}
-          <div className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-afya-gold/40 bg-afya-gold/10 px-2.5 py-1 text-[10px] font-bold tracking-wide text-afya-gold">
-            <span className="w-1.5 h-1.5 rounded-full bg-afya-gold" aria-hidden="true" />
-            {t("ground_regional_intelligence")}
+          <div className="mb-4">
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-afya-gold/40 bg-afya-gold/10 px-2.5 py-1 text-[10px] font-bold tracking-wide text-afya-gold">
+              <span className="w-1.5 h-1.5 rounded-full bg-afya-gold" aria-hidden="true" />
+              {t("ground_regional_intelligence")}
+            </div>
+            <p className="mt-1.5 text-[11px] text-white/55">{regionalLine}</p>
           </div>
 
           {/* State chip + quality */}
@@ -267,24 +290,42 @@ export default function SituationPage() {
         )}
       </div>
 
-      {/* Data-quality warning (part of the situation, not a footnote) */}
-      {quality.status !== "GOOD" && (
+      {/* Data-quality warning (part of the situation, not a footnote). Shown
+          for anything the checks found, even where the status stayed GOOD. */}
+      {(quality.status !== "GOOD" || flags.length > 0) && (
         <div
-          className={`rounded-xl border p-4 flex gap-3 ${quality.status === "DEGRADED" ? "border-afya-gold/40 bg-afya-gold/8" : "border-afya-red/40 bg-afya-red/8"}`}
-          role="alert"
+          className={`rounded-xl border p-4 flex gap-3 ${
+            quality.status === "GOOD"
+              ? "border-afya-border bg-afya-canvas"
+              : quality.status === "DEGRADED"
+                ? "border-afya-gold/40 bg-afya-gold/8"
+                : "border-afya-red/40 bg-afya-red/8"
+          }`}
+          role={quality.status === "GOOD" ? "status" : "alert"}
         >
           <AlertTriangle
-            className={`w-5 h-5 shrink-0 mt-0.5 ${quality.status === "DEGRADED" ? "text-afya-gold" : "text-afya-red"}`}
+            className={`w-5 h-5 shrink-0 mt-0.5 ${
+              quality.status === "GOOD" ? "text-afya-muted" : quality.status === "DEGRADED" ? "text-afya-gold" : "text-afya-red"
+            }`}
             strokeWidth={1.8}
             aria-hidden="true"
           />
           <div>
             <p className="font-semibold text-afya-charcoal text-sm">{t("quality_warning_title")}</p>
-            <p className="text-sm text-afya-muted mt-0.5">
-              {quality.status === "DEGRADED" ? t("quality_degraded_message") : t("quality_poor_message")}
-              {" "}
-              <span className="font-medium">{t("last_reliable")} {fmtTime(quality.updated_at)}</span>
-            </p>
+            {quality.status !== "GOOD" && (
+              <p className="text-sm text-afya-muted mt-0.5">
+                {quality.status === "DEGRADED" ? t("quality_degraded_message") : t("quality_poor_message")}
+                {" "}
+                <span className="font-medium">{t("last_reliable")} {fmtTime(quality.updated_at)}</span>
+              </p>
+            )}
+            {flags.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {flags.map((flag) => (
+                  <li key={flag} className="text-sm text-afya-muted">{flag}</li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       )}
@@ -298,7 +339,7 @@ export default function SituationPage() {
           <div>
             <CardTitle className="mb-0">{hasMeasured ? t("chart_past_next") : t("next_6h")}</CardTitle>
             <CardMeta>
-              WBGT (shade) · {hasMeasured ? `${t("measured")} + ` : ""}{t("predicted")} + {t("uncertainty")}
+              {t("wbgt_shade")} · {hasMeasured ? `${t("measured")} + ` : ""}{t("predicted")} + {t("band_80")}
             </CardMeta>
           </div>
           {expected_peak && (
@@ -334,14 +375,14 @@ export default function SituationPage() {
                   className="text-[10px] text-afya-muted/60 border border-afya-border rounded px-1.5 py-0.5"
                   title={lang === "sw" ? "Kosa la wastani kwenye miezi ya majaribio" : "Mean error on the test months"}
                 >
-                  ±{horizonScores(horizon).mae.toFixed(1)}°C
+                  {t("avg_error")} {horizonScores(horizon).mae.toFixed(1)}°C
                 </span>
               </div>
               <div className="text-3xl font-bold text-afya-charcoal mb-1">
                 {f.value.toFixed(1)}°C
               </div>
               <div className="text-xs text-afya-muted mb-3">
-                {t("uncertainty")}: {f.lower.toFixed(1)}–{f.upper.toFixed(1)}°C
+                {t("band_80")}: {f.lower.toFixed(1)}–{f.upper.toFixed(1)}°C
               </div>
               {/* The 80 % band and forecast value, on one scale shared by all four horizons */}
               <div className="relative h-2.5 rounded-full bg-afya-canvas" aria-hidden="true">
