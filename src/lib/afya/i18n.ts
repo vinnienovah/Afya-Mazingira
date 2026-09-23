@@ -255,6 +255,8 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     send: "Send",
     ai_disclaimer: "AFYA AI explains results AFYA MAZINGIRA has already computed and checked. It does not forecast on its own.",
     no_ai: "AI explanation temporarily unavailable. Deterministic fallback shown.",
+    ai_no_model: "No language model is set up on this server. Answers are written by AFYA MAZINGIRA itself from the result it has already computed.",
+    ai_model_silent: "The language model did not answer this time. This answer is written by AFYA MAZINGIRA itself from the result it has already computed.",
     ai_rate_limited: "Too many questions in a short time. Please wait a minute and try again.",
     ai_answer_language: "Answer language",
 
@@ -1022,6 +1024,8 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     send: "Tuma",
     ai_disclaimer: "AFYA AI hueleza matokeo ambayo AFYA MAZINGIRA imeshakokotoa na kukagua. Haitabiri yenyewe.",
     no_ai: "Maelezo ya AI hayapatikani kwa sasa. Inaonyeshwa mbadala wa kisayansi.",
+    ai_no_model: "Hakuna modeli ya lugha iliyowekwa kwenye seva hii. Majibu yanaandikwa na AFYA MAZINGIRA yenyewe kutoka matokeo iliyokwisha kokotoa.",
+    ai_model_silent: "Modeli ya lugha haikujibu wakati huu. Jibu hili limeandikwa na AFYA MAZINGIRA yenyewe kutoka matokeo iliyokwisha kokotoa.",
     ai_rate_limited: "Maswali mengi kwa muda mfupi. Tafadhali subiri dakika moja kisha ujaribu tena.",
     ai_answer_language: "Lugha ya jibu",
 
