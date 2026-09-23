@@ -122,9 +122,9 @@ export default function ClimateVariablesPanel() {
   }
 
   const conduitLabel =
-    data.conduit_source === "live" ? "LIVE · CONDUIT"
-      : data.conduit_source === "csv" ? "CONDUIT ARCHIVE"
-        : "DEMO";
+    data.conduit_source === "live" ? t("conduit_live_badge")
+      : data.conduit_source === "csv" ? t("conduit_archive_badge")
+        : t("demo_mode");
 
   const latest = data.conduit[data.conduit.length - 1];
   const gustValues = data.conduit.map((p) => p.wind_gust_ms);
@@ -196,7 +196,7 @@ export default function ClimateVariablesPanel() {
         {/* Rainfall at the station, daily, from gauge 1's running total */}
         <MiniChart
           title={t("cv_station_rain_title")}
-          sourceLabel="CONDUIT · GAUGE 1"
+          sourceLabel={t("cv_station_rain_source")}
           placeholder={stationRain?.points?.length ? undefined : stationRain ? t("ch_reason_no_station_data") : t("ch_loading")}
         >
           <BarChart data={stationRain?.points ?? []} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>

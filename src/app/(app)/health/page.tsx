@@ -154,6 +154,14 @@ const STATUS_NAME: Record<Status, [string, string]> = {
   not_reported: both("health_status_not_reported"),
 };
 
+// The audits report their verdicts in English, as sentinel.ts writes them.
+const VERDICT_NAMES: Record<string, [string, string]> = {
+  "matches Stull": both("health_verdict_matches_stull"),
+  "does not match Stull": both("health_verdict_no_match_stull"),
+  "non-standard": both("health_verdict_non_standard"),
+  "within tolerance": both("health_verdict_within_tolerance"),
+};
+
 // The report counts a flat reading in 15-minute slots; the rule reads in hours.
 const slotHours = (slots: number) => (slots * SLOT_MS) / 3600_000;
 // What each rule checks, on 15-minute data, at the limits the report was run
@@ -534,7 +542,7 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
                 <th scope="row" className="py-2 pr-4 text-left font-semibold text-afya-charcoal">A01</th>
                 <td className="py-2 pr-4 text-afya-muted">{sw ? "Balbu nyevu dhidi ya Stull (2011)" : "Wet bulb against Stull (2011)"}</td>
                 <td className="py-2 pr-4">{sw ? "tofauti ya wastani" : "mean difference"} {a01.mae_c?.toFixed(3)} °C</td>
-                <td className="py-2"><Verdict ok={a01.verdict === "matches Stull"} text={a01.verdict} /></td>
+                <td className="py-2"><Verdict ok={a01.verdict === "matches Stull"} verdict={a01.verdict} sw={sw} /></td>
               </tr>
               <tr>
                 <th scope="row" className="py-2 pr-4 text-left font-semibold text-afya-charcoal">A02</th>
@@ -557,7 +565,7 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
                   {sw ? "chini" : "below"} {pct(a03.below_pct)};{" "}
                   {sw ? `zaidi ya ${margin} °C chini` : `more than ${margin} °C below`} {pct(a03.far_below_pct)}
                 </td>
-                <td className="py-2"><Verdict ok={a03.verdict !== "non-standard"} text={a03.verdict} /></td>
+                <td className="py-2"><Verdict ok={a03.verdict !== "non-standard"} verdict={a03.verdict} sw={sw} /></td>
               </tr>
               <tr>
                 <th scope="row" className="py-2 pr-4 text-left font-semibold text-afya-charcoal">A04</th>
@@ -641,11 +649,11 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
   );
 }
 
-function Verdict({ ok, text }: { ok: boolean; text: string }) {
+function Verdict({ ok, verdict, sw }: { ok: boolean; verdict: string; sw: boolean }) {
   return (
     <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold", ok ? STATUS_STYLE.good : STATUS_STYLE.bad)}>
       {ok ? <CheckCircle2 className="w-3 h-3" aria-hidden="true" /> : <AlertTriangle className="w-3 h-3" aria-hidden="true" />}
-      {text}
+      {VERDICT_NAMES[verdict]?.[sw ? 1 : 0] ?? verdict}
     </span>
   );
 }

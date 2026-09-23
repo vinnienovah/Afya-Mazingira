@@ -123,6 +123,23 @@ test("the score and its findings quote the penalties the report scored with", ()
   assert.equal(archive.limits.missing_minutes_per_point, 14.4);
 });
 
+test("every verdict the audits can reach has a name in both languages", () => {
+  // The strings sentinel.ts writes, which the page must not print as they are.
+  const verdicts: Record<string, string> = {
+    "matches Stull": "health_verdict_matches_stull",
+    "does not match Stull": "health_verdict_no_match_stull",
+    "non-standard": "health_verdict_non_standard",
+    "within tolerance": "health_verdict_within_tolerance",
+  };
+  for (const [english, key] of Object.entries(verdicts)) {
+    assert.equal(STRINGS.en[key], english, key);
+    assert.ok(STRINGS.sw[key] && STRINGS.sw[key] !== english, `${key} is still English in Kiswahili`);
+  }
+  for (const audit of [archive.audits.A01_wet_bulb_vs_stull, archive.audits.A03_firmware_wbgt_vs_wet_bulb]) {
+    assert.ok(audit.verdict in verdicts, `the report reached an unnamed verdict: ${audit.verdict}`);
+  }
+});
+
 test("the rain tile says which of the two totals it is", () => {
   // The tile adds up per-slot rain; the gauge's own daily totals, which the
   // findings quote, come to more because these slots carry no reading.
