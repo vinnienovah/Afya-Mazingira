@@ -459,19 +459,17 @@ export async function getRegionalOutlook(
 
 // Rain today (mm) and 0-7 cm soil moisture (m³/m³) behind the flood categories.
 // The 0-7 cm layer is a depth average over ground that takes days to wet and
-// dry, so it never reaches the near-saturation values the 0-1 cm skin hits
-// within an hour of rain; against it the old skin-layer bar of 0.28 sat at the
-// top of the field-capacity band and would almost never be met. 0.25 m³/m³ is
-// the middle of the field-capacity range FAO-56 Table 19 gives for loam (0.20
-// to 0.30) and inside silt loam's (0.22 to 0.36): ground at field capacity
+// dry, so it never reaches the near-saturation values a skin layer hits within
+// an hour of rain: the bar belongs at the middle of field capacity rather than
+// its top. 0.25 m³/m³ is the middle of the range FAO-56 Table 19 gives for
+// loam (0.20 to 0.30) and inside silt loam's (0.22 to 0.36); ground that wet
 // sheds new rain as runoff rather than absorbing it.
 const FLOOD_WET_SOIL_M3 = 0.25;
 const FLOOD_HIGH_RAIN_MM = 30;
 const FLOOD_ELEVATED_RAIN_MM = 15;
 const FLOOD_WET_SOIL_RAIN_MM = 5;
 
-/** The numbers behind the categories, for the page to show the reader instead
- * of pointing at the source. */
+/** The page prints these, so a reader does not have to open the source. */
 export const FLOOD_THRESHOLDS = {
   high_rain_mm: FLOOD_HIGH_RAIN_MM,
   elevated_rain_mm: FLOOD_ELEVATED_RAIN_MM,
