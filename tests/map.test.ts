@@ -16,6 +16,9 @@ import {
   type StationOverride,
 } from "../src/lib/afya/map-data";
 import type { SituationResult } from "../src/lib/afya/types";
+import { getStrings, tf } from "../src/lib/afya/i18n";
+
+const LANGS = ["en", "sw"] as const;
 
 const TODAY = "2026-09-21";
 const eat = (hhmm: string) => new Date(`${TODAY}T${hhmm}:00+03:00`).toISOString();
@@ -211,6 +214,37 @@ test("the wet-soil bar sits at the 0-7 cm field-capacity middle, and the page is
   assert.equal(computeFloodRisk(wet_soil_rain_mm, wet_soil_m3), "ELEVATED");
   assert.equal(computeFloodRisk(wet_soil_rain_mm, wet_soil_m3 - 0.01), "LOW");
   assert.equal(computeFloodRisk(wet_soil_rain_mm - 0.1, null), "LOW");
+});
+
+// The page used to send the reader to the source for these numbers.
+test("both languages carry the conditions copy, with the real thresholds filled in", () => {
+  const { high_rain_mm, elevated_rain_mm, wet_soil_rain_mm, wet_soil_m3 } = FLOOD_THRESHOLDS;
+  const soil = wet_soil_m3.toFixed(2);
+  const values = { high: high_rain_mm, elevated: elevated_rain_mm, wet: wet_soil_rain_mm, soil };
+
+  for (const lang of LANGS) {
+    const strings = getStrings(lang);
+    for (const key of [
+      "flood_title", "flood_subtitle", "flood_levels_title", "flood_held_reading", "flood_mm_today_gauge",
+      "flood_cond_high", "flood_cond_elevated", "flood_cond_low", "flood_high_count", "flood_elevated_count",
+    ]) {
+      assert.ok(strings[key], `${lang} is missing ${key}`);
+    }
+    // The chips describe conditions; they are not stamped with a hazard band.
+    const chips = [strings.flood_cond_high, strings.flood_cond_elevated, strings.flood_cond_low].join(" ");
+    assert.ok(!/HIGH|ELEVATED|LOW|JUU|ILIYOINUKA/.test(chips), `${lang}: ${chips}`);
+    // The soil label follows the layer the check reads.
+    assert.ok(strings.flood_soil_moisture.includes("7"), strings.flood_soil_moisture);
+
+    for (const key of ["flood_level_high_rule", "flood_level_elevated_rule", "flood_level_low_rule"]) {
+      const rule = tf(lang, key, values);
+      assert.ok(!rule.includes("{"), `${lang} ${key} left a placeholder: ${rule}`);
+    }
+    const high = tf(lang, "flood_level_high_rule", values);
+    assert.ok(high.includes(String(high_rain_mm)) && high.includes(soil), high);
+    assert.ok(tf(lang, "flood_level_low_rule", values).includes(String(wet_soil_rain_mm)));
+    assert.ok(tf(lang, "flood_held_reading", { time: "14:05 EAT" }).includes("14:05 EAT"));
+  }
 });
 
 test("the county request asks for the 0-7 cm soil layer, and the reading comes from it", async () => {
