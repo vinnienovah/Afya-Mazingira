@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { DataQuality, ForecastPoint } from "./types";
 import { ACTIVITY_PROFILES } from "./constants";
-import { alignToStep, findBestTime, isDaylight, sunTimes, type BestTimeDetail } from "./best-time-engine";
+import { alignToStep, findBestTime, isDaylight, seriesStepMs, sunTimes, type BestTimeDetail } from "./best-time-engine";
+import { rainProbabilityAt } from "./risk-engine";
 
 // Activity planning for the Plan page and saved plans: what a request may ask
 // for, and which forecast answers it. The station's own forecast comes first;
@@ -13,8 +14,6 @@ export const ActivityKeySchema = z.enum(ACTIVITY_KEYS);
 const IsoDateTime = z.iso.datetime({ offset: true });
 const Duration = z.number().int().min(5).max(480);
 
-// The regional forecast runs three days ahead, so nothing is planned past it.
-export const PLAN_MAX_AHEAD_HOURS = 72;
 const MAX_RANGE_HOURS = 24;
 
 export const RecommendationRequestSchema = z.object({
@@ -33,6 +32,7 @@ export const SavedResultSchema = z.object({
     reasons: z.array(z.string()),
     peak_wbgt_c: z.number().optional(),
     risk: z.enum(["LOW", "ELEVATED", "HIGH", "VERY_HIGH"]).optional(),
+    band_c: z.number().optional(),
   }),
   alternative: WindowSchema.nullable(),
   activity: z.string(),
@@ -101,8 +101,9 @@ export type PlanOutcome = { ok: true; result: PlannedWindow } | PlanFailure;
 export interface PlanForecasts {
   station: ForecastPoint[];
   quality: DataQuality;
-  // The station's chance of rain over the next hours, 0 to 1.
-  rainProbability: number;
+  // The station's chance of rain, 0 to 1, and the reading it was computed on:
+  // it speaks for the hours after that reading and no further.
+  rain: { probability: number; at: string };
   regional: { time: string; wbgt_like: number }[];
 }
 
@@ -126,10 +127,10 @@ export function rangeProblem(startMs: number, endMs: number, durationMinutes?: n
 
 /**
  * Checks a request against the clock: a range that has ended, or has too little
- * left of it, or starts beyond the forecasts, is refused before any forecast
- * is run. Null when it can be planned.
+ * left of it, or leaves no room for the activity before `reachMs`, the last
+ * moment the forecasts cover, is refused. Null when it can be planned.
  */
-export function checkPlanWindow(req: RecommendationRequest, nowMs: number): PlanFailure | null {
+export function checkPlanWindow(req: RecommendationRequest, nowMs: number, reachMs?: number | null): PlanFailure | null {
   const startMs = Date.parse(req.window_start);
   const endMs = Date.parse(req.window_end);
   const range = rangeProblem(startMs, endMs, req.duration_minutes);
@@ -147,10 +148,24 @@ export function checkPlanWindow(req: RecommendationRequest, nowMs: number): Plan
       end: iso(endMs),
     });
   }
-  if (startMs - nowMs > PLAN_MAX_AHEAD_HOURS * 3600_000) {
-    return fail(400, "beyond_forecast", `No forecast reaches that far; plans can start up to ${PLAN_MAX_AHEAD_HOURS / 24} days ahead.`);
+  if (reachMs != null && startMs + req.duration_minutes * 60_000 > reachMs) {
+    return fail(400, "beyond_forecast", `No forecast reaches that far; the last one ends at ${iso(reachMs)}.`, {
+      reach: iso(reachMs),
+    });
   }
   return null;
+}
+
+/**
+ * The last moment the forecasts cover, each point standing for the step after
+ * it. The regional outlook usually reaches furthest; without it the station's
+ * own nine hours are all there is.
+ */
+export function forecastReach(forecasts: PlanForecasts, nowMs: number): number | null {
+  const ends = [forecasts.station, regionalSeries(forecasts.regional, nowMs)]
+    .filter((series) => series.length > 0)
+    .map((series) => Date.parse(series[series.length - 1].time) + seriesStepMs(series));
+  return ends.length ? Math.max(...ends) : null;
 }
 
 /**
@@ -183,7 +198,7 @@ function daylightRoom(fromMs: number, endMs: number, durationMs: number): boolea
  * considered.
  */
 export function planActivity(req: RecommendationRequest, forecasts: PlanForecasts, nowMs: number): PlanOutcome {
-  const early = checkPlanWindow(req, nowMs);
+  const early = checkPlanWindow(req, nowMs, forecastReach(forecasts, nowMs));
   if (early) return early;
 
   const startMs = Date.parse(req.window_start);
@@ -196,7 +211,7 @@ export function planActivity(req: RecommendationRequest, forecasts: PlanForecast
     const station = findBestTime(
       req.activity, req.duration_minutes, req.window_start, req.window_end,
       forecasts.station, forecasts.quality,
-      { nowIso, rainProbability: forecasts.rainProbability },
+      { nowIso, rainProbability: rainProbabilityAt(forecasts.rain.probability, forecasts.rain.at) },
     );
     if (station) return { ok: true, result: { ...station, source: "station", searched_from } };
   }

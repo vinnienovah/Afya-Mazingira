@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import {
-  checkPlanWindow, planActivity, PlanCreateSchema, PlanUpdateSchema, SavedResultSchema,
+  checkPlanWindow, forecastReach, planActivity, PlanCreateSchema, PlanUpdateSchema, SavedResultSchema,
   type PlanForecasts,
 } from "../src/lib/afya/activity-plan";
 import { isDaylight } from "../src/lib/afya/best-time-engine";
@@ -39,7 +39,8 @@ function regional(): { time: string; wbgt_like: number }[] {
 }
 
 function forecasts(nowMs: number, quality = GOOD): PlanForecasts {
-  return { station: station(nowMs - (nowMs % 900_000)), quality, rainProbability: 0.1, regional: regional() };
+  const from = nowMs - (nowMs % 900_000);
+  return { station: station(from), quality, rain: { probability: 0.1, at: iso(from) }, regional: regional() };
 }
 
 const request = (start: number, end: number, duration = 60, activity = "outdoor_work") => ({
@@ -90,6 +91,20 @@ test("the station forecast answers what it covers; tomorrow goes to the regional
   assert.ok(SavedResultSchema.safeParse(JSON.parse(JSON.stringify(tomorrow.result))).success);
 });
 
+test("the station's rain chance is only claimed for the hours it covers", () => {
+  const now = eat("08:00");
+  const soon = planActivity(request(eat("08:00"), eat("10:00")), forecasts(now), now);
+  assert.ok(soon.ok);
+  assert.equal(soon.result.source, "station");
+  assert.ok(soon.result.recommended.reasons.includes("reason_low_rain"));
+
+  // Still the station's own forecast, but hours past the rain model's reach.
+  const later = planActivity(request(eat("13:00"), eat("15:00")), forecasts(now), now);
+  assert.ok(later.ok);
+  assert.equal(later.result.source, "station");
+  assert.ok(!later.result.recommended.reasons.includes("reason_low_rain"));
+});
+
 test("the regional fallback never offers the hours of today that have passed", () => {
   const now = eat("12:03");
   const poor = { ...GOOD, status: "POOR" as const };
@@ -99,12 +114,28 @@ test("the regional fallback never offers the hours of today that have passed", (
   assert.ok(Date.parse(outcome.result.recommended.start) >= eat("12:15"));
 });
 
-test("a window is never offered past the end of every forecast", () => {
-  // Two days out the regional model has ended by 03:00 EAT on day 3.
+test("a window is never offered past the end of every forecast, and the refusal says where it ends", () => {
+  // The regional model runs from 03:00 EAT on day 0 and ends 72 hours later,
+  // at 03:00 EAT on day 3: day 2 is reachable, day 3 is not.
   const now = eat("08:00");
+  assert.equal(forecastReach(forecasts(now), now), eat("03:00", 3));
+
+  const dayTwo = planActivity(request(eat("08:00", 2), eat("18:00", 2), 120), forecasts(now), now);
+  assert.ok(dayTwo.ok);
+  assert.equal(dayTwo.result.source, "regional");
+
   const outcome = planActivity(request(eat("08:00", 3), eat("18:00", 3), 120), forecasts(now), now);
   assert.equal(outcome.ok, false);
-  assert.equal(outcome.ok === false && outcome.error, "no_window");
+  assert.equal(outcome.ok === false && outcome.error, "beyond_forecast");
+  assert.equal(outcome.ok === false && outcome.details?.reach, iso(eat("03:00", 3)));
+});
+
+test("without a regional outlook the limit follows the station's own nine hours", () => {
+  const now = eat("08:00");
+  const stationOnly = { ...forecasts(now), regional: [] };
+  assert.equal(forecastReach(stationOnly, now), eat("08:00") + 9 * HOUR + 900_000);
+  const outcome = planActivity(request(eat("08:00", 1), eat("18:00", 1), 120), stationOnly, now);
+  assert.equal(outcome.ok === false && outcome.error, "beyond_forecast");
 });
 
 test("after dark there is no outdoor window to offer", () => {
