@@ -85,7 +85,7 @@ export default function ForecastPage() {
         <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
           <div>
             <CardTitle className="mb-0">
-              {lang === "sw" ? "Chati ya Utabiri" : "WBGT Forecast (shade)"}
+              {t("forecast_chart_title")}
             </CardTitle>
             <CardMeta>
               {expected_peak
