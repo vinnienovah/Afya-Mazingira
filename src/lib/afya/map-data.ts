@@ -2,7 +2,7 @@
 // indicators per county.
 //   - Weather: one batched request to Open-Meteo's forecast API for every
 //     county centroid, no key required: current temperature and humidity,
-//     today's hourly temperature and humidity, this hour's 0-1 cm soil moisture
+//     today's hourly temperature and humidity, this hour's 0-7 cm soil moisture
 //     and today's rain total (the Nairobi day, hours still to come included).
 //     All of it is model output, not measurement.
 //   - Thermal and outlook: air temperature at 09:00, 12:00, 15:00 and 18:00,
@@ -12,7 +12,8 @@
 //     are configured (not filtered for cloud; see copernicus.ts).
 // Kiambu, the county the Conduit station stands in, takes the station for the
 // hours it covers while the station is current: its measurement for hours
-// already past today, its WBGT forecast for hours the forecast reaches.
+// already past today, its WBGT forecast for hours the forecast reaches, and
+// gauge 1's own daily total in place of the model's rain.
 // A county Open-Meteo did not answer for has null weather values, shown on the
 // map and the flood page as unavailable.
 
@@ -52,15 +53,15 @@ export interface CountyFeature {
     confidence: "LOW" | "MODERATE" | "HIGH";
     /** Current temperature minus the mean of the counties */
     temperature_anomaly_c: number | null;
-    /** Today's total (Nairobi day) in the forecast, hours still to come included */
+    /** Today's total (Nairobi day): the station gauge in Kiambu while it covers
+     * the day, otherwise the forecast, hours still to come included */
     rain_today_mm: number | null;
-    /** This hour, 0 to 1 cm, m³/m³, forecast model */
+    /** This hour, 0 to 7 cm, m³/m³, forecast model */
     soil_moisture: number | null;
     /** Null when the rain or soil value it needs is missing */
     flood_risk: FloodRisk | null;
     ndvi_mean: number | null;
     sources: string[];
-    trend: "rising" | "stable" | "falling" | null;
     outlook_hours: OutlookHour[];
   };
   geometry: {
@@ -91,22 +92,35 @@ export interface StationOverride {
   measured: StationSlot[];
   /** The station's WBGT forecast */
   forecast: { time: string; value: number }[];
+  /** Gauge 1's own total for today so far, mm; null when the gauge missed too
+   * much of the day for a total to mean anything (see dailyRainFrom). */
+  rainTodayMm: number | null;
 }
 
 export const OUTLOOK_HOURS = ["09:00", "12:00", "15:00", "18:00"];
 
 const STATION_COUNTY = "Kiambu";
 const STATION_FRESH_MINUTES = 180;
+/** Named apart from the station itself: the gauge is a measurement where the
+ * rest of the rain on this map is model output. */
+export const STATION_RAIN_SOURCE = "Conduit rain gauge";
 
-/** Kiambu's station override from a pipeline run and the station series behind it. */
-export function stationOverrideFrom(situation: SituationResult, series: StationSlot[] | null): StationOverride {
+/** Kiambu's station override from a pipeline run, the station series behind it
+ * and gauge 1's total for today so far. */
+export function stationOverrideFrom(
+  situation: SituationResult,
+  series: StationSlot[] | null,
+  rainTodayMm: number | null = null,
+): StationOverride {
+  // Stale or synthetic station data is not shown as the county's current state.
+  const isRealData = situation.data_source !== "DEMO" && situation.quality.freshness_minutes <= STATION_FRESH_MINUTES;
   return {
     countyName: STATION_COUNTY,
     wbgt: situation.current.wbgt_c,
-    // Stale or synthetic station data is not shown as the county's current state.
-    isRealData: situation.data_source !== "DEMO" && situation.quality.freshness_minutes <= STATION_FRESH_MINUTES,
+    isRealData,
     measured: series ?? [],
     forecast: situation.forecast_series,
+    rainTodayMm: isRealData ? rainTodayMm : null,
   };
 }
 
@@ -179,7 +193,6 @@ export interface CountyWeather {
   rh: number;
   rainTodayMm: number | null;
   soilMoisture: number | null;
-  trend: "rising" | "stable" | "falling" | null;
   hours: OutlookHour[];
 }
 
@@ -189,7 +202,7 @@ export interface OpenMeteoLocation {
     time: string[];
     temperature_2m: (number | null)[];
     relative_humidity_2m: (number | null)[];
-    soil_moisture_0_to_1cm?: (number | null)[];
+    soil_moisture_0_to_7cm?: (number | null)[];
   };
   daily?: { time: string[]; precipitation_sum: (number | null)[] };
 }
@@ -227,19 +240,13 @@ export function parseCountyWeather(loc: OpenMeteoLocation | undefined, nowMs: nu
     return i < 0 ? emptyHour(hour) : regionalHour(hour, h!.temperature_2m[i], h!.relative_humidity_2m[i]);
   });
 
-  // Trend: now against three hours ahead in the same local-time series.
   const nowIdx = indexAt(`${new Date(nowMs + EAT_OFFSET_MS).toISOString().slice(11, 13)}:00`);
-  const ahead = nowIdx >= 0 ? h!.temperature_2m[nowIdx + 3] ?? null : null;
-  const delta = ahead == null ? null : ahead - tempC;
-  const trend = delta == null ? null : delta > 0.5 ? "rising" : delta < -0.5 ? "falling" : "stable";
-
   const dayIdx = loc?.daily?.time.indexOf(today) ?? -1;
   return {
     tempC,
     rh,
     rainTodayMm: dayIdx >= 0 ? loc!.daily!.precipitation_sum[dayIdx] ?? null : null,
-    soilMoisture: nowIdx >= 0 ? h!.soil_moisture_0_to_1cm?.[nowIdx] ?? null : null,
-    trend,
+    soilMoisture: nowIdx >= 0 ? h!.soil_moisture_0_to_7cm?.[nowIdx] ?? null : null,
     hours,
   };
 }
@@ -259,7 +266,7 @@ async function fetchRegionalWeather(counties: LoadedCounty[], nowMs: number): Pr
   const lngs = counties.map((c) => c.centroid.lng).join(",");
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lngs}` +
-    `&current=temperature_2m,relative_humidity_2m&hourly=temperature_2m,relative_humidity_2m,soil_moisture_0_to_1cm` +
+    `&current=temperature_2m,relative_humidity_2m&hourly=temperature_2m,relative_humidity_2m,soil_moisture_0_to_7cm` +
     `&daily=precipitation_sum&forecast_days=1&timezone=Africa%2FNairobi`;
 
   const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
@@ -385,15 +392,20 @@ export function countyProperties(
   let outlookHours = regionalHours;
   let confidence: CountyFeature["properties"]["confidence"] = w ? "MODERATE" : "LOW";
   let sources = w ? ["Open-Meteo"] : [];
+  // The gauge is the only measured rainfall on this map. Kiambu keeps the model
+  // total when the gauge missed too much of the day, as every other county does.
+  const gaugeRain = isStationCounty ? station!.rainTodayMm : null;
   if (isStationCounty) {
     outlookCategory = wbgtToRisk(station!.wbgt);
     outlookHours = stationOutlookHours(nowMs, station!, regionalHours);
     confidence = "HIGH";
-    sources = ["Conduit station", ...sources];
+    sources = gaugeRain == null
+      ? ["Conduit station", ...sources]
+      : ["Conduit station", STATION_RAIN_SOURCE, ...sources];
   }
   if (ndvi != null) sources = [...sources, "Copernicus Sentinel-2"];
 
-  const rainToday = w?.rainTodayMm ?? null;
+  const rainToday = gaugeRain ?? w?.rainTodayMm ?? null;
   const soilMoisture = w?.soilMoisture ?? null;
   return {
     name: county.name,
@@ -407,7 +419,6 @@ export function countyProperties(
     flood_risk: computeFloodRisk(rainToday, soilMoisture),
     ndvi_mean: ndvi,
     sources,
-    trend: w?.trend ?? null,
     outlook_hours: outlookHours,
   };
 }
@@ -446,14 +457,27 @@ export async function getRegionalOutlook(
   return { type: "FeatureCollection", features };
 }
 
-// Rain today (mm) and 0-1 cm soil moisture (m³/m³) behind the flood categories.
-// 0.28 m³/m³ lies inside the field-capacity ranges FAO-56 Table 19 gives for
-// loam (0.20 to 0.30) and silt loam (0.22 to 0.36): ground that wet sheds new
-// rain as runoff rather than absorbing it.
-const FLOOD_WET_SOIL_M3 = 0.28;
+// Rain today (mm) and 0-7 cm soil moisture (m³/m³) behind the flood categories.
+// The 0-7 cm layer is a depth average over ground that takes days to wet and
+// dry, so it never reaches the near-saturation values the 0-1 cm skin hits
+// within an hour of rain; against it the old skin-layer bar of 0.28 sat at the
+// top of the field-capacity band and would almost never be met. 0.25 m³/m³ is
+// the middle of the field-capacity range FAO-56 Table 19 gives for loam (0.20
+// to 0.30) and inside silt loam's (0.22 to 0.36): ground at field capacity
+// sheds new rain as runoff rather than absorbing it.
+const FLOOD_WET_SOIL_M3 = 0.25;
 const FLOOD_HIGH_RAIN_MM = 30;
 const FLOOD_ELEVATED_RAIN_MM = 15;
 const FLOOD_WET_SOIL_RAIN_MM = 5;
+
+/** The numbers behind the categories, for the page to show the reader instead
+ * of pointing at the source. */
+export const FLOOD_THRESHOLDS = {
+  high_rain_mm: FLOOD_HIGH_RAIN_MM,
+  elevated_rain_mm: FLOOD_ELEVATED_RAIN_MM,
+  wet_soil_rain_mm: FLOOD_WET_SOIL_RAIN_MM,
+  wet_soil_m3: FLOOD_WET_SOIL_M3,
+};
 
 /**
  * Flood-conducive-conditions indicator: rainfall + soil saturation, the same
