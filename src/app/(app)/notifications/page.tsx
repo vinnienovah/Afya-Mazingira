@@ -85,6 +85,9 @@ export default function NotificationsPage() {
   const [saving, setSaving] = useState(false);
   const [testSending, setTestSending] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
+  // The rule whose delete has been asked for but not yet confirmed. A rule is
+  // easy to lose to one stray tap on a phone and there is no undo.
+  const [confirmingDelete, setConfirmingDelete] = useState<number | null>(null);
 
   useEffect(() => {
     if (user) loadRules();
@@ -149,6 +152,7 @@ export default function NotificationsPage() {
   }
 
   async function deleteRule(id: number) {
+    setConfirmingDelete(null);
     await fetch(`/api/notifications/${id}`, { method: "DELETE", credentials: "include" });
     loadRules();
   }
@@ -516,13 +520,31 @@ export default function NotificationsPage() {
                         : <ToggleLeft className="w-7 h-7" strokeWidth={1.8} />
                       }
                     </button>
-                    <button
-                      onClick={() => deleteRule(rule.id)}
-                      className="p-1.5 rounded-lg text-afya-muted hover:bg-afya-red/10 hover:text-afya-red transition-colors"
-                      aria-label={t("delete_rule")}
-                    >
-                      <Trash2 className="w-4 h-4" strokeWidth={1.8} />
-                    </button>
+                    {confirmingDelete === rule.id ? (
+                      <div className="flex items-center gap-1.5" role="group" aria-label={t("delete_rule")}>
+                        <span className="text-xs text-afya-muted">{t("confirm")}</span>
+                        <button
+                          onClick={() => deleteRule(rule.id)}
+                          className="rounded-lg bg-afya-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-afya-red/90 transition-colors"
+                        >
+                          {t("yes")}
+                        </button>
+                        <button
+                          onClick={() => setConfirmingDelete(null)}
+                          className="rounded-lg border border-afya-border px-2.5 py-1 text-xs font-semibold text-afya-muted hover:bg-afya-canvas transition-colors"
+                        >
+                          {t("no")}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmingDelete(rule.id)}
+                        className="p-1.5 rounded-lg text-afya-muted hover:bg-afya-red/10 hover:text-afya-red transition-colors"
+                        aria-label={t("delete_rule")}
+                      >
+                        <Trash2 className="w-4 h-4" strokeWidth={1.8} />
+                      </button>
+                    )}
                   </div>
                 </div>
               </Card>
