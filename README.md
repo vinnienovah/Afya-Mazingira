@@ -190,7 +190,7 @@ On a single split (fitted to May 2026, tested on June to September 2026, which t
 | **Station Health** | Conduit Sentinel: sensor-group status for the last 24 hours at JKUAT or three nearby CHORDS stations, the daily health score since June 2025, firmware and thermometer audits, the rules, and findings to report to JHUB |
 | **Why?** | Data quality flags, the state timeline, what moves the +3 h forecast in °C, the model comparison table with test-month scores, and the regional context with the hours it compares |
 | **Operations** | A day's planned activities, saved in the browser, each judged on the part of its window still ahead and forecast, with a cooler daylight window suggested when there is one |
-| **Flood Risk** | Today's rainfall (so far plus forecast) and topsoil saturation by county from Open-Meteo. Conditions only; not a flood forecast |
+| **Flood Conditions** | Today's rainfall (so far plus forecast) and 0 to 7 cm soil saturation by county from Open-Meteo, with the thresholds printed on the page. Kiambu's rain is the station gauge where the gauge covered the day. Conditions only; not a flood forecast |
 | **Notifications** | Alert rules checked once a day at 08:00 EAT: the day's forecast heat peak for the rule's activity, a hot state ahead, or a saved plan moving into a higher band. Sent by email, and by browser push where the server has VAPID keys |
 | **Briefing** | A printable one-page summary, rendered on the server |
 
@@ -311,7 +311,7 @@ Main API routes (JSON):
 | ERA5-Land via the Open-Meteo archive API | Regional soil moisture at 7 to 28 cm, as context on the Farm page | Open-Meteo, CC BY 4.0. Contains modified Copernicus Climate Change Service information |
 | Open-Meteo forecast API | County map and Thermal layer, Flood page, rainfall context up to today, the farm's regional rain and Penman-Monteith ET₀, plans past the station forecast | Open-Meteo, CC BY 4.0 |
 | Copernicus Sentinel-2, via the Copernicus Data Space | NDVI and acquisition dates | Contains modified Copernicus Sentinel data |
-| County boundaries, `public/geo/counties.geojson` | Map | _Source to be added by the team_ |
+| County boundaries, `public/geo/counties.geojson` | Map | **TO DO (team): record where this file came from.** It holds 11 polygons carrying the official KNBS county codes, but its own origin is not recorded, so neither this table nor the map footer claims one |
 | Landing page photographs | Decoration | Unsplash licence |
 
 Methods: Stull (2011), *J. Appl. Meteor. Climatol.* 50, 2267-2269 (wet bulb); ISO 7243 (WBGT); Hargreaves and Samani (1985) and FAO-56, Allen et al. (1998) (reference evapotranspiration, extraterrestrial radiation, crop coefficients and water balance).

@@ -247,6 +247,30 @@ test("both languages carry the conditions copy, with the real thresholds filled 
   }
 });
 
+test("the map copy says what a county and this server actually hold", () => {
+  for (const lang of LANGS) {
+    const strings = getStrings(lang);
+    for (const key of [
+      "map_satellite_not_configured", "map_time_not_used", "map_soil_0_7",
+      "regional_intelligence_sub", "regional_intelligence_sub_ndvi", "regional_intelligence_sub_none",
+    ]) {
+      assert.ok(strings[key], `${lang} is missing ${key}`);
+    }
+    // The GeoJSON's origin is unrecorded, so the footer names no dataset.
+    assert.ok(!/official|rasmi/i.test(strings.map_boundaries_note), strings.map_boundaries_note);
+    assert.ok(!strings.map_soil_0_1, `${lang} still carries the 0-1 cm label`);
+    // The mode control did nothing but change fill opacity; it and its strings are gone.
+    for (const key of ["environmental_surface", "county_summary", "view_as"]) {
+      assert.ok(!strings[key], `${lang} still carries ${key}`);
+    }
+    for (const status of ["GOOD", "DEGRADED", "POOR"]) {
+      assert.ok(strings[`quality_${status.toLowerCase()}`], `${lang} is missing quality_${status}`);
+    }
+  }
+  // The map's quality badge reads these, so Kiswahili no longer shows "GOOD".
+  assert.equal(getStrings("sw").quality_good, "NZURI");
+});
+
 test("the county request asks for the 0-7 cm soil layer, and the reading comes from it", async () => {
   const nowMs = Date.parse("2026-09-21T09:40:00+03:00");
   const hours = Array.from({ length: 24 }, (_, i) => `${TODAY}T${String(i).padStart(2, "0")}:00`);

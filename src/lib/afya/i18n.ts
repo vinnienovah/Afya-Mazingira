@@ -261,9 +261,6 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     // Map
     map_title: "Regional Environmental Outlook",
     map_subtitle: "Regional context · Ground intelligence at JKUAT Conduit",
-    view_as: "View as",
-    environmental_surface: "Environmental Surface",
-    county_summary: "County Summary",
     intelligence_layers: "Intelligence",
     reference_layers: "Reference",
     data_layers: "Data Layers",
@@ -284,7 +281,9 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     ground_regional_intelligence: "GROUND + REGIONAL INTELLIGENCE",
     ground_regional_sub: "Conduit@Empathy observations available",
     regional_intelligence: "REGIONAL INTELLIGENCE",
-    regional_intelligence_sub: "Climate + satellite + geospatial coverage",
+    regional_intelligence_sub: "Open-Meteo forecast model only",
+    regional_intelligence_sub_ndvi: "Open-Meteo forecast model + Sentinel-2 NDVI",
+    regional_intelligence_sub_none: "No source answered for this county",
     data_sources: "Data Sources",
     era5_layer: "ERA5 (~28 km)",
     chirps_layer: "Open-Meteo rain",
@@ -305,10 +304,12 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     map_src_station_forecast: "Conduit station forecast",
     map_src_regional_forecast: "Open-Meteo forecast",
     map_rain_today: "Rain today (forecast)",
-    map_soil_0_1: "Soil moisture, 0–1 cm",
+    map_soil_0_7: "Soil moisture, 0–7 cm",
     map_temp_vs_mean: "Temp vs county mean",
     map_counties_source: "Counties: Open-Meteo forecast for today",
-    map_county_note: "County values are Open-Meteo forecast model output for the county's centre, for today. The rain figure is the whole day's total, hours still to come included. Kiambu uses the Conduit station for the hours it covers; only values marked as the station are measurements.",
+    map_time_not_used: "The time steps do not apply to this layer: rain is a whole-day total and NDVI a 14-day mean.",
+    map_satellite_not_configured: "Copernicus access is not set up on this server, so there is no NDVI and no scene list.",
+    map_county_note: "County values are Open-Meteo forecast model output for the county's centre, for today. The rain figure is the whole day's total, hours still to come included. Kiambu uses the Conduit station for the hours it covers, and its rain gauge for today's rain whenever the gauge covered enough of the day; only values marked as the station are measurements.",
     acquired: "Acquired",
     valid_time: "Valid time",
     native_resolution: "Native resolution",
@@ -656,7 +657,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     flood_data_note: "Rain and soil moisture: Open-Meteo's forecast for each county's centre, fetched again about every five minutes. Rain is today's total, hours still to come included; soil moisture is the top 7 cm this hour. Kiambu's rain is the Conduit station's own gauge whenever the gauge covered enough of the day. The levels are those two figures against the thresholds listed above, a coarse indicator, not a hazard model. A county missing a value it needs shows as unavailable.",
 
     // Map
-    map_boundaries_note: "County boundaries: official Kenya administrative dataset",
+    map_boundaries_note: "County boundaries: bundled GeoJSON, source not recorded",
 
     // Farm Advisory
     farm_title: "Farm Advisory",
@@ -1034,9 +1035,6 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
 
     map_title: "Muonekano wa Kikanda wa Mazingira",
     map_subtitle: "Muktadha wa kikanda · Ujasusi wa ardhini katika JKUAT Conduit",
-    view_as: "Angalia kama",
-    environmental_surface: "Uso wa Mazingira",
-    county_summary: "Muhtasari wa Kaunti",
     intelligence_layers: "Ujasusi",
     reference_layers: "Rejea",
     data_layers: "Tabaka za Data",
@@ -1057,7 +1055,9 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     ground_regional_intelligence: "AKILI YA ARDHINI + KIKANDA",
     ground_regional_sub: "Uchunguzi wa Conduit@Empathy unapatikana",
     regional_intelligence: "AKILI YA KIKANDA",
-    regional_intelligence_sub: "Hali ya hewa + setilaiti + data za kijiografia",
+    regional_intelligence_sub: "Mfumo wa utabiri wa Open-Meteo pekee",
+    regional_intelligence_sub_ndvi: "Mfumo wa utabiri wa Open-Meteo + NDVI ya Sentinel-2",
+    regional_intelligence_sub_none: "Hakuna chanzo kilichojibu kwa kaunti hii",
     data_sources: "Vyanzo vya Data",
     era5_layer: "ERA5 (~km 28)",
     chirps_layer: "Mvua ya Open-Meteo",
@@ -1078,10 +1078,12 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     map_src_station_forecast: "Utabiri wa kituo cha Conduit",
     map_src_regional_forecast: "Utabiri wa Open-Meteo",
     map_rain_today: "Mvua ya leo (utabiri)",
-    map_soil_0_1: "Unyevu wa udongo, sm 0–1",
+    map_soil_0_7: "Unyevu wa udongo, sm 0–7",
     map_temp_vs_mean: "Joto dhidi ya wastani wa kaunti",
     map_counties_source: "Kaunti: utabiri wa Open-Meteo wa leo",
-    map_county_note: "Thamani za kaunti ni matokeo ya mfumo wa utabiri wa Open-Meteo kwa katikati ya kaunti, kwa leo. Kiasi cha mvua ni jumla ya siku nzima, pamoja na saa ambazo bado hazijafika. Kiambu inatumia kituo cha Conduit kwa saa ambazo kituo kinazifunika; ni thamani zilizoandikwa kuwa za kituo pekee ndizo vipimo.",
+    map_time_not_used: "Hatua za saa hazitumiki kwenye tabaka hili: mvua ni jumla ya siku nzima na NDVI ni wastani wa siku 14.",
+    map_satellite_not_configured: "Ufikiaji wa Copernicus haujawekwa kwenye seva hii, hivyo hakuna NDVI wala orodha ya picha.",
+    map_county_note: "Thamani za kaunti ni matokeo ya mfumo wa utabiri wa Open-Meteo kwa katikati ya kaunti, kwa leo. Kiasi cha mvua ni jumla ya siku nzima, pamoja na saa ambazo bado hazijafika. Kiambu inatumia kituo cha Conduit kwa saa ambazo kituo kinazifunika, na kipima chake cha mvua kwa mvua ya leo pale kipima kinapofunika sehemu kubwa ya siku; ni thamani zilizoandikwa kuwa za kituo pekee ndizo vipimo.",
     acquired: "Imechukuliwa",
     valid_time: "Wakati halali",
     native_resolution: "Azimio asilia",
@@ -1418,7 +1420,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     flood_data_note: "Mvua na unyevu wa udongo: utabiri wa Open-Meteo kwa katikati ya kila kaunti, unaochukuliwa upya takriban kila dakika tano. Mvua ni jumla ya leo, pamoja na saa ambazo bado hazijafika; unyevu wa udongo ni wa sm 7 za juu katika saa hii. Mvua ya Kiambu ni ya kipima cha kituo cha Conduit pale kipima kinapofunika sehemu kubwa ya siku. Viwango ni takwimu hizo mbili dhidi ya vipimo vilivyoorodheshwa hapo juu, kiashiria chepesi, si mfumo wa hatari. Kaunti inayokosa thamani inayohitajika inaonyeshwa kuwa haipatikani.",
 
     // Map
-    map_boundaries_note: "Mipaka ya kaunti: data rasmi ya utawala ya Kenya",
+    map_boundaries_note: "Mipaka ya kaunti: GeoJSON iliyojumuishwa, chanzo hakijaandikwa",
 
     // Farm Advisory
     farm_title: "Ushauri wa Shamba",
