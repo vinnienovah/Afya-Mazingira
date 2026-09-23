@@ -42,6 +42,9 @@ test("the published report carries the cadence rule and the heat-index audit", (
   assert.equal(archive.rule_slots.R14, archive.cadence.gap_slots);
   assert.equal(archive.cadence.late_slots, 0);
   assert.equal(archive.cadence.late_intervals, 0);
+  // Both halves of the split reach the page, so R14's one number is not read
+  // as late arrivals the station never made.
+  assert.deepEqual(placeholders(STRINGS.en.health_cadence_note), ["gaps", "intervals", "late"]);
 
   // R15 cannot be judged from an export without the column, and says so.
   assert.equal(archive.device_codes.reported, false, "no Conduit export carries the Health column");
@@ -118,6 +121,18 @@ test("the score and its findings quote the penalties the report scored with", ()
   assert.equal(archive.limits.bad_group_penalty, 10);
   assert.equal(archive.limits.suspect_group_penalty, 2);
   assert.equal(archive.limits.missing_minutes_per_point, 14.4);
+});
+
+test("the rain tile says which of the two totals it is", () => {
+  // The tile adds up per-slot rain; the gauge's own daily totals, which the
+  // findings quote, come to more because these slots carry no reading.
+  assert.ok(archive.rain.slots_without_reading > 0);
+  assert.ok(archive.rain.slots_without_reading < archive.slots);
+  assert.deepEqual(placeholders(STRINGS.en.health_rain_sum_note), ["slots"]);
+  for (const lang of ["en", "sw"] as const) {
+    assert.notEqual(STRINGS[lang].health_tile_rain, STRINGS[lang].health_tile_gauge2_silent);
+    assert.ok(/slot|kipindi/.test(STRINGS[lang].health_tile_rain), `${lang} tile does not say what it counts`);
+  }
 });
 
 test("the archive is dated by the days it holds, not by a month written into the page", () => {

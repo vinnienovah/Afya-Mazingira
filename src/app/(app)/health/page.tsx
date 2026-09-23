@@ -518,6 +518,9 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
         {notScored && (
           <p className="mt-3 text-xs text-afya-muted">{fill(text.health_battery_not_scored, battery)}</p>
         )}
+        <p className="mt-3 text-xs text-afya-muted">
+          {fill(text.health_rain_sum_note, { slots: archive.rain.slots_without_reading.toLocaleString("en") })}
+        </p>
         <p className="mt-3 text-xs text-afya-muted">{fill(text.health_score_rule, penalties)}</p>
         <p className="mt-2 text-xs text-afya-muted">{fill(text.health_suspect_tier, penalties)}</p>
       </Card>
@@ -624,6 +627,13 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
           {sw
             ? "Namba ya mwisho: vipindi vya dakika 15 vilivyoguswa katika kumbukumbu, au siku kwa R11 hadi R13."
             : "Last column: 15-minute slots each rule touched across the record, or days for R11 to R13."}
+        </p>
+        <p className="text-xs text-afya-muted mt-2">
+          {fill(text.health_cadence_note, {
+            gaps: archive.cadence.gap_slots,
+            late: archive.cadence.late_slots,
+            intervals: archive.cadence.late_intervals,
+          })}
         </p>
         <p className="text-xs text-afya-muted mt-2">{text.health_rain_day_note}</p>
       </Card>
