@@ -778,7 +778,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     stories_problem: "The problem",
     stories_try_it: "Try this yourself",
     stories_scale: "How this scales",
-    stories_scale_body: "AFYA MAZINGIRA scales by adding ground stations, not by stretching one station across a region. Each new Conduit station becomes another high-frequency intelligence node inside the same regional outlook, and every capability shown here, states, forecasts, Best-Time, farm advisory and bilingual explanation, applies immediately at that new location.",
+    stories_scale_body: "AFYA MAZINGIRA scales by adding ground stations, not by stretching one station across a region. Each new Conduit station becomes another high-frequency intelligence node inside the same regional outlook, and the capabilities shown here, states, forecasts, Best-Time, farm advisory and bilingual explanation, are built to travel with it. They do not arrive ready-made: the forecast and state models are fitted to this station's own archive, and parts of the code still carry this station's coordinates, so a new location needs its models refitted on its own record before its numbers mean anything.",
   },
 
   sw: {
@@ -1535,7 +1535,7 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     stories_problem: "Tatizo",
     stories_try_it: "Jaribu mwenyewe",
     stories_scale: "Jinsi inavyokua",
-    stories_scale_body: "AFYA MAZINGIRA hukua kwa kuongeza vituo vya ardhini, si kwa kunyoosha kituo kimoja katika eneo lote. Kila kituo kipya cha Conduit huwa nodi nyingine ya ujasusi ndani ya muonekano ule ule wa kikanda, na kila kipengele kilichoonyeshwa hapa, hali, utabiri, Wakati-Bora, ushauri wa shamba na maelezo ya lugha mbili, hutumika mara moja katika eneo hilo jipya.",
+    stories_scale_body: "AFYA MAZINGIRA hukua kwa kuongeza vituo vya ardhini, si kwa kunyoosha kituo kimoja katika eneo lote. Kila kituo kipya cha Conduit huwa nodi nyingine ya ujasusi ndani ya muonekano ule ule wa kikanda, na vipengele vilivyoonyeshwa hapa, hali, utabiri, Wakati-Bora, ushauri wa shamba na maelezo ya lugha mbili, vimejengwa kuweza kuhamishwa nacho. Havifiki vikiwa tayari: mifumo ya utabiri na ya hali imefunzwa kwa kumbukumbu za kituo hiki, na sehemu za msimbo bado zinabeba viwianishi vya kituo hiki, hivyo eneo jipya linahitaji mifumo yake ifunzwe upya kwa kumbukumbu zake kabla ya takwimu zake kuwa na maana.",
   },
 };
 
