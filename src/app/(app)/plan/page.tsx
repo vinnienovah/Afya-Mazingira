@@ -109,6 +109,8 @@ export default function PlanPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [editingPlan, setEditingPlan] = useState<SavedPlan | null>(null);
   const [rerunning, setRerunning] = useState<number | null>(null);
+  // Deleting is not undoable, so the row asks first.
+  const [confirmingDelete, setConfirmingDelete] = useState<number | null>(null);
 
   const profileOf = (key: string) => ACTIVITY_PROFILES.find((p) => p.key === key) ?? ACTIVITY_PROFILES[0];
   const labelOf = (key: string) => (lang === "sw" ? profileOf(key).label_sw : profileOf(key).label_en);
@@ -229,6 +231,7 @@ export default function PlanPage() {
   }
 
   async function deletePlan(id: number) {
+    setConfirmingDelete(null);
     await fetch(`/api/plans/${id}`, { method: "DELETE", credentials: "include" });
     if (editingPlan?.id === id) setEditingPlan(null);
     loadPlans();
@@ -493,8 +496,15 @@ export default function PlanPage() {
                 style={{ background: "linear-gradient(135deg, #006B3C 0%, #054f2d 100%)" }}
               >
                 <div className="p-6 sm:p-7 text-white">
-                  <div className="text-xs font-bold text-white/60 uppercase tracking-widest mb-3">
-                    {t("best_window_result")}
+                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                    <span className="text-xs font-bold text-white/60 uppercase tracking-widest">
+                      {t("best_window_result")}
+                    </span>
+                    {result.source === "regional" && (
+                      <span className="rounded-full border border-afya-gold/50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-afya-gold">
+                        {t("plan_source_regional")}
+                      </span>
+                    )}
                   </div>
                   <div
                     className="text-4xl sm:text-5xl font-bold mb-1"
@@ -507,14 +517,25 @@ export default function PlanPage() {
                   </div>
 
                   {result.recommended.risk && result.recommended.peak_wbgt_c !== undefined && (
-                    <div className="flex flex-wrap items-center gap-2 mb-5">
-                      <RiskChip level={result.recommended.risk} size="sm" onDark />
-                      <span className="text-sm text-white/85">
-                        {tf(lang, "plan_window_peak", {
-                          wbgt: result.recommended.peak_wbgt_c.toFixed(1),
-                          band: bandLabel(result.recommended.risk),
-                        })}
-                      </span>
+                    <div className="mb-5 space-y-1.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <RiskChip level={result.recommended.risk} size="sm" onDark />
+                        <span className="text-sm text-white/85">
+                          {tf(lang, "plan_window_peak", {
+                            wbgt: result.recommended.peak_wbgt_c.toFixed(1),
+                            band: bandLabel(result.recommended.risk),
+                          })}
+                        </span>
+                      </div>
+                      {/* The band the peak was ranked on: the model's for the
+                          station, the wider judgement one for the regional. */}
+                      {result.recommended.band_c !== undefined && (
+                        <p className="text-xs text-white/60">
+                          {tf(lang, result.source === "regional" ? "plan_window_band_regional" : "plan_window_band_station", {
+                            spread: result.recommended.band_c.toFixed(1),
+                          })}
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -661,6 +682,24 @@ export default function PlanPage() {
                           </div>
                         )}
                       </div>
+                      {confirmingDelete === plan.id ? (
+                      <div className="flex items-center gap-2 shrink-0" role="group" aria-label={`${t("delete")} · ${plan.name}`}>
+                        <span className="text-xs text-afya-charcoal">{t("confirm")}</span>
+                        <button
+                          onClick={() => deletePlan(plan.id)}
+                          autoFocus
+                          className="rounded-lg bg-afya-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-afya-red/90 transition-colors"
+                        >
+                          {t("yes")}
+                        </button>
+                        <button
+                          onClick={() => setConfirmingDelete(null)}
+                          className="rounded-lg border border-afya-border px-3 py-1.5 text-xs font-semibold text-afya-muted hover:text-afya-charcoal transition-colors"
+                        >
+                          {t("no")}
+                        </button>
+                      </div>
+                      ) : (
                       <div className="flex gap-1.5 shrink-0">
                         <button
                           onClick={() => rerunPlan(plan)}
@@ -689,7 +728,7 @@ export default function PlanPage() {
                           <Copy className="w-4 h-4" strokeWidth={1.8} />
                         </button>
                         <button
-                          onClick={() => deletePlan(plan.id)}
+                          onClick={() => setConfirmingDelete(plan.id)}
                           title={t("delete")}
                           className="p-2 rounded-lg text-afya-muted hover:bg-afya-red/10 hover:text-afya-red transition-colors"
                           aria-label={t("delete")}
@@ -697,6 +736,7 @@ export default function PlanPage() {
                           <Trash2 className="w-4 h-4" strokeWidth={1.8} />
                         </button>
                       </div>
+                      )}
                     </div>
                   </Card>
                   );

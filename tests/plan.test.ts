@@ -169,8 +169,21 @@ test("a saved result keeps its band and coverage, and unknown fields are dropped
   const stored = JSON.parse(JSON.stringify({ ...outcome.result, injected: "<script>" }));
   const parsed = SavedResultSchema.parse(stored);
   assert.equal(parsed.recommended.risk, outcome.result.recommended.risk);
+  assert.equal(parsed.recommended.band_c, outcome.result.recommended.band_c);
   assert.equal(parsed.coverage?.points, outcome.result.coverage.points);
   assert.equal("injected" in parsed, false);
+});
+
+test("a window carries the band it was ranked on, wider from the regional model", () => {
+  const now = eat("08:00");
+  const station = planActivity(request(eat("08:00"), eat("16:00")), forecasts(now), now);
+  assert.ok(station.ok);
+  assert.equal(station.result.recommended.band_c, 1);
+
+  const tomorrow = planActivity(request(eat("08:00", 1), eat("18:00", 1), 120), forecasts(now), now);
+  assert.ok(tomorrow.ok);
+  assert.equal(tomorrow.result.source, "regional");
+  assert.equal(tomorrow.result.recommended.band_c, 2);
 });
 
 async function recommend(body: string) {
