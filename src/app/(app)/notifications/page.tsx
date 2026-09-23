@@ -8,6 +8,7 @@ import { tf } from "@/lib/afya/i18n";
 import { fmtAsOf } from "@/lib/afya/format";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { DatabaseNotice } from "@/components/auth/DatabaseNotice";
 import {
   Bell, BellOff, Plus, Trash2, ToggleLeft, ToggleRight,
   CheckCircle2, RefreshCw, Mail,
@@ -262,7 +263,8 @@ export default function NotificationsPage() {
 
   if (!user) {
     return (
-      <div className="max-w-md mx-auto mt-8">
+      <div className="max-w-md mx-auto mt-8 space-y-4">
+        <DatabaseNotice />
         <Card>
           <div className="text-center py-8 space-y-3">
             <Bell className="w-10 h-10 text-afya-muted/40 mx-auto" strokeWidth={1.5} aria-hidden="true" />
@@ -281,6 +283,8 @@ export default function NotificationsPage() {
         <h1 className="text-2xl font-bold text-afya-charcoal">{t("notif_title")}</h1>
         <p className="text-sm text-afya-muted mt-0.5">{t("notif_subtitle")}</p>
       </div>
+
+      <DatabaseNotice />
 
       {/* How alerts are delivered */}
       <Card>
