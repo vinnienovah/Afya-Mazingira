@@ -207,9 +207,9 @@
       text.asOf.replace("{time}", taken ? formatTaken(taken) : "—");
 
     var list = document.getElementById("readings");
-    addReading(list, text.wbgt, number(current.wbgt_c, 1, " °C"));
-    addReading(list, text.temperature, number(current.temperature_c, 1, " °C"));
-    addReading(list, text.humidity, number(current.humidity_pct, 0, " %"));
+    addReading(list, text.wbgt, number(current.wbgt_c, 1, "°C"));
+    addReading(list, text.temperature, number(current.temperature_c, 1, "°C"));
+    addReading(list, text.humidity, number(current.humidity_pct, 0, "%"));
     var band = situation.risk && situation.risk.thermal;
     if (band && text.bands[band]) {
       addReading(list, text.thermal, text.bands[band], "band band-" + band.toLowerCase().replace("_", "-"));
