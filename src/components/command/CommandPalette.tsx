@@ -42,6 +42,8 @@ const ICONS: Record<string, Icon> = {
   "a-ask": Sparkles,
 };
 
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export default function CommandPalette() {
   const router = useRouter();
   const { t, lang, setLang } = useLanguage();
@@ -49,6 +51,8 @@ export default function CommandPalette() {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
 
   const commands = useMemo<CommandItem[]>(() => [
     ...PALETTE_LINKS.map((link) => ({
@@ -118,13 +122,43 @@ export default function CommandPalette() {
     return () => window.removeEventListener("afya:open-command-palette", onOpen);
   }, []);
 
-  // Focus input on open
+  // Focus the input on open, and hand focus back to whatever opened the
+  // palette once it closes.
   useEffect(() => {
-    if (open) {
-      setTimeout(() => inputRef.current?.focus(), 30);
-    }
+    if (!open) return;
+    openerRef.current = document.activeElement as HTMLElement | null;
+    const focusing = setTimeout(() => inputRef.current?.focus(), 30);
+    return () => {
+      clearTimeout(focusing);
+      openerRef.current?.focus();
+    };
   }, [open]);
 
+  // Escape and Tab are handled for the whole dialog, not only the input:
+  // otherwise the close button is a dead end for Escape, and Tab walks off
+  // into the page behind the overlay.
+  function onDialogKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      close();
+      return;
+    }
+    if (e.key !== "Tab" || !dialogRef.current) return;
+
+    const stops = [...dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)];
+    if (!stops.length) return;
+    const first = stops[0];
+    const last = stops[stops.length - 1];
+    const active = document.activeElement;
+
+    if (e.shiftKey && (active === first || !dialogRef.current.contains(active))) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
 
   if (!open) return null;
   const current = active < filtered.length ? active : 0;
@@ -169,11 +203,13 @@ export default function CommandPalette() {
 
   return (
     <div
+      ref={dialogRef}
       className="fixed inset-0 z-[100] flex items-start justify-center bg-afya-deep/45 px-4 pt-[14vh] backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={t("cmd_search")}
       onClick={close}
+      onKeyDown={onDialogKeyDown}
     >
       <div
         className="w-full max-w-lg overflow-hidden rounded-2xl border border-afya-border bg-white shadow-2xl"
@@ -194,7 +230,6 @@ export default function CommandPalette() {
               setActive(0);
             }}
             onKeyDown={(e) => {
-              if (e.key === "Escape") close();
               if (e.key === "ArrowDown") {
                 e.preventDefault();
                 setActive((i) => Math.min(i + 1, filtered.length - 1));
