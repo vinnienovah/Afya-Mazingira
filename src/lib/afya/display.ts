@@ -157,6 +157,16 @@ export function timeOfDayGapHours(aIso: string, bIso: string): number {
   return Math.min(gap, 24 - gap);
 }
 
+/**
+ * Whole Nairobi days between two instants. The gap in time of day says nothing
+ * about this: a reanalysis published days behind can still land on the same
+ * hour of the clock and read as directly comparable.
+ */
+export function calendarGapDays(aIso: string, bIso: string): number {
+  const day = (iso: string) => Math.floor((Date.parse(iso) + EAT_OFFSET_MS) / 86400_000);
+  return Math.abs(day(aIso) - day(bIso));
+}
+
 export interface LiveWindow {
   /** First and last reading the run covers, and the hours between them. */
   from: string;

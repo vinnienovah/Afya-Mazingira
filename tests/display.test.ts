@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  bandGeometry, bandScale, contributionBars, contributorLabel, currentBand, degreeTicks,
+  bandGeometry, bandScale, calendarGapDays, contributionBars, contributorLabel, currentBand, degreeTicks,
   exposureTrend, filledReadings, hourTicks, liveWindow, nextStateNote, rainWindows, stateAt, stateSpans,
   stationWbgtSeries, timeOfDayGapHours, SLOT_MS, type ClimateSeriesRow,
 } from "../src/lib/afya/display";
@@ -111,6 +111,18 @@ test("the gap in time of day ignores the date and wraps at midnight", () => {
   assert.equal(timeOfDayGapHours("2026-09-22T09:00:00Z", "2026-09-17T23:00:00Z"), 10);
   assert.equal(timeOfDayGapHours("2026-09-22T09:00:00Z", "2026-09-17T09:00:00Z"), 0);
   assert.equal(timeOfDayGapHours("2026-09-22T23:00:00Z", "2026-09-17T01:00:00Z"), 2);
+});
+
+test("the calendar gap sees the days a matching time of day hides", () => {
+  // The reading and the ERA5 hour behind it: half an hour apart on the clock,
+  // five Nairobi days apart on the calendar.
+  const station = "2026-09-23T20:30:00Z";
+  const era5 = "2026-09-17T21:00:00Z";
+  assert.equal(timeOfDayGapHours(station, era5), 0.5);
+  assert.equal(calendarGapDays(station, era5), 5);
+  // Nairobi days, not UTC ones: 23:30 UTC is already the next day there.
+  assert.equal(calendarGapDays("2026-09-23T23:30:00Z", "2026-09-24T05:00:00Z"), 0);
+  assert.equal(calendarGapDays(station, "2026-09-23T06:00:00Z"), 0);
 });
 
 // A run of 15-minute slots ending `endIso`, newest last.
