@@ -180,7 +180,12 @@ test("a replayed archive day is revealed against the archive's own readings", as
     if (truth === undefined) continue;
     assert.equal(c.recorded, Math.round(truth * 10) / 10, c.target);
     assert.ok(Math.abs(c.error! - (c.forecast - c.recorded)) < 0.051);
+    assert.ok(Number.isFinite(c.persistence_error), `no baseline at ${c.target}`);
     compared++;
   }
   assert.ok(compared >= 30, `only ${compared} checks compared`);
+  for (const s of data.summary as { mae: number | null; persistence_mae: number | null }[]) {
+    assert.ok(s.mae !== null && s.persistence_mae !== null);
+    assert.ok(Number.isFinite(s.persistence_mae) && s.persistence_mae > 0);
+  }
 });
