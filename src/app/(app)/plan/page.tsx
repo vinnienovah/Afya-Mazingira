@@ -790,7 +790,7 @@ function PlanWhySection({ result, lang, t }: {
       const data = await res.json();
       setAiText(data.explanation);
     } catch {
-      setAiText(t("no_ai"));
+      setAiText(t("error_generic"));
     } finally {
       setLoadingAi(false);
     }
