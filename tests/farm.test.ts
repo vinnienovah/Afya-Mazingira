@@ -29,6 +29,7 @@ import {
 } from "../src/lib/afya/farm-engine";
 import { assembleFarmInputs } from "../src/lib/afya/farm-inputs";
 import { getCsvRange } from "../src/lib/afya/csv-source";
+import { STRINGS } from "../src/lib/afya/i18n";
 import { datesEnding, dayOfYear } from "../src/lib/afya/nairobi-time";
 import { POST } from "../src/app/api/farm/route";
 import type { SituationResult } from "../src/lib/afya/types";
@@ -552,13 +553,95 @@ test("heat stress reads the crop's own cardinal temperatures, not one set for al
   }
 });
 
-function situation(o: { wind: number; temp: number; rainProb: number; quality: string }): SituationResult {
+// 12:00 EAT on 21 September. The station's own sun times that day are 06:21
+// and 18:28 EAT, so this sits well inside them.
+const MIDDAY = "2026-09-21T09:00:00Z";
+
+function situation(o: {
+  wind: number;
+  temp: number;
+  rainProb: number;
+  quality: string;
+  /** When the advisory was built; midday unless the test is about the hour */
+  at?: string;
+  imputed?: string[];
+}): SituationResult {
   return {
-    current: { wind_speed_ms: o.wind, temperature_c: o.temp, humidity_pct: 60 },
+    generated_at: o.at ?? MIDDAY,
+    current: { wind_speed_ms: o.wind, temperature_c: o.temp, humidity_pct: 60, imputed: o.imputed },
     risk: { rain_probability: o.rainProb },
     quality: { status: o.quality },
   } as unknown as SituationResult;
 }
+
+const SPRAYABLE = { wind: 2, temp: 24, rainProb: 0.1, quality: "GOOD" };
+
+test("spraying is never suitable outside daylight, whatever the conditions say", () => {
+  assert.equal(evaluateSprayWindow(situation(SPRAYABLE)).quality, "GOOD");
+
+  // 23:41 EAT, the hour the live advisory called this window suitable.
+  const night = evaluateSprayWindow(situation({ ...SPRAYABLE, at: "2026-09-21T20:41:00Z" }));
+  assert.equal(night.quality, "AVOID");
+  assert.equal(night.reason_keys[0], "farm_reason_outside_daylight");
+
+  // Either side of sunrise: 06:00 EAT is still dark, 07:00 is not.
+  assert.equal(evaluateSprayWindow(situation({ ...SPRAYABLE, at: "2026-09-21T03:00:00Z" })).quality, "AVOID");
+  assert.equal(evaluateSprayWindow(situation({ ...SPRAYABLE, at: "2026-09-21T04:00:00Z" })).quality, "GOOD");
+  // And 19:00 EAT, half an hour past sunset.
+  assert.equal(evaluateSprayWindow(situation({ ...SPRAYABLE, at: "2026-09-21T16:00:00Z" })).quality, "AVOID");
+
+  // The gate reads the hour the advisory was built, not the hour of the crop
+  // year: midwinter and midsummer noon are both daylight here.
+  for (const noon of ["2026-06-21T09:00:00Z", "2026-12-21T09:00:00Z"]) {
+    assert.equal(evaluateSprayWindow(situation({ ...SPRAYABLE, at: noon })).quality, "GOOD", noon);
+  }
+});
+
+test("a spray verdict resting on a filled-in reading is never GOOD", () => {
+  for (const field of ["wind_spd", "temp_sht"]) {
+    const filled = evaluateSprayWindow(situation({ ...SPRAYABLE, imputed: [field] }));
+    assert.equal(filled.quality, "MARGINAL", field);
+    assert.ok(filled.reason_keys.includes("farm_reason_spray_inputs_filled"), field);
+  }
+  // A reading the spray rules never read is not a reason to doubt the verdict.
+  const other = evaluateSprayWindow(situation({ ...SPRAYABLE, imputed: ["humidity_sht"] }));
+  assert.equal(other.quality, "GOOD");
+  assert.ok(!other.reason_keys.includes("farm_reason_spray_inputs_filled"));
+
+  // It takes the window down and never lifts one already refused.
+  const windy = evaluateSprayWindow(situation({ ...SPRAYABLE, wind: 6, imputed: ["wind_spd"] }));
+  assert.equal(windy.quality, "AVOID");
+  assert.ok(windy.reason_keys.includes("farm_reason_spray_inputs_filled"));
+});
+
+test("the reasons that took a spray window down are listed before the ones that were met", () => {
+  const worst = evaluateSprayWindow(
+    situation({ wind: 6, temp: 24, rainProb: 0.6, quality: "POOR", at: "2026-09-21T20:41:00Z", imputed: ["temp_sht"] }),
+  );
+  assert.deepEqual(worst.reason_keys, [
+    "farm_reason_outside_daylight",
+    "farm_reason_wind_drift",
+    "farm_reason_washoff",
+    "farm_reason_spray_inputs_filled",
+    "farm_reason_data_limited",
+  ]);
+});
+
+test("every reason key the farm engine can emit is written in both languages", () => {
+  const keys = Object.keys(STRINGS.en).filter((k) => k.startsWith("farm_"));
+  assert.ok(keys.length > 60, `${keys.length} farm keys`);
+  for (const k of keys) assert.ok(STRINGS.sw[k], `${k} has no Kiswahili`);
+
+  const emitted = new Set<string>([
+    ...evaluateSprayWindow(situation({ ...SPRAYABLE, at: "2026-09-21T20:41:00Z", imputed: ["wind_spd"] })).reason_keys,
+    ...evaluateSprayWindow(situation({ wind: 0.2, temp: 29, rainProb: 0.3, quality: "POOR" })).reason_keys,
+    ...evaluateSprayWindow(situation(SPRAYABLE)).reason_keys,
+  ]);
+  for (const k of emitted) {
+    assert.ok(STRINGS.en[k], `${k} has no English`);
+    assert.ok(STRINGS.sw[k], `${k} has no Kiswahili`);
+  }
+});
 
 test("poor data quality lowers a spray window and never lifts one", () => {
   const windy = { wind: 6, temp: 24, rainProb: 0.1 };

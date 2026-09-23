@@ -9,7 +9,9 @@
 //   · Irrigation need, the root-zone water balance of FAO-56 chapter 8: the
 //     depletion Dr is carried day by day and irrigation is due when it reaches
 //     the readily available water RAW = p × TAW (eqs. 82 and 83)
-//   · Spray suitability, wind drift + evaporation + wash-off risk windows
+//
+// Spray suitability is outside that: wind drift, evaporation and wash-off are
+// weighed against the project's own working limits, stated where they are set.
 //
 // This produces AGRONOMIC DECISION SUPPORT ONLY. It does not predict yield,
 // diagnose plant disease, or replace extension-officer judgement.
@@ -17,6 +19,7 @@
 import type { SituationResult } from "./types";
 import type { RegionalSoilMoisture } from "./sources-external";
 import { appliedByDate, normaliseLog, totalAppliedMm, type IrrigationEntry } from "./irrigation-log";
+import { isDaylight } from "./best-time-engine";
 import { JKUAT_COORDS } from "./constants";
 import { datesEnding, dayOfYear, nairobiDate } from "./nairobi-time";
 
@@ -717,46 +720,78 @@ export interface FieldWindow {
 }
 
 /**
- * Spray suitability. Deterministic rules based on documented agronomic practice:
+ * Spray suitability. The wind, temperature and rain-probability limits below
+ * are the project's own working limits, not figures from a published table:
  *   · wind > 4 m/s        → drift risk
  *   · wind < 0.4 m/s      → inversion / poor deposition
  *   · temperature > 28 °C → rapid evaporation of droplets
  *   · rain probability    → wash-off before uptake
+ * The daylight gate is not one of those judgement calls: the two hazards the
+ * wind rules guard against, drift and a surface inversion holding the spray
+ * cloud, are both at their worst in the still air after sunset, and nothing in
+ * the four rules sees the hour.
+ *
+ * This is a rule set of its own, not the Best-Time engine that picks the
+ * field-work window. It borrows only that engine's sun times.
  */
 const WINDOW_RANK: Record<WindowQuality, number> = { GOOD: 0, MARGINAL: 1, AVOID: 2 };
 
 /** The worse of two verdicts. Every rule below can only take the window down. */
 const worseOf = (a: WindowQuality, b: WindowQuality): WindowQuality => (WINDOW_RANK[b] > WINDOW_RANK[a] ? b : a);
 
+// Readings of the current observation the spray rules read directly. Either one
+// filled in rather than measured is a reading the verdict cannot lean on.
+const SPRAY_INPUTS = ["wind_spd", "temp_sht"];
+
+// The card shows a short list, and a limit that took the window down matters
+// more to the decision than a condition that was met, so limits are listed first.
+const MAX_SPRAY_REASONS = 5;
+
 export function evaluateSprayWindow(situation: SituationResult): FieldWindow {
-  const reasons: string[] = [];
+  const limits: string[] = [];
+  const met: string[] = [];
   const wind = situation.current.wind_speed_ms;
   const temp = situation.current.temperature_c;
   const rainProb = situation.risk.rain_probability;
 
   let score: WindowQuality = "GOOD";
 
-  if (wind > 4.0) { score = worseOf(score, "AVOID"); reasons.push("farm_reason_wind_drift"); }
-  else if (wind < 0.4) { score = worseOf(score, "MARGINAL"); reasons.push("farm_reason_wind_too_calm"); }
-  else reasons.push("farm_reason_wind_suitable");
+  // The verdict answers "spray now", so the hour that has to be in daylight is
+  // the one the advisory was built at, not the timestamp of the reading behind
+  // it, which can be well behind the clock when the station is stale.
+  if (!isDaylight(situation.generated_at)) {
+    score = worseOf(score, "AVOID");
+    limits.push("farm_reason_outside_daylight");
+  }
 
-  if (rainProb >= 0.5) { score = worseOf(score, "AVOID"); reasons.push("farm_reason_washoff"); }
-  else if (rainProb >= 0.25) { score = worseOf(score, "MARGINAL"); reasons.push("farm_reason_rain_possible"); }
-  else reasons.push("farm_reason_low_rain_risk");
+  if (wind > 4.0) { score = worseOf(score, "AVOID"); limits.push("farm_reason_wind_drift"); }
+  else if (wind < 0.4) { score = worseOf(score, "MARGINAL"); limits.push("farm_reason_wind_too_calm"); }
+  else met.push("farm_reason_wind_suitable");
+
+  if (rainProb >= 0.5) { score = worseOf(score, "AVOID"); limits.push("farm_reason_washoff"); }
+  else if (rainProb >= 0.25) { score = worseOf(score, "MARGINAL"); limits.push("farm_reason_rain_possible"); }
+  else met.push("farm_reason_low_rain_risk");
 
   if (temp > 28) {
     score = worseOf(score, "MARGINAL");
-    reasons.push("farm_reason_evaporation");
+    limits.push("farm_reason_evaporation");
+  }
+
+  // A filled-in wind speed or temperature is a value the rules above read as
+  // though it were measured. The window can still be refused on it, never passed.
+  if (SPRAY_INPUTS.some((f) => situation.current.imputed?.includes(f))) {
+    score = worseOf(score, "MARGINAL");
+    limits.push("farm_reason_spray_inputs_filled");
   }
 
   // Thin data is a reason to trust the window less, never a reason to spray
   // into conditions the rules already ruled out.
   if (situation.quality.status === "POOR") {
     score = worseOf(score, "MARGINAL");
-    reasons.push("farm_reason_data_limited");
+    limits.push("farm_reason_data_limited");
   }
 
-  return { operation: "spraying", quality: score, reason_keys: reasons.slice(0, 4) };
+  return { operation: "spraying", quality: score, reason_keys: [...limits, ...met].slice(0, MAX_SPRAY_REASONS) };
 }
 
 // Planting outlook (rain-fed), from the same rain record as the water balance
