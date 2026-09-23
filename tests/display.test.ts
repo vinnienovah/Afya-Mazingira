@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   bandGeometry, bandScale, contributionBars, contributorLabel, currentBand, degreeTicks,
-  exposureTrend, filledReadings, hourTicks, nextStateNote, rainWindows, stateAt, stateSpans,
+  exposureTrend, filledReadings, hourTicks, liveWindow, nextStateNote, rainWindows, stateAt, stateSpans,
   stationWbgtSeries, timeOfDayGapHours, SLOT_MS, type ClimateSeriesRow,
 } from "../src/lib/afya/display";
 import type { ChirpsContext, CurrentObservation, HorizonForecast, RiskAssessment, StateSegment } from "../src/lib/afya/types";
@@ -111,6 +111,54 @@ test("the gap in time of day ignores the date and wraps at midnight", () => {
   assert.equal(timeOfDayGapHours("2026-09-22T09:00:00Z", "2026-09-17T23:00:00Z"), 10);
   assert.equal(timeOfDayGapHours("2026-09-22T09:00:00Z", "2026-09-17T09:00:00Z"), 0);
   assert.equal(timeOfDayGapHours("2026-09-22T23:00:00Z", "2026-09-17T01:00:00Z"), 2);
+});
+
+// A run of 15-minute slots ending `endIso`, newest last.
+const slots = (endIso: string, count: number, gaps: Record<number, number> = {}) => {
+  const end = Date.parse(endIso);
+  return Array.from({ length: count }, (_, i) => {
+    const ts = new Date(end - (count - 1 - i) * SLOT_MS).toISOString();
+    return gaps[i] ? { ts, gap_minutes: gaps[i] } : { ts };
+  });
+};
+
+test("a window that reaches now covers its full day with nothing missing", () => {
+  const now = Date.parse("2026-09-23T20:45:00Z");
+  const w = liveWindow(slots("2026-09-23T20:45:00Z", 96), now);
+  assert.ok(w);
+  assert.equal(w.hours, 24);
+  assert.equal(w.silent_minutes, 0);
+  assert.equal(w.missing_minutes, 0);
+  assert.equal(w.read_slots, 96);
+  assert.equal(w.of_slots, 96);
+});
+
+test("a station that stopped reporting counts the silence since its last reading", () => {
+  // KALRO Thika as the live feed found it: 81 slots ending 596 minutes back.
+  const now = Date.parse("2026-09-23T20:41:00Z");
+  const w = liveWindow(slots("2026-09-23T10:45:00Z", 81), now);
+  assert.ok(w);
+  assert.equal(w.hours, 20, "the run covers twenty hours, not the twenty-four it stands for");
+  // The silence runs from one slot after the last reading.
+  assert.equal(w.silent_minutes, 596 - 15);
+  assert.equal(w.missing_minutes, 581, "trailing silence is missing time, not a full window");
+  assert.equal(w.read_slots, 57, "only these slots fall inside the last twenty-four hours");
+  assert.ok(w.read_slots < w.of_slots);
+});
+
+test("gaps inside the window are counted alongside the silence after it", () => {
+  const now = Date.parse("2026-09-23T13:00:00Z");
+  const quiet = liveWindow(slots("2026-09-23T12:00:00Z", 96, { 10: 30, 11: 45 }), now);
+  assert.ok(quiet);
+  assert.equal(quiet.silent_minutes, 45);
+  assert.equal(quiet.missing_minutes, 30 + 45 + 45);
+  // The same gaps with the feed up to date leave the silence out.
+  const current = liveWindow(slots("2026-09-23T12:00:00Z", 96, { 10: 30, 11: 45 }), Date.parse("2026-09-23T12:05:00Z"));
+  assert.equal(current?.missing_minutes, 75);
+});
+
+test("a window with no readings at all has nothing to report", () => {
+  assert.equal(liveWindow([], Date.now()), null);
 });
 
 const chirps: ChirpsContext = {

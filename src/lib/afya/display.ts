@@ -157,6 +157,54 @@ export function timeOfDayGapHours(aIso: string, bIso: string): number {
   return Math.min(gap, 24 - gap);
 }
 
+export interface LiveWindow {
+  /** First and last reading the run covers, and the hours between them. */
+  from: string;
+  to: string;
+  hours: number;
+  /** Minutes since the last reading, once it is more than one slot late. */
+  silent_minutes: number;
+  /** Minutes with no reading: the gaps inside the run and the silence since it. */
+  missing_minutes: number;
+  /** Readings landing inside the `of_hours` before now, and how many a full window holds. */
+  read_slots: number;
+  of_slots: number;
+  of_hours: number;
+}
+
+/**
+ * What a run of readings covers, against the window it is meant to fill. A
+ * station that stops reporting leaves no gap behind its last reading, so the
+ * gaps inside the run never account for the silence since: without counting it
+ * a station that died yesterday reads as a full window with nothing missing.
+ */
+export function liveWindow(
+  series: { ts: string; gap_minutes?: number }[],
+  nowMs: number,
+  windowHours = 24,
+): LiveWindow | null {
+  if (!series.length) return null;
+  const from = series[0].ts;
+  const to = series[series.length - 1].ts;
+  const toMs = Date.parse(to);
+  const slotMinutes = SLOT_MS / 60_000;
+  // Each reading stands for the quarter hour around it, so a full run of
+  // `n` slots covers one slot more than its first and last are apart.
+  const hours = Math.max(1, Math.round((toMs - Date.parse(from) + SLOT_MS) / 3600_000));
+  const silent = Math.max(0, Math.round((nowMs - toMs) / 60_000 - slotMinutes));
+  const start = nowMs - windowHours * 3600_000;
+  return {
+    from,
+    to,
+    hours,
+    silent_minutes: silent,
+    missing_minutes: Math.round(series.reduce((s, o) => s + (o.gap_minutes ?? 0), 0) + silent),
+    read_slots: series.filter((o) => Date.parse(o.ts) > start).length,
+    of_slots: Math.round((windowHours * 3600_000) / SLOT_MS),
+    of_hours: windowHours,
+  };
+}
+
 /** The days behind the rainfall totals, both ending today; null when rainfall is unavailable. */
 export function rainWindows(c: ChirpsContext): {
   day: string;

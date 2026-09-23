@@ -5,8 +5,10 @@ import useSWR from "swr";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Activity, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useLanguage } from "@/lib/contexts/language";
-import { fmtAgo } from "@/lib/afya/format";
+import { fmtAgo, fmtAsOf } from "@/lib/afya/format";
 import { STRINGS } from "@/lib/afya/i18n";
+import { QUALITY_LIMITS } from "@/lib/afya/data-quality";
+import type { LiveWindow } from "@/lib/afya/display";
 import type { ChordsStation } from "@/lib/afya/sources";
 import type { GroupStatus } from "@/lib/afya/sentinel";
 import { Card, CardTitle } from "@/components/ui/Card";
@@ -65,6 +67,8 @@ interface HealthResponse {
     latest: string | null;
     age_minutes: number | null;
     slots: number;
+    // What the checked readings really cover, against the day they stand for.
+    window: LiveWindow | null;
     missing_minutes: number;
     groups: { group: string; status: Status; rules: string[]; empty_channels: string[]; measured_share: number }[];
     audits: Audits;
@@ -184,6 +188,11 @@ export default function StationHealthPage() {
   const unlisted = live && !conduit
     ? Object.keys(GROUP_NAMES).filter((g) => !live.groups.some((x) => x.group === g))
     : [];
+  // Past the age at which the app stops advising, the station is not reporting
+  // and no group status below describes it now.
+  const silent = !!live && live.age_minutes !== null && live.age_minutes > QUALITY_LIMITS.degraded_max_age_minutes;
+  const silentHours = Math.round((live?.age_minutes ?? 0) / 60);
+  const span = live?.window ?? null;
   const rainNotJudged = !!live?.groups.some((g) => g.group.startsWith("rain_gauge") && g.status === "not_judged");
   const batteryMissing = !!live?.groups.some((g) => g.group === "battery" && g.status === "not_reported");
   const codesMissing = !!live?.groups.some((g) => g.group === "device_code" && g.status === "not_reported");
@@ -241,9 +250,25 @@ export default function StationHealthPage() {
       {live ? (
         <Card>
           <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
-            <CardTitle className="mb-0">{sw ? "Saa 24 zilizopita" : "The last 24 hours"}</CardTitle>
-            <span className="text-xs text-afya-muted">{liveLabel}</span>
+            <CardTitle className="mb-0">
+              {span
+                ? fill(t("health_live_window"), { hours: span.hours, to: fmtAsOf(span.to, lang) })
+                : sw ? "Saa 24 zilizopita" : "The last 24 hours"}
+            </CardTitle>
+            <span className={cn("text-xs", silent ? "font-bold text-afya-red" : "text-afya-muted")}>{liveLabel}</span>
           </div>
+          {silent && span && (
+            <>
+              <p
+                role="alert"
+                className="mb-3 flex items-start gap-1.5 rounded-xl bg-afya-red/10 px-3 py-2 text-xs font-semibold text-afya-red"
+              >
+                <AlertTriangle className="w-4 h-4 shrink-0" strokeWidth={2} aria-hidden="true" />
+                {fill(t("health_live_silent"), { hours: silentHours, to: fmtAsOf(span.to, lang) })}
+              </p>
+              <p className="mb-2 text-xs font-semibold text-afya-charcoal">{t("health_live_last_readings")}</p>
+            </>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {live.groups.map((g) => (
               <div key={g.group} className="rounded-xl border border-afya-border px-4 py-3">
@@ -260,6 +285,11 @@ export default function StationHealthPage() {
               </div>
             ))}
           </div>
+          {span && span.read_slots < span.of_slots && (
+            <p className="mt-3 text-xs text-afya-muted">
+              {fill(t("health_live_coverage"), { hours: span.of_hours, read: span.read_slots, of: span.of_slots })}
+            </p>
+          )}
           {live.missing_minutes > 0 && (
             <p className="mt-3 text-xs text-afya-muted flex items-center gap-1.5">
               <AlertTriangle className="w-3.5 h-3.5 text-afya-gold" strokeWidth={2} aria-hidden="true" />
