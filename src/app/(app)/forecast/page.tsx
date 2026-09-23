@@ -7,6 +7,7 @@ import { useLanguage } from "@/lib/contexts/language";
 import { horizonScores } from "@/lib/afya/forecast-engine";
 import { STATES } from "@/lib/afya/constants";
 import { fmtAsOf, fmtTime } from "@/lib/afya/format";
+import { modelName, tf } from "@/lib/afya/i18n";
 import { exposureTrend, TREND_KEYS } from "@/lib/afya/display";
 import ForecastChart from "@/components/charts/ForecastChart";
 import { Card, CardTitle, CardMeta } from "@/components/ui/Card";
@@ -119,7 +120,7 @@ export default function ForecastPage() {
             <div className="flex items-start justify-between mb-2">
               <span className="font-semibold text-afya-charcoal text-sm">{t(key)}</span>
               <div className="text-right">
-                <span className="text-[10px] text-afya-muted border border-afya-border rounded px-1.5 py-0.5">{h.model}</span>
+                <span className="text-[10px] text-afya-muted border border-afya-border rounded px-1.5 py-0.5">{modelName(lang, h.model)}</span>
                 <div className="text-[9px] text-afya-muted/60 mt-0.5" title={lang === "sw" ? "Kwenye miezi ya majaribio" : "On the test months"}>
                   MAE {horizonScores(horizon).mae.toFixed(2)}°C
                 </div>
@@ -127,7 +128,10 @@ export default function ForecastPage() {
             </div>
             <div className="text-3xl font-bold text-afya-charcoal">{h.value.toFixed(1)}°C</div>
             <div className="text-xs text-afya-muted mt-1">
-              {h.lower.toFixed(1)}°C – {h.upper.toFixed(1)}°C
+              {t("band_80")}: {h.lower.toFixed(1)}°C – {h.upper.toFixed(1)}°C
+            </div>
+            <div className="text-[10px] text-afya-muted/70 mt-0.5">
+              {tf(lang, "band_80_measured", { pct: Math.round(horizonScores(horizon).coverage80 * 100) })}
             </div>
           </Card>
         ) : null)}
@@ -193,7 +197,9 @@ export default function ForecastPage() {
                   <div key={h!.horizon}>
                     <div className="flex justify-between text-xs mb-1">
                       <span className="text-afya-charcoal font-medium">+{h!.horizon}</span>
-                      <span className="text-afya-muted">±{(width / 2).toFixed(1)}°C</span>
+                      <span className="text-afya-muted">
+                        {t("band_80")} ±{(width / 2).toFixed(1)}°C · {Math.round(horizonScores(h!.horizon).coverage80 * 100)}%
+                      </span>
                     </div>
                     <div className="h-1.5 rounded-full bg-afya-canvas overflow-hidden">
                       <div

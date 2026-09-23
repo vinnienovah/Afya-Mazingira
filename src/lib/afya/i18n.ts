@@ -150,9 +150,13 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     // Forecast page
     forecast_title: "Environmental Forecast",
     forecast_subtitle: "WBGT in shade · +1h / +3h / +6h / +9h horizons",
+    wbgt_shade: "WBGT (shade)",
+    forecast_model_seasonal: "Seasonal anomaly",
+    forecast_model_no_change: "No change",
     measured: "Measured",
     predicted: "Predicted",
     uncertainty: "Uncertainty",
+    avg_error: "avg error",
     chart_aria: "Environmental exposure forecast chart showing measured and predicted WBGT values with uncertainty interval",
     peak_marker: "Predicted peak",
     now: "Now",
@@ -169,8 +173,10 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     contributor_departure_from_usual: "Return toward the usual level",
     contributor_values_note: "Each bar is that input's effect on the +3 h forecast, in °C. These are model signals, not causes.",
     contributor_list_note: "Signals in the latest readings, not causes. They are listed, not ranked by size.",
+    band_80: "80% band",
+    band_80_measured: "{pct}% of test-month readings fell inside",
     uncertainty_by_horizon: "Uncertainty by Horizon",
-    uncertainty_by_horizon_note: "How the forecast's confidence band widens the further ahead it looks, a shorter bar means a tighter, more confident range.",
+    uncertainty_by_horizon_note: "The range under each forecast is an 80% band: it was built to hold four readings in five. It widens the further ahead the forecast looks, and beside each width is how often a held-out reading actually fell inside it.",
     explore_climate_history: "Explore Climate History",
     explore_climate_history_note: "Pick any date range up to a year back, daily or hourly, and compare against ERA5 for any location.",
     explore_dashboard: "Open the Dashboard",
@@ -915,10 +921,14 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     reason_early_morning: "Hali za asubuhi ni nzuri",
 
     forecast_title: "Utabiri wa Mazingira",
-    forecast_subtitle: "Utabiri wa WBGT · +1h / +3h / +6h / +9h",
+    forecast_subtitle: "Utabiri wa WBGT kivulini · +1h / +3h / +6h / +9h",
+    wbgt_shade: "WBGT (kivulini)",
+    forecast_model_seasonal: "Tofauti ya msimu",
+    forecast_model_no_change: "Hakuna mabadiliko",
     measured: "Ilipimwa",
     predicted: "Ilitabiriwa",
     uncertainty: "Utata",
+    avg_error: "kosa la wastani",
     chart_aria: "Chati ya utabiri wa kupatwa na mazingira inayoonyesha thamani za WBGT zilizopimwa na kutabiriwa na kipindi cha utata",
     peak_marker: "Kilele kilichotabiriwa",
     now: "Sasa",
@@ -935,8 +945,10 @@ export const STRINGS: Record<Lang, Record<string, string>> = {
     contributor_departure_from_usual: "Kurudi kwenye kiwango cha kawaida",
     contributor_values_note: "Kila mstari ni athari ya kipimo hicho kwenye utabiri wa +saa 3, kwa °C. Hizi ni ishara za mfumo, si sababu.",
     contributor_list_note: "Ishara katika vipimo vya hivi punde, si sababu. Zimeorodheshwa bila kupangwa kwa ukubwa.",
+    band_80: "Bendi ya 80%",
+    band_80_measured: "{pct}% ya vipimo vya miezi ya majaribio vilikuwa ndani",
     uncertainty_by_horizon: "Utata kwa Kipindi",
-    uncertainty_by_horizon_note: "Jinsi kipimo cha uhakika wa utabiri kinavyopanuka kadri kinavyoangalia mbali zaidi, mstari mfupi unamaanisha uhakika zaidi.",
+    uncertainty_by_horizon_note: "Kipimo kilicho chini ya kila utabiri ni bendi ya 80%: ilijengwa kushikilia vipimo vinne kati ya vitano. Hupanuka kadri utabiri unavyoangalia mbali zaidi, na kando ya kila upana kuna mara ngapi kipimo kisichoonwa na modeli kilikuwa ndani yake.",
     explore_climate_history: "Chunguza Historia ya Hali ya Hewa",
     explore_climate_history_note: "Chagua kipindi chochote hadi mwaka mmoja uliopita, kila siku au kila saa, na linganisha na ERA5 kwa eneo lolote.",
     explore_dashboard: "Fungua Dashibodi",
@@ -1542,4 +1554,29 @@ export function tf(lang: Lang, key: string, values: Record<string, string | numb
 
 export function getStrings(lang: Lang): Record<string, string> {
   return STRINGS[lang];
+}
+
+// The forecast engine names its models for the record; the interface shows
+// them in the reader's language. A model with no entry is shown as it is.
+const MODEL_KEYS: Record<string, string> = {
+  "Seasonal anomaly": "forecast_model_seasonal",
+  "No change": "forecast_model_no_change",
+};
+
+export function modelName(lang: Lang, name: string): string {
+  const key = MODEL_KEYS[name];
+  return key ? t(lang, key) : name;
+}
+
+/**
+ * A data-quality flag as a sentence the reader can act on. Flags carry their
+ * value after a colon. Null for a flag with no sentence yet: a raw key on the
+ * page would tell the reader nothing.
+ */
+export function flagText(lang: Lang, flag: string): string | null {
+  const separator = flag.indexOf(":");
+  const name = separator === -1 ? flag : flag.slice(0, separator);
+  const key = `flag_${name}`;
+  if (t(lang, key) === key) return null;
+  return separator === -1 ? t(lang, key) : tf(lang, key, { value: flag.slice(separator + 1) });
 }
