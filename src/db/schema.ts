@@ -94,6 +94,22 @@ export const notificationRules = pgTable("notification_rules", {
   updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Daily alert runs
+// One row per /api/cron/check-alerts run. Nothing else records that the job
+// happened, so without this a scheduled run that never fired looks exactly
+// like one that fired and matched no rule.
+export const alertRuns = pgTable("alert_runs", {
+  id: serial("id").primaryKey(),
+  ran_at: timestamp("ran_at", { withTimezone: true }).notNull().defaultNow(),
+  rules_evaluated: integer("rules_evaluated").notNull().default(0),
+  triggered: integer("triggered").notNull().default(0),
+  emails_sent: integer("emails_sent").notNull().default(0),
+  pushes_sent: integer("pushes_sent").notNull().default(0),
+  errors: integer("errors").notNull().default(0),
+}, (t) => [
+  index("alert_runs_ran_at_idx").on(t.ran_at),
+]);
+
 // Push subscriptions
 export const pushSubscriptions = pgTable("push_subscriptions", {
   id: serial("id").primaryKey(),
@@ -237,6 +253,8 @@ export type NewUser = typeof users.$inferInsert;
 export type ActivityPlan = typeof activityPlans.$inferSelect;
 export type NewActivityPlan = typeof activityPlans.$inferInsert;
 export type NotificationRule = typeof notificationRules.$inferSelect;
+export type AlertRun = typeof alertRuns.$inferSelect;
+export type NewAlertRun = typeof alertRuns.$inferInsert;
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 export type EnvironmentalState = typeof environmentalStates.$inferSelect;
 export type Forecast = typeof forecasts.$inferSelect;

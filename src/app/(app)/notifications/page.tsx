@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { useLanguage } from "@/lib/contexts/language";
 import { useAuth } from "@/lib/contexts/auth";
 import { ACTIVITY_PROFILES } from "@/lib/afya/constants";
+import { tf } from "@/lib/afya/i18n";
+import { fmtAsOf } from "@/lib/afya/format";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
@@ -24,8 +26,11 @@ interface NotifRule {
 type PushState = "checking" | "unsupported" | "off" | "on" | "denied";
 
 interface DeliveryStatus {
+  database_configured: boolean;
   email_configured: boolean;
   push_configured: boolean;
+  /** When the daily cron job last ran, ISO, or null if it never has here. */
+  last_checked_at: string | null;
 }
 
 /** The VAPID public key as the bytes pushManager.subscribe expects. */
@@ -285,9 +290,18 @@ export default function NotificationsPage() {
               <Mail className="w-5 h-5 text-afya-green" strokeWidth={1.8} />
             </div>
             <div className="text-sm text-afya-charcoal pt-2">
-              {delivery === null
-                ? <Skeleton className="h-4 w-64 rounded" />
-                : delivery.email_configured ? t("notif_delivery_email") : t("notif_delivery_email_off")}
+              {delivery === null ? (
+                <Skeleton className="h-4 w-64 rounded" />
+              ) : (
+                <>
+                  <p>{delivery.email_configured ? t("notif_delivery_email") : t("notif_delivery_email_off")}</p>
+                  <p className="text-xs text-afya-muted mt-1">
+                    {delivery.last_checked_at
+                      ? tf(lang, "notif_last_checked", { time: fmtAsOf(delivery.last_checked_at, lang) })
+                      : t("notif_never_checked")}
+                  </p>
+                </>
+              )}
             </div>
           </div>
 
