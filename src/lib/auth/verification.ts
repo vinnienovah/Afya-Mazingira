@@ -8,6 +8,7 @@ import { db } from "@/db";
 import { emailVerificationTokens, users } from "@/db/schema";
 import { eq, and, isNull, isNotNull, desc, gte, count } from "drizzle-orm";
 import type { Lang } from "@/lib/afya/types";
+import { appUrl } from "@/lib/app-url";
 
 const TOKEN_TTL_MS = 24 * 3600 * 1000; // 24 hours
 const RESEND_COOLDOWN_MS = 60 * 1000; // 1 minute between resends
@@ -19,10 +20,6 @@ export const MAX_EMAILS_PER_HOUR = 30;
 
 export function hasResendConfigured(): boolean {
   return !!process.env.RESEND_API_KEY;
-}
-
-function appUrl(): string {
-  return (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
 }
 
 export async function createVerificationToken(userId: number): Promise<string> {
