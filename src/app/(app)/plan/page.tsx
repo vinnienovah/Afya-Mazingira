@@ -5,7 +5,7 @@ import { useLanguage } from "@/lib/contexts/language";
 import { useAuth } from "@/lib/contexts/auth";
 import { ACTIVITY_PROFILES, RISK_META } from "@/lib/afya/constants";
 import { usePreferredActivity } from "@/lib/contexts/situation";
-import { fmtDate, fmtTime, fmtWindow } from "@/lib/afya/format";
+import { fmtDate, fmtDateTimeShort, fmtTime, fmtWindow } from "@/lib/afya/format";
 import { tf } from "@/lib/afya/i18n";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -19,6 +19,9 @@ import type { BestTimeResult, QualityStatus } from "@/lib/afya/types";
 import type { SavedResult } from "@/lib/afya/activity-plan";
 
 const DURATIONS = [30, 60, 90, 120, 180];
+// Today, tomorrow and the day after: the regional forecast runs three days
+// from midnight UTC, so the day after that is only reachable before sunrise.
+const DAY_KEYS = ["plan_day_today", "plan_day_tomorrow", "plan_day_after"];
 // From this hour little daylight is left, so the form starts on tomorrow.
 const LATE_HOUR = 17;
 const EAT_OFFSET_MS = 3 * 3600 * 1000;
@@ -85,7 +88,7 @@ export default function PlanPage() {
   const [duration, setDuration] = useState(90);
   const [chosenStart, setChosenStart] = useState<number | null>(null);
   const [endHour, setEndHour] = useState(18);
-  const [chosenDay, setChosenDay] = useState<number | null>(null); // 0 = today, 1 = tomorrow
+  const [chosenDay, setChosenDay] = useState<number | null>(null); // days ahead of today
   const [planName, setPlanName] = useState("");
 
   const dayOffset = chosenDay ?? (nowHour !== null && nowHour >= LATE_HOUR ? 1 : 0);
@@ -141,7 +144,13 @@ export default function PlanPage() {
     if (data.error === "quality_poor") return t("quality_poor_message");
     const key = `plan_error_${data.error}`;
     if (data.error && t(key) !== key) {
-      const times = Object.fromEntries(Object.entries(data.details ?? {}).map(([k, v]) => [k, fmtTime(v)]));
+      // A time on another day needs its date, or "03:00" reads as today.
+      const times = Object.fromEntries(
+        Object.entries(data.details ?? {}).map(([k, v]) => [
+          k,
+          eatDay(Date.parse(v)) === eatDay(Date.now()) ? fmtTime(v) : fmtDateTimeShort(v),
+        ]),
+      );
       return tf(lang, key, times);
     }
     return data.message ?? t("error_generic");
@@ -236,7 +245,7 @@ export default function PlanPage() {
     setDuration(plan.duration_minutes);
     setChosenStart(eatHour(plan.available_start));
     setEndHour(eatHour(plan.available_end));
-    setChosenDay(Math.min(1, Math.max(0, eatDay(Date.parse(plan.available_start)) - eatDay(Date.now()))));
+    setChosenDay(Math.min(DAY_KEYS.length - 1, Math.max(0, eatDay(Date.parse(plan.available_start)) - eatDay(Date.now()))));
     setPlanName(plan.name);
     setResult(shown);
     setResultFor(shown ? {
@@ -356,24 +365,24 @@ export default function PlanPage() {
           <Card>
             <CardTitle>{t("when_available")}</CardTitle>
             <div className="flex gap-2 mb-3">
-              {[0, 1].map((offset) => (
+              {DAY_KEYS.map((key, offset) => (
                 <button
-                  key={offset}
+                  key={key}
                   onClick={() => changed(setChosenDay)(offset)}
                   aria-pressed={dayOffset === offset}
                   className={cn(
-                    "flex-1 rounded-xl border px-3 py-2 text-sm font-semibold transition-all",
+                    "flex-1 rounded-xl border px-2 py-2 text-sm font-semibold transition-all",
                     dayOffset === offset
                       ? "border-afya-green bg-afya-green text-white"
                       : "border-afya-border text-afya-charcoal hover:border-afya-green/50",
                   )}
                 >
-                  {offset === 0 ? t("plan_day_today") : t("plan_day_tomorrow")}
+                  {t(key)}
                 </button>
               ))}
             </div>
-            {dayOffset === 1 && (
-              <p className="text-xs text-afya-muted mb-3">{t("plan_day_tomorrow_note")}</p>
+            {dayOffset > 0 && (
+              <p className="text-xs text-afya-muted mb-3">{t("plan_day_ahead_note")}</p>
             )}
             <div className="grid grid-cols-2 gap-3">
               <div>
