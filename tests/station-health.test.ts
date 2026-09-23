@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import archive from "../src/lib/afya/model/station-health.json";
 import { STRINGS } from "../src/lib/afya/i18n";
+import { SENTINEL_LIMITS } from "../src/lib/afya/sentinel";
 
 // What the Station Health page reads out of the published report. The report
 // is written by `npm run station-report`; these hold its shape and the
@@ -41,6 +42,9 @@ test("the published report carries the cadence rule and the heat-index audit", (
   assert.equal(archive.rule_slots.R14, archive.cadence.gap_slots);
   assert.equal(archive.cadence.late_slots, 0);
   assert.equal(archive.cadence.late_intervals, 0);
+  // Both halves of the split reach the page, so R14's one number is not read
+  // as late arrivals the station never made.
+  assert.deepEqual(placeholders(STRINGS.en.health_cadence_note), ["gaps", "intervals", "late"]);
 
   // R15 cannot be judged from an export without the column, and says so.
   assert.equal(archive.device_codes.reported, false, "no Conduit export carries the Health column");
@@ -59,4 +63,106 @@ test("every health string the page fills exists in both languages with the same 
   // The findings the page fills need every value the report can give them.
   assert.deepEqual(placeholders(STRINGS.en.health_finding_battery), ["below", "best", "days", "mean"]);
   assert.deepEqual(placeholders(STRINGS.en.health_finding_gaps), ["days", "from", "hours", "minutes", "to"]);
+});
+
+// What the page fills into each rule, so a rule that spells a threshold out
+// again rather than taking it from the report fails here.
+const RULE_PLACEHOLDERS: Record<string, string[]> = {
+  health_rule_r01: ["high", "low"],
+  health_rule_r02: ["high", "low"],
+  health_rule_r03: ["high", "low"],
+  health_rule_r04: ["gust", "wind"],
+  health_rule_r05: ["high", "low"],
+  health_rule_r06: ["floor"],
+  health_rule_r07: ["step"],
+  health_rule_r08: ["long", "move", "short"],
+  health_rule_r09: ["spread"],
+  health_rule_r10: [],
+  health_rule_r11: ["mm"],
+  health_rule_r12: [],
+  health_rule_r13: ["share"],
+  health_rule_r14: [],
+  health_rule_r15: [],
+  health_rule_r16: ["margin"],
+};
+
+test("the rules table reads its numbers from the limits the report was run with", () => {
+  assert.deepEqual(archive.limits, SENTINEL_LIMITS, "the report ships the limits it scored with");
+  for (const [key, expected] of Object.entries(RULE_PLACEHOLDERS)) {
+    for (const lang of ["en", "sw"] as const) {
+      assert.ok(STRINGS[lang][key], `${lang}.${key} is missing`);
+      assert.deepEqual(placeholders(STRINGS[lang][key]), expected, `${lang}.${key}`);
+    }
+  }
+  // The values behind the four the page used to spell out.
+  const l = archive.limits;
+  assert.deepEqual(l.temperature_c, [-5, 45]);
+  assert.deepEqual(l.pressure_hpa, [800, 900]);
+  assert.equal(l.light_dark_floor_counts, 240);
+  assert.equal(l.max_thermometer_spread_c, 2);
+  // R08 and R13 are stated in hours and per cent, not in the slots and share
+  // the limits hold, so the page derives them.
+  assert.equal((l.flat_slots.temp_sht * 15) / 60, 2);
+  assert.equal((l.flat_slots.press_bmx * 15) / 60, 3);
+  assert.equal(Math.round(l.gust_direction_copy_share * 100), 99);
+});
+
+test("the score and its findings quote the penalties the report scored with", () => {
+  const expected: Record<string, string[]> = {
+    health_score_rule: ["bad", "bad", "minutes", "suspect"],
+    health_suspect_tier: ["bad", "suspect"],
+  };
+  for (const [key, names] of Object.entries(expected)) {
+    for (const lang of ["en", "sw"] as const) {
+      assert.deepEqual(placeholders(STRINGS[lang][key]), names, `${lang}.${key}`);
+    }
+  }
+  assert.deepEqual(placeholders(STRINGS.en.health_finding_gauges), ["g1", "g2", "mm"]);
+  assert.equal(archive.limits.bad_group_penalty, 10);
+  assert.equal(archive.limits.suspect_group_penalty, 2);
+  assert.equal(archive.limits.missing_minutes_per_point, 14.4);
+});
+
+test("every verdict the audits can reach has a name in both languages", () => {
+  // The strings sentinel.ts writes, which the page must not print as they are.
+  const verdicts: Record<string, string> = {
+    "matches Stull": "health_verdict_matches_stull",
+    "does not match Stull": "health_verdict_no_match_stull",
+    "non-standard": "health_verdict_non_standard",
+    "within tolerance": "health_verdict_within_tolerance",
+  };
+  for (const [english, key] of Object.entries(verdicts)) {
+    assert.equal(STRINGS.en[key], english, key);
+    assert.ok(STRINGS.sw[key] && STRINGS.sw[key] !== english, `${key} is still English in Kiswahili`);
+  }
+  for (const audit of [archive.audits.A01_wet_bulb_vs_stull, archive.audits.A03_firmware_wbgt_vs_wet_bulb]) {
+    assert.ok(audit.verdict in verdicts, `the report reached an unnamed verdict: ${audit.verdict}`);
+  }
+});
+
+test("the rain tile says which of the two totals it is", () => {
+  // The tile adds up per-slot rain; the gauge's own daily totals, which the
+  // findings quote, come to more because these slots carry no reading.
+  assert.ok(archive.rain.slots_without_reading > 0);
+  assert.ok(archive.rain.slots_without_reading < archive.slots);
+  assert.deepEqual(placeholders(STRINGS.en.health_rain_sum_note), ["slots"]);
+  for (const lang of ["en", "sw"] as const) {
+    assert.notEqual(STRINGS[lang].health_tile_rain, STRINGS[lang].health_tile_gauge2_silent);
+    assert.ok(/slot|kipindi/.test(STRINGS[lang].health_tile_rain), `${lang} tile does not say what it counts`);
+  }
+});
+
+test("the archive is dated by the days it holds, not by a month written into the page", () => {
+  for (const key of ["health_archive_span", "health_archive_conduit_only"]) {
+    assert.deepEqual(placeholders(STRINGS.en[key]), ["from", "to"], key);
+  }
+  // The report ends well before the day it is read on, so the span may not be
+  // written out as the month it opens in: a stale end date is what goes wrong.
+  for (const lang of ["en", "sw"] as const) {
+    for (const [key, value] of Object.entries(STRINGS[lang])) {
+      if (key.startsWith("health_")) assert.ok(!/(June|Juni) 2025/.test(value), `${lang}.${key} dates the archive by its first month alone`);
+    }
+  }
+  assert.equal(archive.first.slice(0, 10), "2025-06-01");
+  assert.ok(archive.last.slice(0, 10) > "2026-06-01", "the last day comes from the report, whatever it is");
 });

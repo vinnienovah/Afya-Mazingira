@@ -9,7 +9,7 @@ import evaluation from "@/lib/afya/model/forecast-evaluation.json";
 import type { Lang } from "@/lib/afya/types";
 import { fill, fmtAsOf, fmtDate, fmtDayMonth, fmtSigned, fmtTime, MONTH_NAMES } from "@/lib/afya/format";
 import {
-  contributorLabel, currentBand, nextStateNote, rainWindows, timeOfDayGapHours,
+  calendarGapDays, contributorLabel, currentBand, nextStateNote, rainWindows, timeOfDayGapHours,
 } from "@/lib/afya/display";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { StateChip } from "@/components/ui/StateChip";
@@ -26,6 +26,9 @@ const HORIZONS = ["1h", "3h", "6h", "9h"] as const;
 
 // ERA5 compared at another time of day mostly shows the daily cycle.
 const MAX_COMPARABLE_GAP_HOURS = 1.5;
+// The reanalysis is published days behind, and the hours-of-day gap cannot see
+// that: an anomaly against another calendar day is not a reading of now.
+const MAX_COMPARABLE_GAP_DAYS = 0;
 
 const isNum = (v: number | null | undefined): v is number => typeof v === "number" && Number.isFinite(v);
 
@@ -81,6 +84,7 @@ export default function IntelligencePage() {
   const anomaly = era5Ok ? era5.local_temp_anomaly_c : null;
   const humidityAnomaly = era5Ok ? era5.local_humidity_anomaly : null;
   const hoursApart = era5Time ? timeOfDayGapHours(current.time, era5Time) : 0;
+  const daysApart = era5Time ? calendarGapDays(current.time, era5Time) : 0;
   const rain = rainWindows(chirps);
   const rainOk = rain !== null;
   const days = (n: number) => (lang === "sw" ? `siku ${n}` : `${n} days`);
@@ -396,6 +400,9 @@ export default function IntelligencePage() {
                 <div className="flex-1 min-w-[12rem] text-[11px] text-afya-muted space-y-1">
                   {era5Time && (
                     <p>{fill(t("anomaly_compare"), { station: fmtAsOf(current.time, lang), era5: fmtAsOf(era5Time, lang) })}</p>
+                  )}
+                  {daysApart > MAX_COMPARABLE_GAP_DAYS && (
+                    <p className="font-semibold text-afya-orange">{fill(t("anomaly_days_old"), { days: daysApart })}</p>
                   )}
                   {hoursApart > MAX_COMPARABLE_GAP_HOURS && (
                     <p className="font-semibold text-afya-orange">{t("anomaly_hours_differ")}</p>

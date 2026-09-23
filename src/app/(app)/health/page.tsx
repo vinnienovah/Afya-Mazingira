@@ -5,8 +5,10 @@ import useSWR from "swr";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Activity, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useLanguage } from "@/lib/contexts/language";
-import { fmtAgo } from "@/lib/afya/format";
+import { fill, fmtAgo, fmtAsOf, MONTH_NAMES } from "@/lib/afya/format";
 import { STRINGS } from "@/lib/afya/i18n";
+import { QUALITY_LIMITS } from "@/lib/afya/data-quality";
+import { SLOT_MS, type LiveWindow } from "@/lib/afya/display";
 import type { ChordsStation } from "@/lib/afya/sources";
 import type { GroupStatus } from "@/lib/afya/sentinel";
 import { Card, CardTitle } from "@/components/ui/Card";
@@ -36,17 +38,42 @@ interface Audits {
   A05_thermometers: Thermometers[];
 }
 interface DeviceCodes { reported: boolean; codes: { code: number; slots: number }[]; note: string }
+// The thresholds the report was run with, as sentinel.ts holds them. The rules
+// table reads its numbers from here rather than spelling them out again.
+interface Limits {
+  temperature_c: [number, number];
+  humidity_pct: [number, number];
+  pressure_hpa: [number, number];
+  wind_speed_ms: [number, number];
+  wind_gust_ms: [number, number];
+  rain_mm: [number, number];
+  light_dark_floor_counts: number;
+  max_step_c: number;
+  flat_slots: Record<string, number>;
+  stuck_other_thermometer_c: number;
+  max_thermometer_spread_c: number;
+  rain_disagreement_mm: number;
+  gust_direction_copy_share: number;
+  wbgt_below_wet_bulb_margin_c: number;
+  bad_group_penalty: number;
+  suspect_group_penalty: number;
+  missing_minutes_per_point: number;
+}
 interface Archive {
   first: string;
   last: string;
   slots: number;
+  limits: Limits;
   summary: {
     days: number; mean_score: number; days_below_80: number; rain_gauge_disagreement_days: number;
     gauge2_silent_days: number; gauge1_silent_days: number; empty_sensor_days: number;
     missing_minutes: number; days_with_missing_time: number;
   };
-  rain: { gauge1_mm: number };
+  // gauge1_mm is the sum of the per-slot rain, which the slots with no reading
+  // at all are missing from.
+  rain: { gauge1_mm: number; slots_without_reading: number };
   rule_slots: Record<string, number>;
+  cadence: { gap_slots: number; late_slots: number; late_intervals: number };
   gust_direction_copy: { days: number; of: number; share_pct: number | null };
   battery: {
     status: Status; mean_score_if_counted: number; best_score_if_counted: number; days_below_80_if_counted: number;
@@ -59,12 +86,16 @@ interface Archive {
 interface HealthResponse {
   // Null for any station but Conduit@Empathy1, the only one with an archive.
   archive: Archive | null;
+  // First and last day the archive holds, whichever station is shown.
+  archive_span: { first: string; last: string };
   live: {
     source: "live" | "csv" | "demo";
     feed: "jhub" | "chords" | null;
     latest: string | null;
     age_minutes: number | null;
     slots: number;
+    // What the checked readings really cover, against the day they stand for.
+    window: LiveWindow | null;
     missing_minutes: number;
     groups: { group: string; status: Status; rules: string[]; empty_channels: string[]; measured_share: number }[];
     audits: Audits;
@@ -89,8 +120,6 @@ const STATIONS: readonly ChordsStation[] = [
 ];
 const CONDUIT_ID = STATIONS[0].id;
 
-const fill = (text: string, values: Record<string, string | number>) =>
-  Object.entries(values).reduce((s, [k, v]) => s.replace(`{${k}}`, String(v)), text);
 // An interface string from i18n.ts in both languages, with any {placeholders} filled.
 const both = (key: string, values: Record<string, string | number> = {}): [string, string] =>
   [fill(STRINGS.en[key], values), fill(STRINGS.sw[key], values)];
@@ -125,27 +154,47 @@ const STATUS_NAME: Record<Status, [string, string]> = {
   not_reported: both("health_status_not_reported"),
 };
 
-// What each rule checks, on 15-minute data. The thresholds live in sentinel.ts.
-const RULES: [string, string, string][] = [
-  ["R01", "Any thermometer below -5 or above 45 °C", "Kipima joto chochote chini ya -5 au juu ya 45 °C"],
-  ["R02", ...both("health_rule_r02")],
-  ["R03", "Pressure outside 800 to 900 hPa (station at 1,523 m)", "Shinikizo nje ya 800 hadi 900 hPa (kituo kiko mita 1,523)"],
-  ["R04", "Wind above 60 m/s or gust above 75 m/s", "Upepo juu ya 60 m/s au upepo mkali juu ya 75 m/s"],
-  ["R05", ...both("health_rule_r05")],
-  ["R06", "Light reading below the sensor's dark floor of 240 counts", "Mwanga chini ya kiwango cha giza cha kipima, 240"],
-  ["R07", ...both("health_rule_r07")],
-  ["R08", ...both("health_rule_r08")],
-  ["R09", "The three thermometers differ by more than 2 °C", "Vipima joto vitatu vinatofautiana zaidi ya 2 °C"],
+// The audits report their verdicts in English, as sentinel.ts writes them.
+const VERDICT_NAMES: Record<string, [string, string]> = {
+  "matches Stull": both("health_verdict_matches_stull"),
+  "does not match Stull": both("health_verdict_no_match_stull"),
+  "non-standard": both("health_verdict_non_standard"),
+  "within tolerance": both("health_verdict_within_tolerance"),
+};
+
+// The report counts a flat reading in 15-minute slots; the rule reads in hours.
+const slotHours = (slots: number) => (slots * SLOT_MS) / 3600_000;
+// What each rule checks, on 15-minute data, at the limits the report was run
+// with: change one in sentinel.ts and the next report moves the table with it.
+const rules = (l: Limits): [string, string, string][] => [
+  ["R01", ...both("health_rule_r01", { low: l.temperature_c[0], high: l.temperature_c[1] })],
+  ["R02", ...both("health_rule_r02", { low: l.humidity_pct[0], high: l.humidity_pct[1] })],
+  ["R03", ...both("health_rule_r03", { low: l.pressure_hpa[0], high: l.pressure_hpa[1] })],
+  ["R04", ...both("health_rule_r04", { wind: l.wind_speed_ms[1], gust: l.wind_gust_ms[1] })],
+  ["R05", ...both("health_rule_r05", { low: l.rain_mm[0], high: l.rain_mm[1] })],
+  ["R06", ...both("health_rule_r06", { floor: l.light_dark_floor_counts })],
+  ["R07", ...both("health_rule_r07", { step: l.max_step_c })],
+  ["R08", ...both("health_rule_r08", {
+    short: slotHours(l.flat_slots.temp_sht),
+    long: slotHours(l.flat_slots.press_bmx),
+    move: l.stuck_other_thermometer_c,
+  })],
+  ["R09", ...both("health_rule_r09", { spread: l.max_thermometer_spread_c })],
   ["R10", ...both("health_rule_r10")],
-  ["R11", ...both("health_rule_r11")],
+  ["R11", ...both("health_rule_r11", { mm: l.rain_disagreement_mm })],
   ["R12", ...both("health_rule_r12")],
-  ["R13", ...both("health_rule_r13")],
+  ["R13", ...both("health_rule_r13", { share: Math.round(l.gust_direction_copy_share * 100) })],
   ["R14", ...both("health_rule_r14")],
   ["R15", ...both("health_rule_r15")],
-  ["R16", "The firmware WBGT is more than 1.5 °C below the wet bulb", "WBGT ya programu dhibiti iko chini ya joto la balbu nyevu kwa zaidi ya 1.5 °C"],
+  ["R16", ...both("health_rule_r16", { margin: l.wbgt_below_wet_bulb_margin_c })],
 ];
 
 const pct = (v: number | null) => (v === null ? "-" : `${v.toFixed(1)} %`);
+// An archive day as its own timestamps record it, UTC: "8 Sep 2026".
+const archiveDay = (iso: string, sw: boolean) => {
+  const [y, m, d] = iso.slice(0, 10).split("-");
+  return `${Number(d)} ${MONTH_NAMES[sw ? "sw" : "en"][Number(m) - 1]} ${y}`;
+};
 // A gap's own times, to the minute, as the readings recorded them.
 const utc = (iso: string | undefined) => (iso ? iso.slice(0, 16).replace("T", " ") : "-");
 const signed = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(2)} °C`;
@@ -184,6 +233,12 @@ export default function StationHealthPage() {
   const unlisted = live && !conduit
     ? Object.keys(GROUP_NAMES).filter((g) => !live.groups.some((x) => x.group === g))
     : [];
+  // Past the age at which the app stops advising, the station is not reporting
+  // and no group status below describes it now.
+  const silent = !!live && live.age_minutes !== null && live.age_minutes > QUALITY_LIMITS.degraded_max_age_minutes;
+  const silentHours = Math.round((live?.age_minutes ?? 0) / 60);
+  const span = live?.window ?? null;
+  const archiveSpan = data?.archive_span ?? null;
   const rainNotJudged = !!live?.groups.some((g) => g.group.startsWith("rain_gauge") && g.status === "not_judged");
   const batteryMissing = !!live?.groups.some((g) => g.group === "battery" && g.status === "not_reported");
   const codesMissing = !!live?.groups.some((g) => g.group === "device_code" && g.status === "not_reported");
@@ -241,9 +296,25 @@ export default function StationHealthPage() {
       {live ? (
         <Card>
           <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
-            <CardTitle className="mb-0">{sw ? "Saa 24 zilizopita" : "The last 24 hours"}</CardTitle>
-            <span className="text-xs text-afya-muted">{liveLabel}</span>
+            <CardTitle className="mb-0">
+              {span
+                ? fill(t("health_live_window"), { hours: span.hours, to: fmtAsOf(span.to, lang) })
+                : sw ? "Saa 24 zilizopita" : "The last 24 hours"}
+            </CardTitle>
+            <span className={cn("text-xs", silent ? "font-bold text-afya-red" : "text-afya-muted")}>{liveLabel}</span>
           </div>
+          {silent && span && (
+            <>
+              <p
+                role="alert"
+                className="mb-3 flex items-start gap-1.5 rounded-xl bg-afya-red/10 px-3 py-2 text-xs font-semibold text-afya-red"
+              >
+                <AlertTriangle className="w-4 h-4 shrink-0" strokeWidth={2} aria-hidden="true" />
+                {fill(t("health_live_silent"), { hours: silentHours, to: fmtAsOf(span.to, lang) })}
+              </p>
+              <p className="mb-2 text-xs font-semibold text-afya-charcoal">{t("health_live_last_readings")}</p>
+            </>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {live.groups.map((g) => (
               <div key={g.group} className="rounded-xl border border-afya-border px-4 py-3">
@@ -260,6 +331,11 @@ export default function StationHealthPage() {
               </div>
             ))}
           </div>
+          {span && span.read_slots < span.of_slots && (
+            <p className="mt-3 text-xs text-afya-muted">
+              {fill(t("health_live_coverage"), { hours: span.of_hours, read: span.read_slots, of: span.of_slots })}
+            </p>
+          )}
           {live.missing_minutes > 0 && (
             <p className="mt-3 text-xs text-afya-muted flex items-center gap-1.5">
               <AlertTriangle className="w-3.5 h-3.5 text-afya-gold" strokeWidth={2} aria-hidden="true" />
@@ -310,9 +386,11 @@ export default function StationHealthPage() {
       ) : (
         <Card>
           <p className="text-sm text-afya-muted">
-            {sw
-              ? "Alama za kila siku tangu Juni 2025, ukaguzi, matokeo na kanuni zinatoka kwenye kumbukumbu ya Conduit@Empathy1, hivyo zinaonyeshwa kwa kituo hicho tu."
-              : "The daily scores since June 2025, the audits, the findings and the rules come from the Conduit@Empathy1 archive, so they show for that station only."}
+            {archiveSpan &&
+              fill(t("health_archive_conduit_only"), {
+                from: archiveDay(archiveSpan.first, sw),
+                to: archiveDay(archiveSpan.last, sw),
+              })}
           </p>
         </Card>
       )}
@@ -322,6 +400,7 @@ export default function StationHealthPage() {
 
 function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
   const text = STRINGS[sw ? "sw" : "en"];
+  const limits = archive.limits;
   const a03 = archive.audits.A03_firmware_wbgt_vs_wet_bulb;
   const a01 = archive.audits.A01_wet_bulb_vs_stull;
   const a02 = archive.audits.A02_heat_index_vs_nws;
@@ -360,12 +439,22 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
         [sw ? "Alama ya wastani" : "Mean score", String(archive.summary.mean_score)],
         [sw ? "Siku chini ya 80" : "Days below 80", String(archive.summary.days_below_80)],
       ];
+  const margin = limits.wbgt_below_wet_bulb_margin_c;
+  const penalties = {
+    bad: limits.bad_group_penalty,
+    suspect: limits.suspect_group_penalty,
+    minutes: limits.missing_minutes_per_point,
+  };
   const findings: [string, string][] = [
     [
-      `The firmware WBGT is more than 1.5 °C below the wet bulb in ${pct(a03.far_below_pct)} of the record (${pct(a03.far_below_night_pct)} at night, ${pct(a03.far_below_day_pct)} by day). A WBGT below the wet bulb is not physically possible in shade, so the formula in the firmware should be checked.`,
-      `WBGT ya programu dhibiti iko chini ya balbu nyevu kwa zaidi ya 1.5 °C katika ${pct(a03.far_below_pct)} ya kumbukumbu (${pct(a03.far_below_night_pct)} usiku, ${pct(a03.far_below_day_pct)} mchana). Hilo haliwezekani kivulini, hivyo fomula ya programu dhibiti ikaguliwe.`,
+      `The firmware WBGT is more than ${margin} °C below the wet bulb in ${pct(a03.far_below_pct)} of the record (${pct(a03.far_below_night_pct)} at night, ${pct(a03.far_below_day_pct)} by day). A WBGT below the wet bulb is not physically possible in shade, so the formula in the firmware should be checked.`,
+      `WBGT ya programu dhibiti iko chini ya balbu nyevu kwa zaidi ya ${margin} °C katika ${pct(a03.far_below_pct)} ya kumbukumbu (${pct(a03.far_below_night_pct)} usiku, ${pct(a03.far_below_day_pct)} mchana). Hilo haliwezekani kivulini, hivyo fomula ya programu dhibiti ikaguliwe.`,
     ],
-    both("health_finding_gauges", { g2: archive.summary.gauge2_silent_days, g1: archive.summary.gauge1_silent_days }),
+    both("health_finding_gauges", {
+      g2: archive.summary.gauge2_silent_days,
+      g1: archive.summary.gauge1_silent_days,
+      mm: limits.rain_disagreement_mm,
+    }),
     both("health_finding_uv_column"),
     archive.device_codes.reported
       ? [
@@ -404,7 +493,12 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
   return (
     <>
       <Card>
-        <CardTitle>{sw ? "Kila siku tangu Juni 2025" : "Every day since June 2025"}</CardTitle>
+        <CardTitle>
+          {fill(text.health_archive_span, {
+            from: archiveDay(archive.first, sw),
+            to: archiveDay(archive.last, sw),
+          })}
+        </CardTitle>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-2 mb-4">
           {[
             [sw ? "Siku" : "Days", String(archive.summary.days)],
@@ -432,8 +526,11 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
         {notScored && (
           <p className="mt-3 text-xs text-afya-muted">{fill(text.health_battery_not_scored, battery)}</p>
         )}
-        <p className="mt-3 text-xs text-afya-muted">{text.health_score_rule}</p>
-        <p className="mt-2 text-xs text-afya-muted">{text.health_suspect_tier}</p>
+        <p className="mt-3 text-xs text-afya-muted">
+          {fill(text.health_rain_sum_note, { slots: archive.rain.slots_without_reading.toLocaleString("en") })}
+        </p>
+        <p className="mt-3 text-xs text-afya-muted">{fill(text.health_score_rule, penalties)}</p>
+        <p className="mt-2 text-xs text-afya-muted">{fill(text.health_suspect_tier, penalties)}</p>
       </Card>
 
       <Card>
@@ -445,7 +542,7 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
                 <th scope="row" className="py-2 pr-4 text-left font-semibold text-afya-charcoal">A01</th>
                 <td className="py-2 pr-4 text-afya-muted">{sw ? "Balbu nyevu dhidi ya Stull (2011)" : "Wet bulb against Stull (2011)"}</td>
                 <td className="py-2 pr-4">{sw ? "tofauti ya wastani" : "mean difference"} {a01.mae_c?.toFixed(3)} °C</td>
-                <td className="py-2"><Verdict ok={a01.verdict === "matches Stull"} text={a01.verdict} /></td>
+                <td className="py-2"><Verdict ok={a01.verdict === "matches Stull"} verdict={a01.verdict} sw={sw} /></td>
               </tr>
               <tr>
                 <th scope="row" className="py-2 pr-4 text-left font-semibold text-afya-charcoal">A02</th>
@@ -465,9 +562,10 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
                 <th scope="row" className="py-2 pr-4 text-left font-semibold text-afya-charcoal">A03</th>
                 <td className="py-2 pr-4 text-afya-muted">{sw ? "WBGT ya programu dhibiti dhidi ya balbu nyevu" : "Firmware WBGT against the wet bulb"}</td>
                 <td className="py-2 pr-4">
-                  {sw ? "chini" : "below"} {pct(a03.below_pct)}; {sw ? "zaidi ya 1.5 °C chini" : "more than 1.5 °C below"} {pct(a03.far_below_pct)}
+                  {sw ? "chini" : "below"} {pct(a03.below_pct)};{" "}
+                  {sw ? `zaidi ya ${margin} °C chini` : `more than ${margin} °C below`} {pct(a03.far_below_pct)}
                 </td>
-                <td className="py-2"><Verdict ok={a03.verdict !== "non-standard"} text={a03.verdict} /></td>
+                <td className="py-2"><Verdict ok={a03.verdict !== "non-standard"} verdict={a03.verdict} sw={sw} /></td>
               </tr>
               <tr>
                 <th scope="row" className="py-2 pr-4 text-left font-semibold text-afya-charcoal">A04</th>
@@ -523,7 +621,7 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <tbody className="divide-y divide-afya-border/50">
-              {RULES.map(([id, en, swText]) => (
+              {rules(archive.limits).map(([id, en, swText]) => (
                 <tr key={id}>
                   <th scope="row" className="py-1.5 pr-4 text-left font-semibold text-afya-charcoal">{id}</th>
                   <td className="py-1.5 pr-4 text-afya-muted">{sw ? swText : en}</td>
@@ -538,17 +636,24 @@ function ArchiveRecord({ archive, sw }: { archive: Archive; sw: boolean }) {
             ? "Namba ya mwisho: vipindi vya dakika 15 vilivyoguswa katika kumbukumbu, au siku kwa R11 hadi R13."
             : "Last column: 15-minute slots each rule touched across the record, or days for R11 to R13."}
         </p>
+        <p className="text-xs text-afya-muted mt-2">
+          {fill(text.health_cadence_note, {
+            gaps: archive.cadence.gap_slots,
+            late: archive.cadence.late_slots,
+            intervals: archive.cadence.late_intervals,
+          })}
+        </p>
         <p className="text-xs text-afya-muted mt-2">{text.health_rain_day_note}</p>
       </Card>
     </>
   );
 }
 
-function Verdict({ ok, text }: { ok: boolean; text: string }) {
+function Verdict({ ok, verdict, sw }: { ok: boolean; verdict: string; sw: boolean }) {
   return (
     <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold", ok ? STATUS_STYLE.good : STATUS_STYLE.bad)}>
       {ok ? <CheckCircle2 className="w-3 h-3" aria-hidden="true" /> : <AlertTriangle className="w-3 h-3" aria-hidden="true" />}
-      {text}
+      {VERDICT_NAMES[verdict]?.[sw ? 1 : 0] ?? verdict}
     </span>
   );
 }

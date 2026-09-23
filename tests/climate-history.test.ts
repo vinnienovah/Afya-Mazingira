@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { aggregateStation, clipToAvailable, fetchEra5History, type HistoryPoint } from "../src/lib/afya/climate-history";
 import { addDays, nairobiDate, nairobiDayStart } from "../src/lib/afya/nairobi-day";
 import type { DemoObservation } from "../src/lib/afya/demo-observations";
+import { STRINGS } from "../src/lib/afya/i18n";
 
 function slot(iso: string, patch: Partial<DemoObservation> = {}): DemoObservation {
   return {
@@ -83,4 +84,16 @@ test("the ERA5 request asks for ERA5 alone, by Nairobi day, and clips what is no
     { time: "2026-09-15", temp_c: 17.9, humidity_pct: 70, rain_mm: 0.7, wind_ms: 2 },
     { time: "2026-09-16", temp_c: 18.2, humidity_pct: 72, rain_mm: 2.0, wind_ms: 2.5 },
   ]);
+});
+
+test("the source chip on every live chart is named in both languages", () => {
+  // The Dashboard's charts label their source from these; each one stayed
+  // English on the Kiswahili page while it was written into the component.
+  for (const key of ["conduit_live_badge", "conduit_archive_badge", "demo_mode", "cv_station_rain_source"]) {
+    assert.ok(STRINGS.en[key], `${key} is missing`);
+    assert.ok(STRINGS.sw[key], `${key} has no Kiswahili`);
+  }
+  assert.notEqual(STRINGS.sw.conduit_live_badge, STRINGS.en.conduit_live_badge);
+  assert.notEqual(STRINGS.sw.conduit_archive_badge, STRINGS.en.conduit_archive_badge);
+  assert.notEqual(STRINGS.sw.cv_station_rain_source, STRINGS.en.cv_station_rain_source);
 });
