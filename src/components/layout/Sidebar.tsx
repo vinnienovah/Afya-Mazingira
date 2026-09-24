@@ -24,6 +24,12 @@ const NAV_MAIN = [
   { href: "/flood",        icon: Waves,           key: "nav_flood" },
   { href: "/health",       icon: Activity,        key: "nav_health" },
 ];
+const NAV_GROUPS = [
+  { key: "nav_group_today", paths: ["/situation", "/forecast"] },
+  { key: "nav_group_plan", paths: ["/plan", "/farm"] },
+  { key: "nav_group_explore", paths: ["/map", "/climate", "/flood"] },
+  { key: "nav_group_evidence", paths: ["/intelligence", "/health", "/operations"] },
+];
 
 const NAV_SECONDARY = [
   { href: "/notifications", icon: Bell,       key: "nav_notifications" },
@@ -81,7 +87,10 @@ export default function Sidebar() {
 
       {/* Main nav */}
       <nav className="flex-1 overflow-y-auto px-3 space-y-0.5" aria-label="Main navigation">
-        {NAV_MAIN.map(({ href, icon: Icon, key }) => {
+        {NAV_GROUPS.map((group) => (
+          <section key={group.key} aria-label={t(group.key)} className="mb-3">
+            <h2 className="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-white/60">{t(group.key)}</h2>
+            {group.paths.map((href) => NAV_MAIN.find((item) => item.href === href)!).map(({ href, icon: Icon, key }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
           return (
             <Link
@@ -96,13 +105,15 @@ export default function Sidebar() {
               )}
             >
               <Icon className="w-[17px] h-[17px] shrink-0" strokeWidth={1.8} aria-hidden="true" />
-              <span className="truncate">{t(key)}</span>
+              <span className="leading-snug">{t(key)}</span>
               {active && (
                 <span className="ml-auto w-1.5 h-1.5 rounded-full bg-white/70 shrink-0" aria-hidden="true" />
               )}
             </Link>
           );
         })}
+          </section>
+        ))}
       </nav>
 
       {/* Secondary nav */}
@@ -123,7 +134,7 @@ export default function Sidebar() {
               )}
             >
               <Icon className="w-[17px] h-[17px] shrink-0" strokeWidth={1.8} aria-hidden="true" />
-              <span className="truncate">{t(key)}</span>
+              <span className="leading-snug">{t(key)}</span>
             </Link>
           );
         })}

@@ -176,7 +176,7 @@ On a single split (fitted to May 2026, tested on June to September 2026, which t
 - Regional soil moisture (ERA5-Land, 7 to 28 cm) is shown as context only, ranked against its own past year. The page marks the whole advisory as indicative.
 - What it comes to: over 1 June to 8 September 2026, the dry season, the advice for maize in its vegetative stage is 320 mm in five waterings against 338 mm of crop demand, at an interval of 18.8 days where FAO-56's own figures give 19.7. Beans at maturity are left to dry down.
 
-**Regional outlook.** Kiambu, where the station stands, uses the station: its measured temperature for hours already past and its forecast WBGT for the outlook. The other ten counties use Open-Meteo's forecast model through the same shade WBGT (with Stull's wet bulb), labelled as regional. The Thermal layer colours each county by its air temperature at the chosen hour.
+**Regional outlook.** Every county, including Kiambu, uses regional forecasts sampled at cell centres of a 10 × 10 grid across its bounding box, retaining only points inside the complete polygon (including multipart geometry and excluding holes). Cosine-latitude weights approximate sample-cell area. WBGT is calculated at each sample before averaging. The map shows estimated county means, sampled ranges, sample coverage and estimated sampled-area share at or above 21 °C shade WBGT. These are approximate spatial samples, not native-raster zonal statistics or forecast uncertainty intervals. A minimum of 80% weighted coverage and two valid points is required. JKUAT observations remain a separate station point and never colour all of Kiambu. Sentinel-2 NDVI is a labelled local ~4 km sample box shown as a point, not a county choropleth; it is not cloud-filtered. Small polygon parts can fall between sample centres. Weather calls are batched, briefly cached, and use an explicitly dated same-day fallback after upstream failure.
 
 ## 5. Features
 
@@ -187,11 +187,11 @@ On a single split (fitted to May 2026, tested on June to September 2026, which t
 | **Plan Activity** | Best-time search for an activity, duration and time window: only windows still ahead, in daylight and fully covered by the forecast, with reasons that hold for that window, an alternative, and saved plans that can be edited and rerun |
 | **Farm Advisory** | Water now (with the depth and what the zone still wants), hold for rain, nothing needed yet (with the day it falls due), or too little data (with the week's requirement), from the root-zone balance; spray and field-work windows, crop heat stress and planting outlook for 7 crops and 4 growth stages; marked indicative |
 | **Risk Map** | Leaflet on OpenStreetMap: 11 county boundaries with outlook, thermal (air temperature), rain and vegetation layers and a time slider; station-backed versus regional marked on each; grey where a source has no data |
-| **Dashboard** | Live station variables and daily station rain, a climate history explorer over any date range (station or ERA5), and historical replay of any day from June 2025 to yesterday: step through the day with the future hidden, then reveal each forecast against what the station recorded |
+| **Climate History** | Live station variables and daily station rain, a climate history explorer over any date range (station or ERA5), and historical replay of any day from June 2025 to yesterday: step through the day with the future hidden, then reveal each forecast against what the station recorded |
 | **Station Health** | Conduit Sentinel: sensor-group status for the last 24 hours at JKUAT or three nearby CHORDS stations, the daily health score since June 2025, firmware and thermometer audits, the rules, and findings to report to JHUB |
 | **Why?** | Data quality flags, the state timeline, what moves the +3 h forecast in °C, the model comparison table with test-month scores, and the regional context with the hours it compares |
 | **Operations** | A day's planned activities, saved in the browser, each judged on the part of its window still ahead and forecast, with a cooler daylight window suggested when there is one |
-| **Flood Conditions** | Today's rainfall (so far plus forecast) and 0 to 7 cm soil saturation by county from Open-Meteo, with the thresholds printed on the page. Kiambu's rain is the station gauge where the gauge covered the day. Conditions only; not a flood forecast |
+| **Rainfall & Ground Conditions** | Today's rainfall (so far plus forecast) and 0 to 7 cm soil saturation by county from Open-Meteo, with the thresholds printed on the page. Conditions only; not a flood forecast |
 | **Notifications** | Alert rules checked once a day at 08:00 EAT: the day's forecast heat peak for the rule's activity, a hot state ahead, or a saved plan moving into a higher band. Sent by email, and by browser push where the server has VAPID keys |
 | **Briefing** | A printable one-page summary, rendered on the server |
 
@@ -396,3 +396,9 @@ The repository starts on 18 September 2026 with the first version of the app in 
 6. Mati, B. M. (2023). Farmer-led irrigation development in Kenya. *Agricultural Water Management.* https://www.sciencedirect.com/science/article/pii/S0378377422006527
 7. Capital FM (2 February 2026). "Kenya MET explains heatwave limits as high temperatures persist across the country." https://allafrica.com/stories/202602020114.html
 8. AICCRA (June 2023). "Kenyan agriculture data platform gets upgrade." https://aiccra.cgiar.org/news/kenyan-agriculture-data-platform-gets-upgrade
+
+## Navigation and map update
+
+Navigation is grouped into Today, Plan, Explore, and Evidence & operations, with corresponding groups in the mobile More menu. English and Kiswahili labels use Climate History, Models & Evidence, and Rainfall & Ground Conditions; existing URLs remain compatible. Rain/soil categories describe project-defined conditions indicators, not flood probabilities.
+
+Validation: `node --import tsx --test tests/*.test.ts`, `npm run typecheck`, `npm run lint`, and `npm run build -- --webpack`. Spatial tests cover holes, multipart polygons, missing coverage, aggregation, and the prohibition on station-to-county overrides.

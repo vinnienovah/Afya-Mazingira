@@ -4,14 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { MapContainer, TileLayer, GeoJSON, CircleMarker, Tooltip, useMap } from "react-leaflet";
 import type { Layer, PathOptions, LeafletKeyboardEvent } from "leaflet";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
-import { RISK_META } from "@/lib/afya/constants";
+import { JKUAT_COORDS, RISK_META } from "@/lib/afya/constants";
 import type { CountyFeature } from "@/lib/afya/map-data";
 import {
   HOUR_SOURCE_LABEL_KEY, NO_DATA_COLOUR, ndviColour, outlookColour, rainColour, thermalColour,
 } from "@/lib/afya/map-scales";
 import "leaflet/dist/leaflet.css";
 
-const JKUAT: [number, number] = [-1.0931, 37.0149];
+const JKUAT: [number, number] = [JKUAT_COORDS.lat, JKUAT_COORDS.lng];
 
 export type MapLayerKey = "outlook" | "thermal" | "rain" | "vegetation";
 
@@ -42,7 +42,7 @@ function colourFor(layer: MapLayerKey, p: CountyFeature["properties"] | undefine
   if (layer === "outlook") return outlookColour(hour?.category);
   if (layer === "thermal") return thermalColour(hour?.temp_c);
   if (layer === "rain") return rainColour(p.rain_today_mm);
-  return ndviColour(p.ndvi_mean);
+  return NO_DATA_COLOUR; // Local NDVI samples must not colour whole counties.
 }
 
 /** The tooltip line for the selected layer and hour. */
@@ -69,12 +69,18 @@ function tooltipDetail(
       `${t("map_shade_wbgt")} ${hour.wbgt_c != null ? `${hour.wbgt_c.toFixed(1)} °C` : noData}` +
         (hour.wbgt_source ? ` (${t(HOUR_SOURCE_LABEL_KEY[hour.wbgt_source])})` : ""),
     );
+    const stats = layer === "thermal" ? hour.spatial?.temperature : hour.spatial?.wbgt;
+    if (stats) {
+      parts.push(`${t("map_sample_mean")} · ${stats.valid_samples}/${stats.total_samples}`);
+      parts.push(`${t("map_sample_coverage")}: ${stats.coverage_pct.toFixed(0)}%`);
+      if (stats.min != null && stats.max != null) parts.push(`${t("map_sample_range")}: ${stats.min.toFixed(1)}–${stats.max.toFixed(1)} °C`);
+    }
     return parts.join("<br/>");
   }
   if (layer === "rain") {
     return `${t("map_rain_today")}: ${p.rain_today_mm != null ? `${p.rain_today_mm.toFixed(1)} mm` : noData}`;
   }
-  return `NDVI: ${p.ndvi_mean != null ? p.ndvi_mean.toFixed(2) : noData}`;
+  return `${t("map_local_ndvi")}: ${p.ndvi_mean != null ? p.ndvi_mean.toFixed(2) : noData}`;
 }
 
 /** Keeps Leaflet sized correctly inside responsive/flex layouts. */
@@ -177,6 +183,13 @@ export default function CountyLeafletMap({
           />
         )}
 
+        {layer === "vegetation" && Object.values(indicators).filter((p) => p.ndvi_sample && p.ndvi_mean != null).map((p) => (
+          <CircleMarker key={p.name} center={[p.ndvi_sample!.lat, p.ndvi_sample!.lng]} radius={7}
+            pathOptions={{ color: "#ffffff", weight: 2, fillColor: ndviColour(p.ndvi_mean), fillOpacity: 1 }}
+            eventHandlers={{ click: () => onSelectCounty(p.name) }}>
+            <Tooltip>{p.name}: {p.ndvi_mean!.toFixed(2)}<br />{t("map_local_ndvi")}</Tooltip>
+          </CircleMarker>
+        ))}
         {/* JKUAT Conduit ground-intelligence marker */}
         <CircleMarker
           center={JKUAT}

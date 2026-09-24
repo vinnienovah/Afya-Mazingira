@@ -1,23 +1,5 @@
-// Regional outlook: real county boundaries (public/geo/counties.geojson) with
-// indicators per county.
-//   - Weather: one batched request to Open-Meteo's forecast API for every
-//     county centroid, no key required: current temperature and humidity,
-//     today's hourly temperature and humidity, this hour's 0-7 cm soil moisture
-//     and today's rain total (the Nairobi day, hours still to come included).
-//     All of it is model output, not measurement.
-//   - Thermal and outlook: air temperature at 09:00, 12:00, 15:00 and 18:00,
-//     and the same wbgtToRisk() bands as the rest of the app applied to shade
-//     WBGT from temperature and humidity (Stull wet bulb, no sun term).
-//   - NDVI: Copernicus Sentinel-2 statistics per county when CDSE credentials
-//     are configured (not filtered for cloud; see copernicus.ts).
-// Kiambu, the county the Conduit station stands in, takes the station for the
-// hours it covers while the station is current: its measurement for hours
-// already past today, its WBGT forecast for hours the forecast reaches, and
-// gauge 1's own daily total in place of the model's rain.
-// A county Open-Meteo did not answer for has null weather values, shown on the
-// map and the flood page as unavailable.
-
 import fs from "fs";
+import { countySamples, summarizeSamples, type SpatialSample, type SpatialSummary } from "./spatial-sampling";
 import path from "path";
 import type { Geometry } from "geojson";
 import type { RiskLevel, SituationResult } from "./types";
@@ -37,6 +19,7 @@ export interface OutlookHour {
   /** Air temperature, for the Thermal layer */
   temp_c: number | null;
   temp_source: HourSource | null;
+  spatial?: { temperature: SpatialSummary; wbgt: SpatialSummary };
 }
 
 export type FloodRisk = "LOW" | "ELEVATED" | "HIGH";
@@ -48,26 +31,24 @@ export interface CountyFeature {
     name_sw: string;
     /** False when Open-Meteo gave nothing for this county */
     weather_available: boolean;
-    /** Now: the station's WBGT in Kiambu while it is current, the forecast model elsewhere */
+    /** Current area-weighted sampled regional WBGT category; never a station override. */
     outlook_category: RiskLevel | null;
     confidence: "LOW" | "MODERATE" | "HIGH";
     /** Current temperature minus the mean of the counties */
     temperature_anomaly_c: number | null;
-    /** Today's total (Nairobi day): the station gauge in Kiambu while it covers
-     * the day, otherwise the forecast, hours still to come included */
+    /** Sampled regional total for the Nairobi day, including forecast hours ahead. */
     rain_today_mm: number | null;
     /** This hour, 0 to 7 cm, m³/m³, forecast model */
     soil_moisture: number | null;
     /** Null when the rain or soil value it needs is missing */
     flood_risk: FloodRisk | null;
     ndvi_mean: number | null;
+    ndvi_sample: { lat: number; lng: number } | null;
+    spatial: { method: string; sample_count: number; threshold_wbgt_c: number; current: SpatialSummary | null };
     sources: string[];
     outlook_hours: OutlookHour[];
   };
-  geometry: {
-    type: "Polygon";
-    coordinates: [number, number][][];
-  };
+  geometry: Geometry;
 }
 
 export interface CountyCollection {
@@ -131,7 +112,7 @@ interface LoadedCounty {
   name_sw: string;
   geometry: Geometry;
   centroid: { lat: number; lng: number };
-  bbox: Bbox;
+  samples: SpatialSample[];
 }
 
 let boundariesCache: LoadedCounty[] | null = null;
@@ -145,14 +126,18 @@ function loadCountyBoundaries(): LoadedCounty[] {
       features: { properties: { name: string; name_sw?: string }; geometry: Geometry }[];
     };
     boundariesCache = geo.features.map((f) => {
-      const ring = ringOf(f.geometry);
-      const { centroid, bbox } = centroidAndBbox(ring);
+      const samples = countySamples(f.geometry);
+      // NDVI remains a local sample. Use an interior sampling point, never a
+      // vertex average that can lie outside a concave county or inside a hole.
+      const meanLat = samples.reduce((n, p) => n + p.lat, 0) / samples.length;
+      const meanLng = samples.reduce((n, p) => n + p.lng, 0) / samples.length;
+      const centroid = [...samples].sort((a, b) => Math.hypot(a.lat - meanLat, a.lng - meanLng) - Math.hypot(b.lat - meanLat, b.lng - meanLng))[0];
       return {
         name: f.properties.name,
         name_sw: f.properties.name_sw ?? f.properties.name,
         geometry: f.geometry,
         centroid,
-        bbox,
+        samples,
       };
     });
   } catch (err) {
@@ -162,35 +147,13 @@ function loadCountyBoundaries(): LoadedCounty[] {
   return boundariesCache;
 }
 
-function ringOf(geometry: Geometry): [number, number][] {
-  if (geometry.type === "Polygon") return geometry.coordinates[0] as [number, number][];
-  if (geometry.type === "MultiPolygon") return geometry.coordinates[0][0] as [number, number][];
-  return [];
-}
-
-function centroidAndBbox(ring: [number, number][]): { centroid: { lat: number; lng: number }; bbox: Bbox } {
-  if (!ring.length) return { centroid: { lat: -1.09, lng: 37.0 }, bbox: [36.9, -1.2, 37.1, -1.0] };
-  let sumLng = 0, sumLat = 0;
-  let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
-  for (const [lng, lat] of ring) {
-    sumLng += lng;
-    sumLat += lat;
-    if (lng < minLng) minLng = lng;
-    if (lng > maxLng) maxLng = lng;
-    if (lat < minLat) minLat = lat;
-    if (lat > maxLat) maxLat = lat;
-  }
-  return {
-    centroid: { lat: sumLat / ring.length, lng: sumLng / ring.length },
-    bbox: [minLng, minLat, maxLng, maxLat],
-  };
-}
-
 // Weather (real, batched Open-Meteo)
 
 export interface CountyWeather {
   tempC: number;
   rh: number;
+  spatial?: SpatialSummary;
+  sampleCount?: number;
   rainTodayMm: number | null;
   soilMoisture: number | null;
   hours: OutlookHour[];
@@ -230,7 +193,7 @@ function regionalHour(hour: string, tempC: number | null, rh: number | null): Ou
 export function parseCountyWeather(loc: OpenMeteoLocation | undefined, nowMs: number): CountyWeather | null {
   const tempC = loc?.current?.temperature_2m;
   const rh = loc?.current?.relative_humidity_2m;
-  if (tempC == null || rh == null) return null;
+  if (tempC == null || rh == null || !Number.isFinite(tempC) || !Number.isFinite(rh)) return null;
 
   const today = nairobiDate(nowMs);
   const h = loc?.hourly;
@@ -251,8 +214,8 @@ export function parseCountyWeather(loc: OpenMeteoLocation | undefined, nowMs: nu
   };
 }
 
-// One request covers all 11 counties, so a refusal empties the whole map. The
-// last answer stands in for up to an hour, and the page says when it was read.
+// Reuse successful spatial batches briefly and retain a same-day fallback
+// for up to an hour, with the original read time exposed to the UI.
 const WEATHER_TTL_MS = 60 * 60_000;
 let lastWeather: { at: number; data: (CountyWeather | null)[] } | null = null;
 
@@ -261,20 +224,57 @@ export function regionalWeatherAsOf(nowMs: number = Date.now()): number | null {
   return lastWeather && nowMs - lastWeather.at > 60_000 ? lastWeather.at : null;
 }
 
-async function fetchRegionalWeather(counties: LoadedCounty[], nowMs: number): Promise<(CountyWeather | null)[]> {
-  const lats = counties.map((c) => c.centroid.lat).join(",");
-  const lngs = counties.map((c) => c.centroid.lng).join(",");
-  const url =
-    `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lngs}` +
-    `&current=temperature_2m,relative_humidity_2m&hourly=temperature_2m,relative_humidity_2m,soil_moisture_0_to_7cm` +
-    `&daily=precipitation_sum&forecast_days=1&timezone=Africa%2FNairobi`;
+export function aggregateCountyWeather(samples: SpatialSample[], data: (CountyWeather | null)[]): CountyWeather | null {
+  const stat = (get: (w: CountyWeather) => number | null) => summarizeSamples(samples, data.map((w) => w ? get(w) : null));
+  const temp = stat((w) => w.tempC), humidity = stat((w) => w.rh);
+  if (temp.mean == null || humidity.mean == null) return null;
+  const spatial = stat((w) => shadeWbgtFromHumidity(w.tempC, w.rh));
+  const hours = OUTLOOK_HOURS.map((hour, i) => {
+    const temperature = stat((w) => w.hours[i]?.temp_c ?? null);
+    const wbgt = stat((w) => w.hours[i]?.wbgt_c ?? null);
+    return { hour, temp_c: temperature.mean == null ? null : round1(temperature.mean),
+      wbgt_c: wbgt.mean == null ? null : round1(wbgt.mean),
+      category: wbgt.mean == null ? null : wbgtToRisk(wbgt.mean),
+      temp_source: temperature.mean == null ? null : "regional_forecast" as const,
+      wbgt_source: wbgt.mean == null ? null : "regional_forecast" as const,
+      spatial: { temperature, wbgt } };
+  });
+  return { tempC: temp.mean, rh: humidity.mean, spatial, sampleCount: samples.length,
+    rainTodayMm: stat((w) => w.rainTodayMm).mean,
+    soilMoisture: stat((w) => w.soilMoisture).mean, hours };
+}
 
-  const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-  if (!res.ok) throw new Error(`Open-Meteo regional HTTP ${res.status}`);
-  const json = (await res.json()) as OpenMeteoLocation[] | OpenMeteoLocation;
-  const list = Array.isArray(json) ? json : [json]; // single-county requests aren't array-wrapped
-  const parsed = counties.map((_, i) => parseCountyWeather(list[i], nowMs));
-  if (parsed.some((w) => w !== null)) lastWeather = { at: nowMs, data: parsed };
+async function fetchRegionalWeather(counties: LoadedCounty[], nowMs: number): Promise<(CountyWeather | null)[]> {
+  if (lastWeather && nowMs >= lastWeather.at && nowMs - lastWeather.at < 5 * 60_000 && nairobiDate(nowMs) === nairobiDate(lastWeather.at)) return lastWeather.data;
+  const points = counties.flatMap((c) => c.samples);
+  const values: (CountyWeather | null)[] = points.map(() => null);
+  // Bounded batches keep URLs small and isolate upstream failures. Four requests
+  // run at a time. Missing batches count against each county's coverage gate.
+  const batches = Array.from({ length: Math.ceil(points.length / 40) }, (_, i) => i * 40);
+  let cursor = 0;
+  await Promise.all(Array.from({ length: Math.min(4, batches.length) }, async () => {
+    while (cursor < batches.length) {
+      const offset = batches[cursor++];
+      const batch = points.slice(offset, offset + 40);
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${batch.map((p) => p.lat.toFixed(5)).join(",")}&longitude=${batch.map((p) => p.lng.toFixed(5)).join(",")}` +
+        `&current=temperature_2m,relative_humidity_2m&hourly=temperature_2m,relative_humidity_2m,soil_moisture_0_to_7cm&daily=precipitation_sum&forecast_days=1&timezone=Africa%2FNairobi`;
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+        if (!res.ok) continue;
+        const json = await res.json() as OpenMeteoLocation[] | OpenMeteoLocation;
+        const list = Array.isArray(json) ? json : [json];
+        batch.forEach((_, i) => { values[offset + i] = parseCountyWeather(list[i], nowMs); });
+      } catch { /* Missing samples remain null. */ }
+    }
+  }));
+  let offset = 0;
+  const parsed = counties.map((c) => {
+    const weather = aggregateCountyWeather(c.samples, values.slice(offset, offset + c.samples.length));
+    offset += c.samples.length;
+    return weather;
+  });
+  if (!parsed.some(Boolean)) throw new Error("No county has sufficient spatial coverage");
+  lastWeather = { at: nowMs, data: parsed };
   return parsed;
 }
 
@@ -333,7 +333,7 @@ export function stationOutlookHours(nowMs: number, station: StationOverride, reg
   });
 }
 
-// NDVI (real, per-county Copernicus Sentinel-2 statistics)
+// NDVI: local sample boxes, explicitly not county-wide statistics.
 
 const NDVI_TTL_MS = 6 * 3600_000;
 const NDVI_BOX_HALF_DEG = 0.02; // ~2 km half-width sample box around each centroid
@@ -352,6 +352,7 @@ async function getRegionalNdvi(counties: LoadedCounty[]): Promise<Record<string,
     const to = new Date(Date.now() - 86400_000).toISOString().slice(0, 10);
     const results = await Promise.allSettled(
       counties.map((c) => {
+        if (!c.centroid) return Promise.resolve(null);
         const box: Bbox = [
           c.centroid.lng - NDVI_BOX_HALF_DEG,
           c.centroid.lat - NDVI_BOX_HALF_DEG,
@@ -378,34 +379,24 @@ async function getRegionalNdvi(counties: LoadedCounty[]): Promise<Record<string,
 /** Indicators for one county. `meanTemp` is the mean current temperature of
  * the counties Open-Meteo answered for. */
 export function countyProperties(
-  county: { name: string; name_sw: string },
+  county: { name: string; name_sw: string; centroid?: { lat: number; lng: number }; samples?: SpatialSample[] },
   w: CountyWeather | null,
   ndvi: number | null,
   meanTemp: number | null,
   station: StationOverride | undefined,
   nowMs: number,
 ): CountyFeature["properties"] {
-  const isStationCounty = station?.countyName === county.name && station.isRealData;
-  const regionalHours = w?.hours ?? OUTLOOK_HOURS.map(emptyHour);
+  // Station observations belong to the point marker; never paint a county.
+  void station;
+  void nowMs;
+  const outlookHours = w?.hours ?? OUTLOOK_HOURS.map(emptyHour);
+  const wbgt = w?.spatial?.mean ?? (w ? shadeWbgtFromHumidity(w.tempC, w.rh) : null);
+  const outlookCategory = wbgt == null ? null : wbgtToRisk(wbgt);
+  const confidence = w ? "MODERATE" as const : "LOW" as const;
+  const sources = w ? ["Open-Meteo"] : [];
+  if (ndvi != null) sources.push("Copernicus Sentinel-2 (local sample)");
 
-  let outlookCategory: RiskLevel | null = w ? wbgtToRisk(shadeWbgtFromHumidity(w.tempC, w.rh)) : null;
-  let outlookHours = regionalHours;
-  let confidence: CountyFeature["properties"]["confidence"] = w ? "MODERATE" : "LOW";
-  let sources = w ? ["Open-Meteo"] : [];
-  // The gauge is the only measured rainfall on this map. Kiambu keeps the model
-  // total when the gauge missed too much of the day, as every other county does.
-  const gaugeRain = isStationCounty ? station!.rainTodayMm : null;
-  if (isStationCounty) {
-    outlookCategory = wbgtToRisk(station!.wbgt);
-    outlookHours = stationOutlookHours(nowMs, station!, regionalHours);
-    confidence = "HIGH";
-    sources = gaugeRain == null
-      ? ["Conduit station", ...sources]
-      : ["Conduit station", STATION_RAIN_SOURCE, ...sources];
-  }
-  if (ndvi != null) sources = [...sources, "Copernicus Sentinel-2"];
-
-  const rainToday = gaugeRain ?? w?.rainTodayMm ?? null;
+  const rainToday = w?.rainTodayMm ?? null;
   const soilMoisture = w?.soilMoisture ?? null;
   return {
     name: county.name,
@@ -418,6 +409,8 @@ export function countyProperties(
     soil_moisture: soilMoisture,
     flood_risk: computeFloodRisk(rainToday, soilMoisture),
     ndvi_mean: ndvi,
+    ndvi_sample: county.centroid ?? null,
+    spatial: { method: "10 × 10 bounding-grid cell centres inside the county; cosine-latitude area weights; minimum 80% valid coverage. Approximate sampled-area statistics, not native-grid zonal statistics.", sample_count: county.samples?.length ?? w?.sampleCount ?? 0, threshold_wbgt_c: 21, current: w?.spatial ?? null },
     sources,
     outlook_hours: outlookHours,
   };
@@ -432,7 +425,7 @@ export async function getRegionalOutlook(
 
   const [weather, ndviByCounty] = await Promise.all([
     fetchRegionalWeather(counties, nowMs).catch((err) => {
-      const held = lastWeather && nowMs - lastWeather.at < WEATHER_TTL_MS ? lastWeather.data : null;
+      const held = lastWeather && nowMs - lastWeather.at < WEATHER_TTL_MS && nairobiDate(lastWeather.at) === nairobiDate(nowMs) ? lastWeather.data : null;
       console.warn(
         `[afya] Regional weather fetch failed, ${held ? "showing the last read" : "counties marked unavailable"}:`,
         (err as Error).message,
@@ -448,10 +441,7 @@ export async function getRegionalOutlook(
   const features: CountyFeature[] = counties.map((c, i) => ({
     type: "Feature",
     properties: countyProperties(c, weather[i], ndviByCounty[c.name] ?? null, meanTemp, stationOverride, nowMs),
-    geometry: {
-      type: "Polygon",
-      coordinates: ringToPolygonCoords(c.geometry),
-    },
+    geometry: c.geometry,
   }));
 
   return { type: "FeatureCollection", features };
@@ -492,12 +482,6 @@ export function computeFloodRisk(rainTodayMm: number | null, soilMoisture: numbe
   if (rainTodayMm >= FLOOD_ELEVATED_RAIN_MM) return "ELEVATED";
   if (rainTodayMm >= FLOOD_WET_SOIL_RAIN_MM) return wet == null ? null : wet ? "ELEVATED" : "LOW";
   return "LOW";
-}
-
-function ringToPolygonCoords(geometry: Geometry): [number, number][][] {
-  if (geometry.type === "Polygon") return geometry.coordinates as [number, number][][];
-  if (geometry.type === "MultiPolygon") return geometry.coordinates[0] as [number, number][][];
-  return [[]];
 }
 
 // Satellite acquisitions metadata (demo fallback; live path in

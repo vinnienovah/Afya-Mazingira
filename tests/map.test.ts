@@ -151,21 +151,22 @@ test("a stale station is not shown as Kiambu's current state", () => {
   assert.ok(p.outlook_hours.every((h) => h.temp_source !== "station_measured"));
 });
 
-test("Kiambu's rain today is the station gauge when the gauge covered the day", () => {
+test("a local rain gauge never replaces Kiambu county rainfall", () => {
   const now = Date.parse(eat("13:10"));
   const weather = () => parseCountyWeather(countyForecast(), now);
   const kiambu = { name: "Kiambu", name_sw: "Kiambu" };
 
   const measured = countyProperties(kiambu, weather(), null, 17.5, { ...station(now, []), rainTodayMm: 32.4 }, now);
-  assert.equal(measured.rain_today_mm, 32.4);
-  assert.deepEqual(measured.sources, ["Conduit station", STATION_RAIN_SOURCE, "Open-Meteo"]);
-  // 32.4 mm on soil at 0.31 m³/m³, where the model's 6.4 mm reached only ELEVATED.
-  assert.equal(measured.flood_risk, "HIGH");
+  assert.equal(measured.rain_today_mm, 6.4);
+  assert.deepEqual(measured.sources, ["Open-Meteo"]);
+  assert.ok(!measured.sources.includes(STATION_RAIN_SOURCE));
+  // The station's 32.4 mm cannot raise the county-wide regional category.
+  assert.equal(measured.flood_risk, "ELEVATED");
 
   // Too little of the day at the gauge: the model's rain stands, unmarked.
   const modelled = countyProperties(kiambu, weather(), null, 17.5, station(now, []), now);
   assert.equal(modelled.rain_today_mm, 6.4);
-  assert.deepEqual(modelled.sources, ["Conduit station", "Open-Meteo"]);
+  assert.deepEqual(modelled.sources, ["Open-Meteo"]);
   assert.equal(modelled.flood_risk, "ELEVATED");
 
   // The gauge stands in Kiambu only.
@@ -279,7 +280,8 @@ test("the county request asks for the 0-7 cm soil layer, and the reading comes f
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     requested = String(input);
     if (!requested.includes("api.open-meteo.com")) return new Response("{}", { status: 200 });
-    const body = Array.from({ length: 20 }, () => ({
+    const count = new URL(String(input)).searchParams.get("latitude")!.split(",").length;
+    const body = Array.from({ length: count }, () => ({
       current: { temperature_2m: 24, relative_humidity_2m: 55 },
       hourly: {
         time: hours,
@@ -298,7 +300,7 @@ test("the county request asks for the 0-7 cm soil layer, and the reading comes f
     // The free tier refuses this eleven-county batch at two days.
     assert.ok(requested.includes("forecast_days=1"), requested);
     const county = out.features[0].properties;
-    assert.equal(county.soil_moisture, 0.26);
+    assert.ok(Math.abs(county.soil_moisture! - 0.26) < 1e-10);
     // 8 mm on soil just above the 0.25 m³/m³ bar.
     assert.equal(county.flood_risk, "ELEVATED");
   } finally {
@@ -324,7 +326,8 @@ test("when the county fetch is refused, the last read still fills the map", asyn
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     if (!String(input).includes("api.open-meteo.com")) return new Response("{}", { status: 200 });
     if (refuse) return new Response("rate limited", { status: 429 });
-    const body = Array.from({ length: 20 }, (_, i) => location(24 + (i % 5)));
+    const count = new URL(String(input)).searchParams.get("latitude")!.split(",").length;
+    const body = Array.from({ length: count }, (_, i) => location(24 + (i % 5)));
     return new Response(JSON.stringify(body), { status: 200 });
   }) as typeof fetch;
   try {
@@ -342,4 +345,13 @@ test("when the county fetch is refused, the last read still fills the map", asyn
   } finally {
     globalThis.fetch = realFetch;
   }
+});
+
+
+test("even a fresh station cannot replace county-wide regional weather", () => {
+  const now = Date.parse(eat("10:30"));
+  const w = parseCountyWeather(countyForecast(), now);
+  const withStation = countyProperties({ name: "Kiambu", name_sw: "Kiambu" }, w, null, 20, station(now, []), now);
+  const withoutStation = countyProperties({ name: "Kiambu", name_sw: "Kiambu" }, w, null, 20, undefined, now);
+  assert.deepEqual(withStation, withoutStation);
 });
