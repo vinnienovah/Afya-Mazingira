@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useLanguage } from "@/lib/contexts/language";
 import { useSituation } from "@/lib/contexts/situation";
 import { RISK_META } from "@/lib/afya/constants";
+import { currentBand } from "@/lib/afya/display";
 import { fill, fmtAsOf } from "@/lib/afya/format";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -87,6 +88,8 @@ export default function MapPage() {
   // Without credentials every county's NDVI is null, so the scale would be a
   // legend for a layer that has nothing in it.
   const ndviEmpty = layer === "vegetation" && !satelliteConfigured;
+  const stationStatus = !situation ? t("data_unavailable") : situation.demo_mode ? "DEMO" :
+    `${situation.data_source === "CONDUIT_ARCHIVE" ? t("archive_notice") : t("ground_measurement")} · ${fmtAsOf(situation.current.time, lang)}`;
 
   const legend: [string, string][] =
     layer === "outlook"
@@ -112,6 +115,7 @@ export default function MapPage() {
         </div>
       </div>
 
+      <p className="rounded-xl border border-afya-border bg-white px-4 py-3 text-sm text-afya-muted" role="note">{t("map_spatial_note")}</p>
       {/* Layer control */}
       <div className="rounded-xl border border-afya-border bg-white p-1 flex gap-0.5 flex-wrap w-fit">
         {LAYER_META.map((lm) => (
@@ -164,7 +168,7 @@ export default function MapPage() {
                   onSelectCounty={setSelectedName}
                   onSelectStation={() => setSelectedName(null)}
                   stationLabel={t("jkuat_station")}
-                  stationSubLabel={t("ground_measurement")}
+                  stationSubLabel={stationStatus}
                   lang={lang}
                   t={t}
                 />
@@ -206,7 +210,7 @@ export default function MapPage() {
                   )}
                   aria-hidden="true"
                 />
-                Conduit · {t("measured_label")} · JKUAT
+                Conduit · JKUAT · {stationStatus}
               </span>
               <span className="text-[10px] text-afya-muted">
                 {t("map_counties_source")} · {t("regional_model_label")}
@@ -418,8 +422,8 @@ function CountyPanel({
         {hasGround ? t("ground_regional_sub") : t(regionalSubKey(p))}
       </p>
 
-      {p.outlook_category ? (
-        <RiskChip level={p.outlook_category} size="md" />
+      {hour?.category ? (
+        <RiskChip level={hour.category} size="md" />
       ) : (
         <span className="inline-flex rounded-full border border-dashed border-[#68756F] px-3 py-1 text-xs font-bold text-afya-charcoal" style={{ backgroundColor: NO_DATA_COLOUR }}>
           {unavailable}
@@ -461,12 +465,21 @@ function CountyPanel({
           </div>
         )}
 
+        {hour?.spatial && (
+          <div className="rounded-xl border border-afya-border p-3 space-y-2 text-xs">
+            <h4 className="font-semibold">{t("map_sample_mean")}</h4>
+            <p>{t("map_sample_coverage")}: {hour.spatial.wbgt.valid_samples}/{hour.spatial.wbgt.total_samples} ({hour.spatial.wbgt.coverage_pct.toFixed(0)}%)</p>
+            <p>{t("map_sample_range")} · WBGT: {fmt(hour.spatial.wbgt.min, 1, "°C")} – {fmt(hour.spatial.wbgt.max, 1, "°C")}</p>
+            <p>{t("map_sample_range")} · {t("map_air_temp")}: {fmt(hour.spatial.temperature.min, 1, "°C")} – {fmt(hour.spatial.temperature.max, 1, "°C")}</p>
+            <p>{t("map_above_threshold")}: {fmt(hour.spatial.wbgt.above_pct, 1, "%")}</p>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-2">
           {[
             { l: t("map_temp_vs_mean"), v: p.temperature_anomaly_c == null ? unavailable : `${p.temperature_anomaly_c >= 0 ? "+" : ""}${p.temperature_anomaly_c}°C` },
             { l: t("map_rain_today"), v: fmt(p.rain_today_mm, 1, " mm") },
             { l: t("map_soil_0_7"), v: p.soil_moisture == null ? unavailable : `${(p.soil_moisture * 100).toFixed(0)}%` },
-            { l: "NDVI", v: p.ndvi_mean !== null ? p.ndvi_mean.toFixed(2) : "-" },
+            { l: t("map_local_ndvi"), v: p.ndvi_mean !== null ? p.ndvi_mean.toFixed(2) : "-" },
             { l: t("confidence"), v: p.confidence },
           ].map((ind, i) => (
             <div key={i} className="rounded-lg border border-afya-border bg-afya-canvas/50 px-2.5 py-2">
@@ -501,6 +514,7 @@ function StationPanel({
 }) {
   return (
     <Card>
+      <p className="mb-3 text-xs text-afya-muted">{t("map_station_scope")}</p>
       <div className="flex items-center gap-2 mb-3">
         <span
           className={cn(
@@ -511,7 +525,8 @@ function StationPanel({
         />
         <div>
           <h3 className="font-bold text-afya-charcoal text-sm">{t("jkuat_station")}</h3>
-          <p className="text-[10px] text-afya-muted">{t("ground_measurement")} · {t("measured_label")}</p>
+          <p className="text-xs text-afya-muted">{situation?.demo_mode ? "DEMO" : t("ground_measurement")}</p>
+          {situation && <p className="text-xs text-afya-muted">{t("data_as_of")} {fmtAsOf(situation.current.time)} · {situation.quality.status}</p>}
         </div>
       </div>
       {situation ? (
@@ -522,7 +537,7 @@ function StationPanel({
           </div>
           <div className="flex items-center justify-between">
             <span className="text-xs text-afya-muted">{t("thermal_exposure")}</span>
-            <RiskChip level={situation.risk.thermal} size="sm" />
+            <RiskChip level={currentBand(situation)} size="sm" />
           </div>
           <div className="flex items-center justify-between text-xs">
             <span className="text-afya-muted">{t("expected_peak")}</span>

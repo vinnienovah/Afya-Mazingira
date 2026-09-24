@@ -16,15 +16,15 @@ const PRIMARY = [
 ];
 
 const OVERFLOW = [
-  { href: "/farm",          icon: Sprout,       key: "nav_farm" },
-  { href: "/climate",       icon: LineChart,    key: "nav_climate" },
-  { href: "/intelligence",  icon: BrainCircuit, key: "nav_intelligence" },
-  { href: "/operations",    icon: Building2,    key: "nav_operations" },
-  { href: "/flood",         icon: Waves,        key: "nav_flood" },
-  { href: "/health",        icon: Activity,     key: "nav_health" },
-  { href: "/notifications", icon: Bell,         key: "nav_notifications" },
-  { href: "/profile",       icon: User,         key: "nav_profile" },
-  { href: "/about",         icon: Info,         key: "about_title" },
+  { href: "/farm", icon: Sprout, key: "nav_farm", group: "nav_group_plan" },
+  { href: "/climate", icon: LineChart, key: "nav_climate", group: "nav_group_explore" },
+  { href: "/flood", icon: Waves, key: "nav_flood", group: "nav_group_explore" },
+  { href: "/intelligence", icon: BrainCircuit, key: "nav_intelligence", group: "nav_group_evidence" },
+  { href: "/health", icon: Activity, key: "nav_health", group: "nav_group_evidence" },
+  { href: "/operations", icon: Building2, key: "nav_operations", group: "nav_group_evidence" },
+  { href: "/notifications", icon: Bell, key: "nav_notifications", group: "nav_group_account" },
+  { href: "/profile", icon: User, key: "nav_profile", group: "nav_group_account" },
+  { href: "/about", icon: Info, key: "about_title", group: "nav_group_account" },
 ];
 
 export default function MobileNav() {
@@ -63,8 +63,12 @@ export default function MobileNav() {
             <X className="w-4 h-4" strokeWidth={2} />
           </button>
         </div>
-        <nav className="px-4 pb-6 grid grid-cols-2 gap-1" aria-label="More navigation">
-          {OVERFLOW.map(({ href, icon: Icon, key }) => (
+        <nav className="px-4 pb-6 max-h-[70vh] overflow-y-auto" aria-label="More navigation">
+          {[...new Set(OVERFLOW.map((item) => item.group))].map((group) => (
+            <section key={group} aria-label={t(group)}>
+              <h2 className="px-3 pt-3 text-xs font-bold text-afya-muted">{t(group)}</h2>
+              <div className="grid grid-cols-2 gap-1">
+              {OVERFLOW.filter((item) => item.group === group).map(({ href, icon: Icon, key }) => (
             <Link
               key={href}
               href={href}
@@ -80,6 +84,9 @@ export default function MobileNav() {
               <Icon className="w-4 h-4 shrink-0" strokeWidth={1.8} aria-hidden="true" />
               <span>{t(key)}</span>
             </Link>
+          ))}
+              </div>
+            </section>
           ))}
         </nav>
       </div>
