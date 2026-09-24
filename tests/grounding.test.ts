@@ -92,16 +92,16 @@ test("Swahili replies with °C, ranges and Swahili clock times pass", () => {
   assertPasses("Ubora wa data: NZURI. Kipimo cha mwisho kina umri wa dakika 31.", g);
 });
 
-test("farm answers may use the advice's depth range, soil moisture and rain", () => {
+test("farm answers may use the advised depth, the depletion, soil moisture and rain", () => {
   const g = grounding("en", { farm: true, question: "Should I irrigate my maize today, and how much?" });
   // The live English farm reply.
   assertPasses(
-    "Yes, you should irrigate your maize today. The recommended irrigation action is IRRIGATE_NOW with a depth of 65 mm. " +
+    "Yes, you should irrigate your maize today. The recommended irrigation action is IRRIGATE_NOW with a depth of 110 mm. " +
       "Your current soil moisture is at 18 percent, and root-zone depletion is at 100 percent.",
     g,
   );
-  assertPasses("Irrigate now with about 65–110 mm, since crop demand (2.89 mm a day) exceeded the 14.9 mm of rain in 7 days.", g);
-  assertPasses("Ndiyo, mwagilia mahindi leo, takriban milimita 65 hadi 110. Unyevu wa udongo ni asilimia 18 tu.", grounding("sw", { farm: true }));
+  assertPasses("Irrigate now with about 110 mm: the root zone is 110 mm short of full against a refill point of 77 mm.", g);
+  assertPasses("Ndiyo, mwagilia mahindi leo, takriban milimita 110. Unyevu wa udongo ni asilimia 18 tu.", grounding("sw", { farm: true }));
 });
 
 test("a plan's own window may be explained, and the default window may not", () => {

@@ -13,7 +13,7 @@ import {
 } from "./forecast-engine";
 import { getClimatology } from "./climatology-source";
 import evaluation from "./model/forecast-evaluation.json";
-import { computeThermalRisk, computeRainProbability, computeUncertainty } from "./risk-engine";
+import { computeThermalRisk, computeRainProbability, computeUncertainty, rainProbabilityAt } from "./risk-engine";
 import { findBestWindowFromNow } from "./best-time-engine";
 import { evaluateQuality } from "./data-quality";
 import { groupStatus } from "./sentinel";
@@ -64,7 +64,7 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
   // that fails them lowers data quality, so a faulty sensor cannot feed the
   // forecast quietly. Rain is left out: the heat pipeline does not use it, and
   // the CHORDS feed does not carry it.
-  const failing = groupStatus(series.slice(-96)).filter((g) => g.status === "bad" && g.group !== "rain");
+  const failing = groupStatus(series.slice(-96)).filter((g) => g.status === "bad" && !g.group.startsWith("rain_gauge"));
   for (const g of failing) quality.flags.push(`station_health_bad:${g.group}`);
   if (failing.length && quality.status === "GOOD") quality.status = "DEGRADED";
   // If the +9h forecast horizon has fully elapsed, the situation is too stale
@@ -158,6 +158,8 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
   // forecast never recommends an already-elapsed window)
   // People plan outdoor work and exercise in daylight, so the headline window
   // lies between sunrise and sunset at the station (the engine's default).
+  // The look-ahead runs past the rain model's three hours, so the chance is
+  // given per time: windows beyond it are ranked and explained without one.
   const best_time: BestTimeResult | null = findBestWindowFromNow(
     forecast_series,
     activityKey,
@@ -165,7 +167,7 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Situat
     10, // 10-hour look-ahead window
     quality,
     effectiveNow,
-    { rainProbability: risk.rain_probability },
+    { rainProbability: rainProbabilityAt(risk.rain_probability, currentObs.ts) },
   );
 
   // Step 10: What moves the +3 h forecast, from the model itself

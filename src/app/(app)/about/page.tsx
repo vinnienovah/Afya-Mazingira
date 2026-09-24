@@ -11,7 +11,8 @@ export default function AboutPage() {
   const PROVENANCE = [
     {
       icon: <Radio className="w-5 h-5 text-afya-green" />,
-      name: "Conduit",
+      name_en: "Conduit",
+      name_sw: "Conduit",
       detail_en: "Local environmental measurements · JHUB Africa / JKUAT",
       detail_sw: "Vipimo vya mazingira ya kimaeneo · JHUB Africa / JKUAT",
       type: {
@@ -21,44 +22,49 @@ export default function AboutPage() {
     },
     {
       icon: <Globe className="w-5 h-5 text-afya-rain" />,
-      name: "ERA5",
+      name_en: "ERA5",
+      name_sw: "ERA5",
       detail_en: "Regional atmospheric reanalysis · ECMWF / Copernicus, through the Open-Meteo archive",
       detail_sw: "Uchambuzi upya wa anga ya kikanda · ECMWF / Copernicus, kupitia kumbukumbu ya Open-Meteo",
       type: { en: "REGIONAL MODEL · ~28 km · hourly · about 5 days behind", sw: "MFUMO WA KIKANDA · ~km 28 · kila saa · huchelewa takriban siku 5" },
     },
     {
       icon: <CloudRain className="w-5 h-5 text-afya-rain" />,
-      name: "Rainfall",
+      name_en: "Rainfall",
+      name_sw: "Mvua",
       detail_en: "The station's own gauge 1, read from its daily running total, for the farm water budget; Open-Meteo's regional model for 7- and 30-day context and where the gauge is short of data",
       detail_sw: "Kipima mvua 1 cha kituo, kinachosomwa kutoka jumla yake ya kila siku, kwa hesabu ya maji ya shamba; mfumo wa kikanda wa Open-Meteo kwa muktadha wa siku 7 na 30 na pale kipima kinapokosa data",
       type: { en: "GROUND MEASUREMENT + REGIONAL MODEL · daily", sw: "KIPIMO CHA ARDHI + MFUMO WA KIKANDA · kila siku" },
     },
     {
       icon: <CloudSun className="w-5 h-5 text-afya-rain" />,
-      name: "Open-Meteo forecast",
+      name_en: "Open-Meteo forecast",
+      name_sw: "Utabiri wa Open-Meteo",
       detail_en: "County outlook on the Risk Map, and plans for tomorrow",
       detail_sw: "Utabiri wa kaunti kwenye Ramani ya Hatari, na mipango ya kesho",
       type: { en: "REGIONAL FORECAST · hourly", sw: "UTABIRI WA KIKANDA · kila saa" },
     },
     {
       icon: <Satellite className="w-5 h-5 text-afya-teal" />,
-      name: "Sentinel-2",
-      detail_en: "Vegetation / NDVI · ESA Copernicus",
-      detail_sw: "Mimea / NDVI · ESA Copernicus",
-      type: { en: "SATELLITE-DERIVED · 10 m · ~5-day revisit", sw: "KUTOKA SAYETI · 10 m · ~siku 5" },
+      name_en: "Sentinel-2",
+      name_sw: "Sentinel-2",
+      detail_en: "Vegetation / NDVI · ESA Copernicus. Only where the server holds Copernicus credentials: without them no NDVI is computed and the Risk Map's vegetation layer stays empty",
+      detail_sw: "Mimea / NDVI · ESA Copernicus. Ni pale tu seva ina vitambulisho vya Copernicus: bila hivyo NDVI haikokotolewi na safu ya mimea kwenye Ramani ya Hatari inabaki tupu",
+      type: { en: "SATELLITE-DERIVED · 10 m · ~5-day revisit · NEEDS CREDENTIALS", sw: "KUTOKA SAYETI · 10 m · ~siku 5 · INAHITAJI VITAMBULISHO" },
     },
     {
       icon: <Satellite className="w-5 h-5 text-afya-teal" />,
-      name: "Sentinel-3 SLSTR",
-      detail_en: "Acquisition dates only; land surface temperature is not computed · ESA Copernicus",
-      detail_sw: "Tarehe za uchukuzi pekee; joto la uso wa ardhi halikokotolewi · ESA Copernicus",
-      type: { en: "SATELLITE-DERIVED · dates", sw: "KUTOKA SAYETI · tarehe" },
+      name_en: "Sentinel-3 SLSTR",
+      name_sw: "Sentinel-3 SLSTR",
+      detail_en: "Acquisition dates only; land surface temperature is not computed · ESA Copernicus. On the same credentials: without them no acquisition is listed at all",
+      detail_sw: "Tarehe za uchukuzi pekee; joto la uso wa ardhi halikokotolewi · ESA Copernicus. Kwa vitambulisho vile vile: bila hivyo hakuna uchukuzi unaoorodheshwa",
+      type: { en: "SATELLITE-DERIVED · dates · NEEDS CREDENTIALS", sw: "KUTOKA SAYETI · tarehe · INAHITAJI VITAMBULISHO" },
     },
   ];
 
   const LIMITS = [
     { icon: <AlertTriangle className="w-4 h-4" />, en: "Does not provide medical diagnosis or clinical advice", sw: "Haitoi utambuzi wa matibabu au ushauri wa kliniki" },
-    { icon: <AlertTriangle className="w-4 h-4" />, en: "Not a street-level flood predictor", sw: "Siyo utabiri wa mafuriko ya kiwango cha barabara" },
+    { icon: <AlertTriangle className="w-4 h-4" />, en: "Does not predict flooding at any scale: the flood page shows rainfall and soil-saturation conditions only", sw: "Haitabiri mafuriko kwa kiwango chochote: ukurasa wa mafuriko unaonyesha hali ya mvua na ujaaji wa udongo pekee" },
     { icon: <AlertTriangle className="w-4 h-4" />, en: "Does not predict malaria, cholera, or asthma attacks", sw: "Haitabiri malaria, kipindupindu, au mapigo ya pumu" },
     { icon: <AlertTriangle className="w-4 h-4" />, en: "One station does not represent all of Juja", sw: "Kituo kimoja hakimwakilishi Juja nzima" },
     { icon: <AlertTriangle className="w-4 h-4" />, en: "Does not use generative AI as a forecasting engine", sw: "Haitumii AI ya kizalishaji kama injini ya utabiri" },
@@ -121,10 +127,10 @@ export default function AboutPage() {
         </div>
         <div className="space-y-3">
           {PROVENANCE.map((p) => (
-            <div key={p.name} className="flex items-start gap-3 rounded-xl border border-afya-border bg-afya-canvas/50 px-4 py-3">
+            <div key={p.name_en} className="flex items-start gap-3 rounded-xl border border-afya-border bg-afya-canvas/50 px-4 py-3">
               <span className="mt-0.5 shrink-0" aria-hidden="true">{p.icon}</span>
               <div className="flex-1 min-w-0">
-                <div className="font-semibold text-sm text-afya-charcoal">{p.name}</div>
+                <div className="font-semibold text-sm text-afya-charcoal">{lang === "sw" ? p.name_sw : p.name_en}</div>
                 <div className="text-xs text-afya-muted mt-0.5">{lang === "sw" ? p.detail_sw : p.detail_en}</div>
                 <div className="text-[10px] font-semibold text-afya-muted/60 uppercase tracking-wide mt-1">
                   {lang === "sw" ? p.type.sw : p.type.en}

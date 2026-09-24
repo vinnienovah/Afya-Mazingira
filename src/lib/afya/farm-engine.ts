@@ -6,21 +6,34 @@
 //     eq. 52, from a measured daily Tmax and Tmin, with extraterrestrial
 //     radiation for the station's latitude and the date (eq. 21)
 //   · Crop water requirement (ETc), single crop coefficient (ETc = Kc × ET₀)
-//   · Irrigation need, a 7-day budget of crop demand against effective rain
-//   · Spray suitability, wind drift + evaporation + wash-off risk windows
+//   · Irrigation need, the root-zone water balance of FAO-56 chapter 8: the
+//     depletion Dr is carried day by day and irrigation is due when it reaches
+//     the readily available water RAW = p × TAW (eqs. 82 and 83)
+//
+// Spray suitability is outside that: wind drift, evaporation and wash-off are
+// weighed against the project's own working limits, stated where they are set.
 //
 // This produces AGRONOMIC DECISION SUPPORT ONLY. It does not predict yield,
 // diagnose plant disease, or replace extension-officer judgement.
 
 import type { SituationResult } from "./types";
 import type { RegionalSoilMoisture } from "./sources-external";
+import { appliedByDate, normaliseLog, totalAppliedMm, type IrrigationEntry } from "./irrigation-log";
+import { isDaylight } from "./best-time-engine";
 import { JKUAT_COORDS } from "./constants";
 import { datesEnding, dayOfYear, nairobiDate } from "./nairobi-time";
 
 export type GrowthStage = "establishment" | "vegetative" | "flowering" | "maturity";
-export type IrrigationAction = "IRRIGATE_NOW" | "HOLD_RAIN_EXPECTED" | "NO_IRRIGATION";
+export type IrrigationAction = "IRRIGATE_NOW" | "HOLD_RAIN_EXPECTED" | "NO_IRRIGATION" | "DATA_TOO_THIN";
 export type WindowQuality = "GOOD" | "MARGINAL" | "AVOID";
 export type Confidence = "LOW" | "MODERATE" | "HIGH";
+
+/** Peak air temperatures (°C) at which a crop first shows stress, then more of it */
+export interface HeatThresholds {
+  mild: number;
+  moderate: number;
+  severe: number;
+}
 
 export interface CropProfile {
   key: string;
@@ -34,47 +47,80 @@ export interface CropProfile {
   depletion_fraction: number;
   /** Typical rainfall (mm) needed to justify planting in a rain-fed season */
   planting_rain_mm: number;
+  heat: HeatThresholds;
+  /** The stage that fails at HEAT_SENSITIVE_STAGE_SHIFT_C below those thresholds, or null */
+  heat_sensitive_stage: GrowthStage | null;
 }
 
 // Crops common to Kiambu / Juja smallholder and institutional farms.
-// Root depths and p for maize, beans, tomato and potato fall within FAO-56
-// Table 22 (Allen et al. 1998); the kale, coffee and napier values do not
-// come from that table.
+//
+// Kc maps the FAO-56 Table 12 curve onto the four stages this page offers:
+// establishment is Kc_ini, flowering is Kc_mid, maturity is Kc_end, and
+// vegetative stands for the development stage, which ramps from Kc_ini to
+// Kc_mid. Root depth and p come from FAO-56 Table 22, at the shallow end of
+// each range for the thin soils around Juja. Kale and napier are in neither
+// table: their figures are the project's own, set below the nearest FAO entry
+// (cabbage, grazing pasture) so a leaf crop and a cut fodder grass are watered
+// sooner and in smaller doses than the entry would suggest. planting_rain_mm
+// is the project's own throughout.
+//
+// The heat-stress thresholds are set from each species' optimum range in FAO
+// EcoCrop: the mild step sits at or just above the top of that range, and the
+// two above it mark failing pollen and visible damage. They are damage
+// thresholds, not the base, optimum and maximum that govern developmental rate
+// and that an agronomist would call the crop's cardinal temperatures.
+// Where a crop has a heat-sensitive reproductive stage the thresholds drop by
+// HEAT_SENSITIVE_STAGE_SHIFT_C: pollen viability and fruit set fail a few
+// degrees below the temperature that harms vegetative growth. Kale, napier and
+// coffee carry none: the page offers "flowering" for every crop, but for a leaf
+// crop, a cut fodder grass and a perennial tree it marks no such event.
 export const CROP_PROFILES: CropProfile[] = [
   {
+    // Grain maize, left to dry in the field: FAO-56 gives Kc_end 0.35 for that
+    // and 0.60 where the cob is picked green.
     key: "maize", label_en: "Maize", label_sw: "Mahindi",
-    kc: { establishment: 0.40, vegetative: 0.80, flowering: 1.20, maturity: 0.60 },
+    kc: { establishment: 0.30, vegetative: 0.80, flowering: 1.20, maturity: 0.35 },
     root_depth_m: 1.0, depletion_fraction: 0.55, planting_rain_mm: 40,
+    heat: { mild: 32, moderate: 35, severe: 38 }, heat_sensitive_stage: "flowering",
   },
   {
     key: "beans", label_en: "Beans", label_sw: "Maharagwe",
     kc: { establishment: 0.40, vegetative: 0.75, flowering: 1.15, maturity: 0.35 },
     root_depth_m: 0.6, depletion_fraction: 0.45, planting_rain_mm: 30,
+    heat: { mild: 28, moderate: 32, severe: 35 }, heat_sensitive_stage: "flowering",
   },
   {
     key: "kale", label_en: "Kale (sukuma wiki)", label_sw: "Sukuma wiki",
     kc: { establishment: 0.70, vegetative: 0.95, flowering: 1.05, maturity: 0.95 },
     root_depth_m: 0.4, depletion_fraction: 0.40, planting_rain_mm: 20,
+    heat: { mild: 28, moderate: 32, severe: 35 }, heat_sensitive_stage: null,
   },
   {
     key: "tomato", label_en: "Tomato", label_sw: "Nyanya",
     kc: { establishment: 0.60, vegetative: 0.90, flowering: 1.15, maturity: 0.80 },
     root_depth_m: 0.7, depletion_fraction: 0.40, planting_rain_mm: 25,
+    heat: { mild: 30, moderate: 33, severe: 36 }, heat_sensitive_stage: "flowering",
   },
   {
+    // Tuber set is the sensitive stage and begins at flowering, so the shift
+    // lands on the right weeks.
     key: "potato", label_en: "Potato", label_sw: "Viazi",
     kc: { establishment: 0.50, vegetative: 0.85, flowering: 1.15, maturity: 0.75 },
     root_depth_m: 0.5, depletion_fraction: 0.35, planting_rain_mm: 30,
+    heat: { mild: 26, moderate: 29, severe: 32 }, heat_sensitive_stage: "flowering",
   },
   {
+    // Arabica: FAO-56 Table 22 lists coffee (bare ground) with p 0.40.
     key: "coffee", label_en: "Coffee", label_sw: "Kahawa",
     kc: { establishment: 0.90, vegetative: 0.95, flowering: 0.95, maturity: 0.95 },
-    root_depth_m: 1.3, depletion_fraction: 0.50, planting_rain_mm: 50,
+    root_depth_m: 1.3, depletion_fraction: 0.40, planting_rain_mm: 50,
+    heat: { mild: 26, moderate: 30, severe: 34 }, heat_sensitive_stage: null,
   },
   {
     key: "napier", label_en: "Napier / fodder", label_sw: "Napier / malisho",
     kc: { establishment: 0.90, vegetative: 1.00, flowering: 1.05, maturity: 0.95 },
     root_depth_m: 1.0, depletion_fraction: 0.55, planting_rain_mm: 35,
+    heat: { mild: 35, moderate: 38, severe: 40 }, heat_sensitive_stage: null,
   },
 ];
 
@@ -83,6 +129,18 @@ export const CROP_KEYS = CROP_PROFILES.map((c) => c.key);
 /** The profile for a crop key, or null for a crop the advisory does not cover. */
 export function findCropProfile(key: string): CropProfile | null {
   return CROP_PROFILES.find((c) => c.key === key) ?? null;
+}
+
+// FAO-56 chapter 6 treats a crop whose Kc_end falls below about 0.45 as one
+// left to senesce and dry in the field, which is exactly the crop that should
+// not be watered through its last stage. Here that is grain maize and dry
+// beans; kale, napier, coffee, tomato and potato are picked green or keep
+// growing, and their Kc_end says so.
+const DRY_DOWN_KC_END = 0.45;
+
+/** True when the crop is left to dry in the field rather than watered to harvest. */
+export function driesDownAtMaturity(crop: CropProfile): boolean {
+  return crop.kc.maturity < DRY_DOWN_KC_END;
 }
 
 const round1 = (v: number) => Math.round(v * 10) / 10;
@@ -164,6 +222,40 @@ export function measuredTempRange(series: TempSlot[], endIso: string, hours = 24
   }
   if (!hoursSeen.size) return null;
   return { tmax_c: round1(tmax), tmin_c: round1(tmin), measured_hours: hoursSeen.size };
+}
+
+/** The station's own 15-minute slots and the instant a 24-hour window ends. */
+export interface MeasuredDay {
+  /** Slots oldest first, the same series the temperature range is read from */
+  series: TempSlot[];
+  /** ISO instant the window ends at */
+  end: string;
+}
+
+/** Measured hours of the `hours` up to `day.end` at or above `thresholdC`,
+ * to a tenth of an hour. Each slot stands for the spacing of the series, so on
+ * the station's quarter hours an hour above the threshold is four slots and
+ * not a curve fitted between them. Null when the window holds too little to
+ * count over. */
+export function measuredHoursAbove(
+  day: MeasuredDay,
+  thresholdC: number,
+  hours = 24,
+): number | null {
+  const end = Date.parse(day.end);
+  const start = end - hours * 3600_000;
+  const window = day.series.filter((o) => {
+    const t = Date.parse(o.ts);
+    return t > start && t <= end && isMeasured(o);
+  });
+  let step = Infinity;
+  for (let i = 1; i < window.length; i++) {
+    const gap = Date.parse(window[i].ts) - Date.parse(window[i - 1].ts);
+    if (gap > 0 && gap < step) step = gap;
+  }
+  if (!Number.isFinite(step)) return null;
+  const above = window.filter((o) => o.temp_sht >= thresholdC).length;
+  return round1((above * step) / 3600_000);
 }
 
 /** Measured Tmax and Tmin for each Nairobi calendar day in the series. */
@@ -300,14 +392,19 @@ export interface FarmInputs {
   /** Today in Nairobi, YYYY-MM-DD */
   today: string;
   et0: Et0Estimate;
-  /** ET₀ on the days before today, by date */
+  /** ET₀ on the days before today, by date; the balance wants BALANCE_DAYS of them */
   past_et0: Record<string, DayEt0>;
   rain: RainRecord;
   /** Open-Meteo's FAO-56 Penman-Monteith ET₀ for today, shown beside the station value */
   regional_et0_mm_day: number | null;
   /** Rain in the regional forecast for the next 48 hours */
   forecast_rain_48h_mm: number | null;
+  /** The slots behind the ET₀ range, for the hours a crop spent above its
+   * stress threshold; absent when the station covered none of the window */
+  measured_day?: MeasuredDay;
   soil: RegionalSoilMoisture | null;
+  /** Irrigation the farmer recorded, normalised to the balance window */
+  applied?: IrrigationEntry[];
 }
 
 export interface WaterBalance {
@@ -336,20 +433,34 @@ export interface WaterBalance {
   balance_7d_mm: number;
   /** Crop demand not met by effective rain, never below 0 */
   net_irrigation_7d_mm: number;
-  demand_30d_mm: number;
-  balance_30d_mm: number;
+  /** A week of crop demand at today's ETc, to plan with when the balance cannot run */
+  weekly_requirement_mm: number;
   forecast_rain_48h_mm: number | null;
   /** Regional soil moisture (ERA5-Land, 7 to 28 cm) as a %, context only */
   soil_moisture_pct: number | null;
   /** Where that reading sits in its own last 365 days */
   soil_percentile: number | null;
   soil_date: string | null;
-  /** The 7-day shortfall as a share of what the root zone holds, if it was full a week ago */
+  /** Root-zone depletion Dr (mm) today, after rain and any recorded irrigation */
+  depletion_mm: number;
+  /** Irrigation the farmer recorded inside the balance window, mm */
+  irrigation_applied_mm: number;
+  /** Days of the window carrying a recorded pass */
+  irrigation_days: number;
+  /** Dr as a share of what the root zone holds */
   depletion_pct: number;
+  /** Days the balance ran over, and how many of them the rain gauge reported */
+  balance_days: number;
+  balance_days_with_rain: number;
+  /** False when too few days were covered to state a depletion at all */
+  balance_available: boolean;
+  /** Total available water in the root zone, the middle of the clay range */
+  taw_mm: number;
+  /** Readily available water, p × TAW, the point at which irrigation is due */
   readily_available_mm: number;
-  /** Readily available water at the low and high clay available-water bounds */
-  readily_available_range_mm: MmRange;
-  /** Total available water the root zone holds, same bounds */
+  /** p after the FAO-56 eq. 83 correction for today's demand */
+  depletion_fraction_adjusted: number;
+  /** What the root zone holds at the low and high clay available-water bounds */
   total_available_range_mm: MmRange;
 }
 
@@ -358,6 +469,66 @@ export interface WaterBalance {
 // water. The field's own figure is unknown, so holding capacities span that range.
 const CLAY_AVAILABLE_WATER = { low: 0.12, high: 0.2 };
 const CLAY_AVAILABLE_WATER_MID = (CLAY_AVAILABLE_WATER.low + CLAY_AVAILABLE_WATER.high) / 2;
+
+// The balance starts from a root zone taken as full BALANCE_DAYS ago. Sixty
+// days is longer than any of these crops needs to empty its zone at Juja's
+// demand (TAW/ETc is about 50 days for coffee, 30 or fewer for the rest), so
+// by the time the run reaches today the starting assumption has washed out.
+export const BALANCE_DAYS = 60;
+// A shorter run is mostly its own starting assumption, and understates how dry
+// the zone is. Under a month there is nothing worth stating.
+export const MIN_BALANCE_DAYS = 30;
+// A day the gauge did not report still evaporates, so its ETc is counted and
+// its rain is not: the run comes back as an upper bound on Dr. Past this many
+// such days the bound is too loose to act on.
+export const MIN_BALANCE_COVERAGE = 0.8;
+
+export interface RootZoneRun {
+  depletion_mm: number;
+  days: number;
+  days_with_rain: number;
+  available: boolean;
+}
+
+/**
+ * The daily root-zone balance of FAO-56 eq. 85: Dr grows by ETc, shrinks by
+ * effective rain and by any irrigation the farmer recorded, and is held inside
+ * [0, TAW]. Holding it at TAW is what stops a storm banking water the zone
+ * never held; holding it at 0 is a zone at field capacity, the rest having
+ * drained past the roots.
+ *
+ * Recorded irrigation counts in full where rain counts at the effective share:
+ * a pass is put on the root zone deliberately, so what it loses is the surplus
+ * past field capacity, which the clamp at 0 already drains.
+ */
+export function runRootZoneBalance(
+  dates: string[],
+  etcOn: (date: string) => number,
+  rainOn: (date: string) => number | null,
+  tawMm: number,
+  appliedOn: (date: string) => number = () => 0,
+): RootZoneRun {
+  let dr = 0;
+  let daysWithRain = 0;
+  for (const date of dates) {
+    const mm = rainOn(date);
+    if (mm != null) daysWithRain++;
+    dr = Math.min(tawMm, Math.max(0, dr + etcOn(date) - effectiveRainMm(mm ?? 0) - appliedOn(date)));
+  }
+  return {
+    depletion_mm: round1(dr),
+    days: dates.length,
+    days_with_rain: daysWithRain,
+    available: dates.length >= MIN_BALANCE_DAYS && daysWithRain >= MIN_BALANCE_COVERAGE * dates.length,
+  };
+}
+
+/** p corrected for today's demand (FAO-56 eq. 83): a crop using less than
+ * 5 mm a day can dry the zone further before it feels it, one using more feels
+ * it sooner. Held inside the 0.1 to 0.8 the table allows. */
+export function adjustedDepletionFraction(p: number, etcMmDay: number): number {
+  return Math.min(0.8, Math.max(0.1, Math.round((p + 0.04 * (5 - etcMmDay)) * 100) / 100));
+}
 
 export function computeWaterBalance(inputs: FarmInputs, crop: CropProfile, stage: GrowthStage): WaterBalance {
   const kc = crop.kc[stage];
@@ -388,17 +559,30 @@ export function computeWaterBalance(inputs: FarmInputs, crop: CropProfile, stage
   const week = datesEnding(inputs.today, 7);
   const month = datesEnding(inputs.today, 30);
   const demand7 = demandOver(week);
-  const demand30 = demandOver(month);
   const rain7 = rainOver(week);
   const rain30 = rainOver(month);
 
   const zr = rootDepthM(crop, stage);
   const holding = (availableWater: number) => round1(availableWater * 1000 * zr);
-  const taw = { low: holding(CLAY_AVAILABLE_WATER.low), high: holding(CLAY_AVAILABLE_WATER.high) };
-  const tawMid = CLAY_AVAILABLE_WATER_MID * 1000 * zr;
-  const readily = (total: number) => round1(total * crop.depletion_fraction);
+  const tawRange = { low: holding(CLAY_AVAILABLE_WATER.low), high: holding(CLAY_AVAILABLE_WATER.high) };
+  const taw = round1(CLAY_AVAILABLE_WATER_MID * 1000 * zr);
+  const p = adjustedDepletionFraction(crop.depletion_fraction, etc);
   const net7 = round1(Math.max(0, demand7 - rain7.effective));
   const soil = inputs.soil;
+
+  // The run starts where the rain record does: a balance cannot be carried
+  // across days with no gauge at all.
+  const firstReported = inputs.rain.days.find((d) => d.mm != null)?.date;
+  const window = datesEnding(inputs.today, BALANCE_DAYS).filter((date) => firstReported != null && date >= firstReported);
+  const applied = normaliseLog(inputs.applied ?? [], inputs.today, BALANCE_DAYS).filter((e) => window.includes(e.date));
+  const appliedMm = appliedByDate(applied);
+  const run = runRootZoneBalance(
+    window,
+    (date) => kc * et0On(date),
+    (date) => rainByDate.get(date) ?? null,
+    taw,
+    (date) => appliedMm.get(date) ?? 0,
+  );
 
   return {
     et0_mm_day: et0,
@@ -421,16 +605,22 @@ export function computeWaterBalance(inputs: FarmInputs, crop: CropProfile, stage
     demand_7d_station_days: week.filter(fromStation).length,
     balance_7d_mm: round1(rain7.effective - demand7),
     net_irrigation_7d_mm: net7,
-    demand_30d_mm: demand30,
-    balance_30d_mm: round1(rain30.effective - demand30),
+    weekly_requirement_mm: round1(7 * etc),
     forecast_rain_48h_mm: inputs.forecast_rain_48h_mm,
     soil_moisture_pct: soil ? round1(soil.value_m3 * 100) : null,
     soil_percentile: soil?.percentile ?? null,
     soil_date: soil?.date ?? null,
-    depletion_pct: Math.min(100, Math.round((net7 / tawMid) * 1000) / 10),
-    readily_available_mm: readily(tawMid),
-    readily_available_range_mm: { low: readily(taw.low), high: readily(taw.high) },
-    total_available_range_mm: taw,
+    depletion_mm: run.depletion_mm,
+    depletion_pct: taw > 0 ? Math.round((run.depletion_mm / taw) * 1000) / 10 : 0,
+    irrigation_applied_mm: totalAppliedMm(applied),
+    irrigation_days: applied.length,
+    balance_days: run.days,
+    balance_days_with_rain: run.days_with_rain,
+    balance_available: run.available,
+    taw_mm: taw,
+    readily_available_mm: round1(p * taw),
+    depletion_fraction_adjusted: p,
+    total_available_range_mm: tawRange,
   };
 }
 
@@ -438,87 +628,125 @@ export function computeWaterBalance(inputs: FarmInputs, crop: CropProfile, stage
 
 export interface IrrigationAdvice {
   action: IrrigationAction;
-  /** Lower end of depth_range_mm, for clients that read one figure (0 when no irrigation is advised) */
+  /** Net depth to apply, mm; 0 unless irrigation is due */
   depth_mm: number;
   /** Litres per m² == mm; provided for smallholder framing */
   litres_per_m2: number;
-  /** Suggested depth to the nearest 5 mm, a range when the root zone cannot
-   * hold the whole shortfall (null when no irrigation is advised) */
-  depth_range_mm: MmRange | null;
+  /** Whole days at today's demand before the zone reaches RAW, when that is what is being waited for */
+  days_until_irrigation: number | null;
+  /** Net depth the zone still wants after this one, mm; 0 when this pass refills it */
+  remaining_mm: number;
   reason_keys: string[];
   confidence: Confidence;
 }
 
-// A shortfall under 5 mm is within the rounding of the inputs.
+// A depth under 5 mm is within the rounding of the inputs, and wets little
+// more than the surface.
 export const MIN_IRRIGATION_MM = 5;
-// Hold off when the regional forecast has at least this much rain within 48 hours.
-export const HOLD_FORECAST_RAIN_MM = 10;
+// Hold for rain only when the forecast covers most of the refill: a second
+// pass over the field to add the last fifth costs more than it returns.
+export const HOLD_FORECAST_SHARE = 0.8;
 const HIGH_ETC_MM = 4.5;
 
-/** The inputs carry a regional model and a typical soil, so a depth finer
- * than 5 mm would claim more precision than they have. */
-export function roundToFiveMm(mm: number): number {
-  return Math.round(mm / 5) * 5;
+/** Depths are stated in 5 mm steps and never rounded up: the advice must not
+ * ask for more water than the depletion it refills. */
+export function floorToFiveMm(mm: number): number {
+  return Math.max(0, Math.floor(mm / 5) * 5);
 }
 
-/** The shortfall to the nearest 5 mm, but no more than the root zone holds at
- * either end of the clay range: water beyond that drains past the roots. */
-export function irrigationDepthRange(shortfallMm: number, holding: MmRange): MmRange {
-  return {
-    low: roundToFiveMm(Math.min(shortfallMm, holding.low)),
-    high: roundToFiveMm(Math.min(shortfallMm, holding.high)),
-  };
-}
-
-/** HIGH when both the rain and every day's ET₀ come from the station, MODERATE
- * when one of them does, LOW when both come from the regional model. */
+/** HIGH when the rain and every day's ET₀ come from the station and the
+ * balance ran its full window with no gaps, MODERATE when one source does,
+ * LOW when both come from the regional model. */
 export function adviceConfidence(wb: WaterBalance): Confidence {
   const stationRain = wb.rain_source === "station_gauge";
   const stationEt0 = wb.et0_source === "station";
-  if (stationRain && stationEt0 && wb.rain_7d_days_with_data === 7 && wb.demand_7d_station_days === 7) return "HIGH";
+  const fullBalance = wb.balance_days >= BALANCE_DAYS && wb.balance_days_with_rain === wb.balance_days;
+  if (stationRain && stationEt0 && fullBalance && wb.demand_7d_station_days === 7) return "HIGH";
   if (stationRain || stationEt0) return "MODERATE";
   return "LOW";
 }
 
 const capAtModerate = (c: Confidence): Confidence => (c === "HIGH" ? "MODERATE" : c);
 
-export function computeIrrigationAdvice(wb: WaterBalance): IrrigationAdvice {
-  const confidence = adviceConfidence(wb);
-  const none = { depth_mm: 0, litres_per_m2: 0, depth_range_mm: null };
+/** Whole days at today's ETc before the depletion reaches RAW; at least one,
+ * and null when there is no demand to divide by. */
+function daysUntilRaw(wb: WaterBalance): number | null {
+  if (!(wb.etc_mm_day > 0)) return null;
+  return Math.max(1, Math.round((wb.readily_available_mm - wb.depletion_mm) / wb.etc_mm_day));
+}
 
-  if (wb.net_irrigation_7d_mm < MIN_IRRIGATION_MM) {
+/**
+ * FAO-56 chapter 8's rule, on the depletion the balance has been carrying:
+ * irrigate when Dr reaches RAW, and refill the zone. Before that point the
+ * crop is drawing on water it already has, and the answer is when it will run
+ * out, not how much to pour on today.
+ */
+export function computeIrrigationAdvice(wb: WaterBalance, crop: CropProfile, stage: GrowthStage): IrrigationAdvice {
+  const confidence = adviceConfidence(wb);
+  const none = { depth_mm: 0, litres_per_m2: 0, days_until_irrigation: null, remaining_mm: 0 };
+
+  if (!wb.balance_available) {
+    return {
+      action: "DATA_TOO_THIN",
+      ...none,
+      reason_keys: ["farm_reason_balance_short", "farm_reason_weekly_requirement"],
+      confidence: "LOW",
+    };
+  }
+
+  if (stage === "maturity" && driesDownAtMaturity(crop)) {
+    return { action: "NO_IRRIGATION", ...none, reason_keys: ["farm_reason_dry_down"], confidence };
+  }
+
+  if (wb.depletion_mm < wb.readily_available_mm) {
+    const reasons = ["farm_reason_below_raw"];
+    if (wb.effective_rain_7d_mm >= wb.demand_7d_mm) reasons.push("farm_reason_rain_meets_demand");
     return {
       action: "NO_IRRIGATION",
       ...none,
-      reason_keys: [
-        wb.effective_rain_7d_mm >= wb.demand_7d_mm ? "farm_reason_rain_meets_demand" : "farm_reason_small_shortfall",
-      ],
+      days_until_irrigation: daysUntilRaw(wb),
+      reason_keys: reasons,
       confidence,
     };
   }
 
+  // Due. The balance holds Dr at or below TAW, so refilling it can never ask
+  // for more than the root zone holds. The 48-hour total is treated as one
+  // wetting, which is the generous reading of a forecast split over two days.
+  const forecast = wb.forecast_rain_48h_mm;
+  const covered = forecast != null ? effectiveRainMm(forecast) : 0;
+  const depth = floorToFiveMm(wb.depletion_mm - covered);
+
   // The forecast is a regional model, so a hold is never more than moderately sure.
-  if (wb.forecast_rain_48h_mm != null && wb.forecast_rain_48h_mm >= HOLD_FORECAST_RAIN_MM) {
+  if (covered > 0 && (covered >= HOLD_FORECAST_SHARE * wb.depletion_mm || depth < MIN_IRRIGATION_MM)) {
     return {
       action: "HOLD_RAIN_EXPECTED",
       ...none,
-      reason_keys: ["farm_reason_demand_exceeds_rain", "farm_reason_rain_expected"],
+      reason_keys: ["farm_reason_zone_at_raw", "farm_reason_rain_expected"],
       confidence: capAtModerate(confidence),
     };
   }
+  if (depth < MIN_IRRIGATION_MM) {
+    return { action: "NO_IRRIGATION", ...none, reason_keys: ["farm_reason_small_shortfall"], confidence };
+  }
 
-  const range = irrigationDepthRange(wb.net_irrigation_7d_mm, wb.total_available_range_mm);
-  const reasons = ["farm_reason_demand_exceeds_rain"];
-  if (wb.net_irrigation_7d_mm > wb.total_available_range_mm.low) reasons.push("farm_reason_root_zone_cap");
+  // A pass deeper than the readily available water runs off clay or drains
+  // past the roots, and few fields here are watered by more than a hose or a
+  // furrow, so a dry zone is refilled over several passes rather than one.
+  const pass = Math.min(depth, floorToFiveMm(wb.readily_available_mm));
+  const reasons = ["farm_reason_zone_at_raw"];
+  if (pass < depth) reasons.push("farm_reason_split_passes");
+  if (covered > 0) reasons.push("farm_reason_forecast_part_covered");
   if (wb.etc_mm_day > HIGH_ETC_MM) reasons.push("farm_reason_high_et");
-  if (wb.forecast_rain_48h_mm == null) reasons.push("farm_reason_forecast_unavailable");
+  if (forecast == null) reasons.push("farm_reason_forecast_unavailable");
   return {
     action: "IRRIGATE_NOW",
-    depth_mm: range.low,
-    litres_per_m2: range.low,
-    depth_range_mm: range,
+    depth_mm: pass,
+    litres_per_m2: pass,
+    days_until_irrigation: null,
+    remaining_mm: depth - pass,
     reason_keys: reasons,
-    confidence: wb.forecast_rain_48h_mm == null ? capAtModerate(confidence) : confidence,
+    confidence: forecast == null ? capAtModerate(confidence) : confidence,
   };
 }
 
@@ -531,39 +759,79 @@ export interface FieldWindow {
 }
 
 /**
- * Spray suitability. Deterministic rules based on documented agronomic practice:
+ * Spray suitability. The wind, temperature and rain-probability limits below
+ * are the project's own working limits, not figures from a published table:
  *   · wind > 4 m/s        → drift risk
  *   · wind < 0.4 m/s      → inversion / poor deposition
  *   · temperature > 28 °C → rapid evaporation of droplets
  *   · rain probability    → wash-off before uptake
+ * The daylight gate is not one of those judgement calls: the two hazards the
+ * wind rules guard against, drift and a surface inversion holding the spray
+ * cloud, are both at their worst in the still air after sunset, and nothing in
+ * the four rules sees the hour.
+ *
+ * This is a rule set of its own, not the Best-Time engine that picks the
+ * field-work window. It borrows only that engine's sun times.
  */
+const WINDOW_RANK: Record<WindowQuality, number> = { GOOD: 0, MARGINAL: 1, AVOID: 2 };
+
+/** The worse of two verdicts. Every rule below can only take the window down. */
+const worseOf = (a: WindowQuality, b: WindowQuality): WindowQuality => (WINDOW_RANK[b] > WINDOW_RANK[a] ? b : a);
+
+// Readings of the current observation the spray rules read directly. Either one
+// filled in rather than measured is a reading the verdict cannot lean on.
+const SPRAY_INPUTS = ["wind_spd", "temp_sht"];
+
+// The card shows a short list, and a limit that took the window down matters
+// more to the decision than a condition that was met, so limits are listed first.
+const MAX_SPRAY_REASONS = 5;
+
 export function evaluateSprayWindow(situation: SituationResult): FieldWindow {
-  const reasons: string[] = [];
+  const limits: string[] = [];
+  const met: string[] = [];
   const wind = situation.current.wind_speed_ms;
   const temp = situation.current.temperature_c;
   const rainProb = situation.risk.rain_probability;
 
   let score: WindowQuality = "GOOD";
 
-  if (wind > 4.0) { score = "AVOID"; reasons.push("farm_reason_wind_drift"); }
-  else if (wind < 0.4) { score = "MARGINAL"; reasons.push("farm_reason_wind_too_calm"); }
-  else reasons.push("farm_reason_wind_suitable");
+  // The verdict answers "spray now", so the hour it is judged on is the one
+  // the whole situation is stated for. generated_at is that instant, and the
+  // rain probability below is already read at it; the current reading's own
+  // timestamp can trail it where the series was padded from another feed.
+  if (!isDaylight(situation.generated_at)) {
+    score = worseOf(score, "AVOID");
+    limits.push("farm_reason_outside_daylight");
+  }
 
-  if (rainProb >= 0.5) { score = "AVOID"; reasons.push("farm_reason_washoff"); }
-  else if (rainProb >= 0.25 && score === "GOOD") { score = "MARGINAL"; reasons.push("farm_reason_rain_possible"); }
-  else if (rainProb < 0.25) reasons.push("farm_reason_low_rain_risk");
+  if (wind > 4.0) { score = worseOf(score, "AVOID"); limits.push("farm_reason_wind_drift"); }
+  else if (wind < 0.4) { score = worseOf(score, "MARGINAL"); limits.push("farm_reason_wind_too_calm"); }
+  else met.push("farm_reason_wind_suitable");
+
+  if (rainProb >= 0.5) { score = worseOf(score, "AVOID"); limits.push("farm_reason_washoff"); }
+  else if (rainProb >= 0.25) { score = worseOf(score, "MARGINAL"); limits.push("farm_reason_rain_possible"); }
+  else met.push("farm_reason_low_rain_risk");
 
   if (temp > 28) {
-    if (score === "GOOD") score = "MARGINAL";
-    reasons.push("farm_reason_evaporation");
+    score = worseOf(score, "MARGINAL");
+    limits.push("farm_reason_evaporation");
   }
 
+  // A filled-in wind speed or temperature is a value the rules above read as
+  // though it were measured. The window can still be refused on it, never passed.
+  if (SPRAY_INPUTS.some((f) => situation.current.imputed?.includes(f))) {
+    score = worseOf(score, "MARGINAL");
+    limits.push("farm_reason_spray_inputs_filled");
+  }
+
+  // Thin data is a reason to trust the window less, never a reason to spray
+  // into conditions the rules already ruled out.
   if (situation.quality.status === "POOR") {
-    score = "MARGINAL";
-    reasons.push("farm_reason_data_limited");
+    score = worseOf(score, "MARGINAL");
+    limits.push("farm_reason_data_limited");
   }
 
-  return { operation: "spraying", quality: score, reason_keys: reasons.slice(0, 4) };
+  return { operation: "spraying", quality: score, reason_keys: [...limits, ...met].slice(0, MAX_SPRAY_REASONS) };
 }
 
 // Planting outlook (rain-fed), from the same rain record as the water balance
@@ -575,28 +843,67 @@ export interface PlantingOutlook {
   /** Days of the 30 with a reading */
   rain_days_with_data: number;
   required_mm: number;
+  /** The wettest three days of the last ten, the soaking a seedbed needs */
+  wetting_mm: number;
+  wetting_required_mm: number;
   dry_spell_days: number;
+  /** Rain in the regional forecast for the next 48 hours, shown beside the verdict */
+  forecast_rain_48h_mm: number | null;
   message_key: string;
 }
 
 const LONG_DRY_SPELL_DAYS = 7;
+// A seasonal total can be a month of drizzle that never wet the seedbed.
+// Onset rules across East Africa ask for a real soaking, about 20 mm inside
+// two or three days, before a farmer commits seed.
+export const PLANTING_WETTING_MM = 20;
+const PLANTING_WETTING_DAYS = 3;
+const PLANTING_WETTING_WITHIN_DAYS = 10;
 
-export function evaluatePlantingOutlook(rain: RainRecord, today: string, crop: CropProfile): PlantingOutlook {
+/** The wettest run of `span` consecutive days in `days` (oldest first). */
+export function bestWettingMm(days: (number | null)[], span: number): number {
+  let best = 0;
+  for (let end = span; end <= days.length; end++) {
+    const total = days.slice(end - span, end).reduce((sum: number, mm) => sum + (mm ?? 0), 0);
+    best = Math.max(best, total);
+  }
+  return round1(best);
+}
+
+export function evaluatePlantingOutlook(
+  rain: RainRecord,
+  today: string,
+  crop: CropProfile,
+  wb: WaterBalance,
+): PlantingOutlook {
   const byDate = new Map(rain.days.map((d) => [d.date, d.mm]));
   const month = datesEnding(today, 30).map((date) => byDate.get(date) ?? null);
   const reported = month.filter((mm): mm is number => mm != null);
   const rain30 = round1(reported.reduce((a, b) => a + b, 0));
   const dry = spellLength(month, false);
   const required = crop.planting_rain_mm;
+  const wetting = bestWettingMm(
+    datesEnding(today, PLANTING_WETTING_WITHIN_DAYS).map((date) => byDate.get(date) ?? null),
+    PLANTING_WETTING_DAYS,
+  );
+  // Seed goes into the same root zone the irrigation card is reading. While
+  // that zone is at or past the refill point the two must not disagree.
+  const inDeficit = wb.balance_available && wb.depletion_mm >= wb.readily_available_mm;
 
-  // Rain-fed planting favours accumulated moisture plus no long dry spell
-  const favourable = rain30 >= required && dry <= LONG_DRY_SPELL_DAYS;
+  // The 48-hour forecast is carried for the farmer to read, not for this test.
+  // Every term of the test is a seedbed that is already wet; rain still in a
+  // regional model has wet nothing, and a seed committed on it is committed
+  // whether or not the rain arrives.
+  const favourable =
+    rain30 >= required && wetting >= PLANTING_WETTING_MM && dry <= LONG_DRY_SPELL_DAYS && !inDeficit;
 
   let key: string;
   if (favourable) key = "farm_plant_favourable";
   else if (rain30 < required && dry > LONG_DRY_SPELL_DAYS) key = "farm_plant_dry";
   else if (rain30 < required) key = "farm_plant_insufficient";
-  else key = "farm_plant_dryspell";
+  else if (dry > LONG_DRY_SPELL_DAYS) key = "farm_plant_dryspell";
+  else if (inDeficit) key = "farm_plant_soil_dry";
+  else key = "farm_plant_no_wetting";
 
   return {
     favourable,
@@ -604,7 +911,10 @@ export function evaluatePlantingOutlook(rain: RainRecord, today: string, crop: C
     rain_source: rain.source,
     rain_days_with_data: reported.length,
     required_mm: required,
+    wetting_mm: wetting,
+    wetting_required_mm: PLANTING_WETTING_MM,
     dry_spell_days: dry,
+    forecast_rain_48h_mm: wb.forecast_rain_48h_mm,
     message_key: key,
   };
 }
@@ -619,33 +929,59 @@ export interface CropStressSignal {
   peak_temp_c: number;
   /** The station's measured maximum over the last 24 hours, or the regional forecast maximum for today */
   peak_source: Et0Source;
+  /** The peak temperature at which this crop, at this stage, first shows stress */
+  mild_threshold_c: number;
+  /** Measured hours of the last 24 at or above that threshold; null unless the
+   * station measured enough of the window for the count to stand for the day */
+  hours_above_mild: number | null;
   reason_keys: string[];
 }
 
+// Pollen viability and fruit set fail a few degrees below the temperature that
+// harms vegetative growth, so at a crop's reproductive stage every threshold
+// moves down by this much.
+export const HEAT_SENSITIVE_STAGE_SHIFT_C = 3;
+
 /**
  * Crop heat-stress signal from the day's peak air temperature, the same Tmax
- * the ET₀ uses. Thresholds reflect widely documented cardinal temperatures for
- * the crops listed above; they are advisory signals, not yield predictions.
+ * the ET₀ uses, against the crop's own heat-stress thresholds (see
+ * CROP_PROFILES). Advisory signals, not yield predictions.
+ *
+ * The level is the peak alone. The signal also carries how long the day held
+ * at or above the first threshold, which separates a minute at the peak from
+ * an afternoon at it; the level itself does not move on that figure. Hours are
+ * only counted where the station measured enough of the window to stand for
+ * the day, since a count over a part of it can only understate.
  */
-export function evaluateCropStress(et0: Et0Estimate, stage: GrowthStage): CropStressSignal {
+export function evaluateCropStress(
+  et0: Et0Estimate,
+  crop: CropProfile,
+  stage: GrowthStage,
+  day?: MeasuredDay,
+): CropStressSignal {
   const peakTemp = et0.tmax_c;
   const reasons: string[] = [];
   let level: HeatStress = "NONE";
 
-  // Flowering is the most heat-sensitive stage for most of these crops
-  const sensitive = stage === "flowering";
-  const t1 = sensitive ? 28 : 30;
-  const t2 = sensitive ? 32 : 34;
-  const t3 = sensitive ? 35 : 38;
+  const sensitive = crop.heat_sensitive_stage !== null && stage === crop.heat_sensitive_stage;
+  const shift = sensitive ? HEAT_SENSITIVE_STAGE_SHIFT_C : 0;
+  const mild = round1(crop.heat.mild - shift);
 
-  if (peakTemp >= t3) { level = "SEVERE"; reasons.push("farm_reason_severe_heat"); }
-  else if (peakTemp >= t2) { level = "MODERATE"; reasons.push("farm_reason_moderate_heat"); }
-  else if (peakTemp >= t1) { level = "MILD"; reasons.push("farm_reason_mild_heat"); }
+  if (peakTemp >= crop.heat.severe - shift) { level = "SEVERE"; reasons.push("farm_reason_severe_heat"); }
+  else if (peakTemp >= crop.heat.moderate - shift) { level = "MODERATE"; reasons.push("farm_reason_moderate_heat"); }
+  else if (peakTemp >= mild) { level = "MILD"; reasons.push("farm_reason_mild_heat"); }
   else reasons.push("farm_reason_no_heat_stress");
 
   if (sensitive && level !== "NONE") reasons.push("farm_reason_flowering_sensitive");
 
-  return { level, peak_temp_c: peakTemp, peak_source: et0.source, reason_keys: reasons };
+  return {
+    level,
+    peak_temp_c: peakTemp,
+    peak_source: et0.source,
+    mild_threshold_c: mild,
+    hours_above_mild: day && et0.station_hours >= MIN_MEASURED_HOURS ? measuredHoursAbove(day, mild) : null,
+    reason_keys: reasons,
+  };
 }
 
 // Full farm advisory bundle
@@ -676,10 +1012,10 @@ export function buildFarmAdvisory(
     crop,
     stage,
     water_balance: wb,
-    irrigation: computeIrrigationAdvice(wb),
+    irrigation: computeIrrigationAdvice(wb, crop, stage),
     spray_window: evaluateSprayWindow(situation),
-    planting: evaluatePlantingOutlook(inputs.rain, inputs.today, crop),
-    stress: evaluateCropStress(inputs.et0, stage),
+    planting: evaluatePlantingOutlook(inputs.rain, inputs.today, crop, wb),
+    stress: evaluateCropStress(inputs.et0, crop, stage, inputs.measured_day),
     field_work_window: situation.best_time
       ? {
           start: situation.best_time.recommended.start,

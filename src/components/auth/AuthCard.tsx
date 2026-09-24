@@ -8,6 +8,7 @@ import { useLanguage } from "@/lib/contexts/language";
 import { useAuth } from "@/lib/contexts/auth";
 import { GoogleButton } from "@/components/auth/GoogleButton";
 import { PasswordStrengthMeter } from "@/components/auth/PasswordStrength";
+import { DatabaseNotice } from "@/components/auth/DatabaseNotice";
 import { Globe, RefreshCw, Eye, EyeOff, CheckCircle2, AlertCircle, Mail } from "lucide-react";
 
 type Mode = "signin" | "signup";
@@ -89,6 +90,7 @@ export function AuthCard({ initialMode }: { initialMode: Mode }) {
         const data = await res.json().catch(() => ({}));
         if (res.status === 409) { setError(t("error_email_taken")); return; }
         if (res.status === 429) { setError(t(data.error === "email_quota" ? "error_email_quota" : "error_rate_limited")); return; }
+        if (res.status === 503) { setError(t("error_service_unavailable")); return; }
         if (!res.ok) { setError(t("error_generic")); return; }
         if (data.verified) {
           await refresh();
@@ -232,6 +234,8 @@ export function AuthCard({ initialMode }: { initialMode: Mode }) {
                       ? (lang === "sw" ? "Ingia ili kuendelea na AFYA MAZINGIRA" : "Sign in to continue to AFYA MAZINGIRA")
                       : (lang === "sw" ? "Unda akaunti yako ya AFYA MAZINGIRA" : "Create your AFYA MAZINGIRA account")}
                   </p>
+
+                  <DatabaseNotice className="mb-5" />
 
                   <form onSubmit={handleSubmit} className="space-y-4" noValidate>
                     {mode === "signup" && (

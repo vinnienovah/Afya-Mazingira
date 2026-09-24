@@ -8,7 +8,9 @@ test("without a database the app still reports itself up, and says the database 
   try {
     const res = await GET();
     assert.equal(res.status, 200);
-    assert.deepEqual(await res.json(), { ok: true, database: "not_configured" });
+    // database_configured is the flag the sign-in, sign-up, notifications and
+    // profile pages read to say accounts are off here.
+    assert.deepEqual(await res.json(), { ok: true, database: "not_configured", database_configured: false });
   } finally {
     if (saved !== undefined) process.env.DATABASE_URL = saved;
   }

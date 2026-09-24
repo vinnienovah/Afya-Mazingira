@@ -5,7 +5,10 @@ import { useLanguage } from "@/lib/contexts/language";
 import { wbgtToRisk } from "@/lib/afya/constants";
 import { fmtDate, fmtTime, fmtWindow } from "@/lib/afya/format";
 import { tf } from "@/lib/afya/i18n";
-import { lastReplayDay, REPLAY_FIRST_DAY, type HorizonSummary, type ReplayFrame } from "@/lib/afya/replay";
+import {
+  isInTrainingPeriod, lastReplayDay, REPLAY_FIRST_DAY, TRAINING_PERIOD,
+  type HorizonSummary, type ReplayFrame,
+} from "@/lib/afya/replay";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { StateChip } from "@/components/ui/StateChip";
 import { RiskChip } from "@/components/ui/RiskChip";
@@ -103,6 +106,10 @@ export function ReplayContent() {
   const currentStep = steps[stepIdx] ?? null;
   const simTimeEAT = currentStep ? fmtTime(currentStep.sim_time) : "--:00";
   const shown = currentStep?.available ? currentStep : null;
+  // The picker reaches back into the days the coefficients were fitted on. An
+  // in-sample replay still shows the pipeline working, so long as it says so.
+  const [trainFrom, trainTo] = TRAINING_PERIOD;
+  const inTraining = isInTrainingPeriod(date);
 
   return (
     <div className="max-w-5xl mx-auto space-y-5">
@@ -234,6 +241,16 @@ export function ReplayContent() {
               </button>
             )}
           </div>
+
+          {inTraining && (
+            <p className="mt-4 flex items-start gap-2 rounded-xl border border-afya-gold/40 bg-afya-gold/10 px-3 py-2 text-xs font-semibold text-afya-gold">
+              <AlertTriangle className="w-4 h-4 shrink-0" strokeWidth={2} aria-hidden="true" />
+              {tf(lang, "replay_in_training", {
+                from: fmtDate(`${trainFrom}T12:00:00Z`),
+                to: fmtDate(`${trainTo}T12:00:00Z`),
+              })}
+            </p>
+          )}
 
           {/* Gold accent bar */}
           <div className="h-1 mt-5 rounded-full" style={{ background: "#F2B705" }} aria-hidden="true" />
@@ -409,17 +426,40 @@ export function ReplayContent() {
                 {result && result.summary.some((s) => s.mae !== null) && (
                   <div className="mt-3 rounded-xl bg-afya-canvas border border-afya-border px-3 py-2.5">
                     <div className="text-[11px] font-semibold text-afya-muted mb-1.5">{t("replay_day_errors")}</div>
-                    <div className="grid grid-cols-4 gap-2 text-center">
-                      {result.summary.map((s) => (
-                        <div key={s.horizon}>
-                          <div className="text-[10px] text-afya-muted">{HORIZON_LABEL[s.horizon]}</div>
-                          <div className="text-sm font-bold text-afya-charcoal tabular-nums">
-                            {s.mae === null ? "-" : `${s.mae.toFixed(1)}°C`}
-                          </div>
-                          <div className="text-[10px] text-afya-muted">n={s.n}</div>
-                        </div>
-                      ))}
-                    </div>
+                    <table className="w-full text-center">
+                      <thead>
+                        <tr>
+                          <th scope="col" className="sr-only">{t("replay_col_ahead")}</th>
+                          {result.summary.map((s) => (
+                            <th key={s.horizon} scope="col" className="text-[10px] font-normal text-afya-muted">
+                              {HORIZON_LABEL[s.horizon]}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {([
+                          [t("replay_row_model"), (s: HorizonSummary) => s.mae, "text-afya-charcoal"],
+                          [t("replay_row_persistence"), (s: HorizonSummary) => s.persistence_mae, "text-afya-muted"],
+                        ] as const).map(([label, of, tone]) => (
+                          <tr key={label}>
+                            <th scope="row" className="text-left text-[10px] font-semibold text-afya-muted pr-2">{label}</th>
+                            {result.summary.map((s) => (
+                              <td key={s.horizon} className={cn("text-sm font-bold tabular-nums", tone)}>
+                                {of(s) === null ? "-" : `${of(s)!.toFixed(1)}°C`}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                        <tr>
+                          <th scope="row" className="text-left text-[10px] font-semibold text-afya-muted pr-2">{t("replay_row_checks")}</th>
+                          {result.summary.map((s) => (
+                            <td key={s.horizon} className="text-[10px] text-afya-muted tabular-nums">{s.n}</td>
+                          ))}
+                        </tr>
+                      </tbody>
+                    </table>
+                    <p className="text-[10px] text-afya-muted mt-1.5">{t("replay_persistence_note")}</p>
                   </div>
                 )}
               </Card>

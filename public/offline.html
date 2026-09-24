@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Offline | AFYA MAZINGIRA</title>
+<meta name="theme-color" content="#103D2C" />
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
+<style>
+  :root {
+    --green: #006b3c;
+    --deep: #103d2c;
+    --canvas: #f7f6f1;
+    --charcoal: #17211c;
+    --muted: #68756f;
+    --border: #d5ded8;
+    --gold: #f2b705;
+    --orange: #e27832;
+    --red: #c62828;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px 16px 40px;
+    background: var(--canvas);
+    color: var(--charcoal);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 34rem; margin: 0 auto; }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; }
+  .brand-mark {
+    width: 36px; height: 36px; border-radius: 12px; flex: none;
+    background: var(--deep); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 15px;
+  }
+  .brand-name { font-weight: 700; letter-spacing: 0.02em; }
+  .brand-tag { font-size: 12px; color: var(--muted); }
+  .card {
+    background: #fff; border: 1px solid var(--border);
+    border-radius: 14px; padding: 20px; margin-bottom: 16px;
+  }
+  h1 { font-size: 20px; margin: 0 0 6px; }
+  p { margin: 0 0 10px; }
+  p:last-child { margin-bottom: 0; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .stamp {
+    display: inline-block; border-radius: 999px; padding: 4px 10px;
+    background: rgba(242, 183, 5, 0.16); color: #6a4f00;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .as-of { font-weight: 600; margin-top: 10px; }
+  .readings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+  .reading { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
+  .reading dt { font-size: 11px; color: var(--muted); margin: 0 0 2px; }
+  .reading dd { margin: 0; font-size: 18px; font-weight: 700; }
+  .band { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; }
+  .band-low { color: var(--green); }
+  .band-elevated { color: #8a6a00; }
+  .band-high { color: var(--orange); }
+  .band-very-high { color: var(--red); }
+  button {
+    font: inherit; font-weight: 600; cursor: pointer;
+    background: var(--green); color: #fff;
+    border: 0; border-radius: 12px; padding: 12px 20px;
+  }
+  button:hover { background: #005c33; }
+  :focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+  @media (max-width: 380px) { .readings { grid-template-columns: minmax(0, 1fr); } }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">AM</span>
+    <span>
+      <span class="brand-name">AFYA MAZINGIRA</span>
+      <span class="brand-tag" id="tagline" style="display:block"></span>
+    </span>
+  </div>
+
+  <div class="card">
+    <h1 id="title"></h1>
+    <p id="intro" class="muted"></p>
+  </div>
+
+  <div class="card" id="reading-card" hidden>
+    <span class="stamp" id="stamp"></span>
+    <p class="as-of" id="as-of"></p>
+    <p class="muted" id="stale-note"></p>
+    <dl class="readings" id="readings"></dl>
+  </div>
+
+  <div class="card" id="empty-card" hidden>
+    <p id="empty-note"></p>
+  </div>
+
+  <button type="button" id="retry"></button>
+</main>
+
+<script>
+// Served by the service worker when a navigation cannot reach the network, so
+// it carries its own text and styling: none of the app's bundles are
+// guaranteed to be in the cache at that point.
+(function () {
+  var DATA_CACHE = "afya-data-v1";
+
+  var TEXT = {
+    en: {
+      tagline: "Environmental Risk & Early Action Intelligence",
+      title: "You are offline",
+      intro: "This device cannot reach AFYA MAZINGIRA right now. Nothing below is live.",
+      stamp: "Last known reading",
+      asOf: "Recorded {time}",
+      staleNote: "This is the last reading stored on this device, not the situation now. Conditions may have changed since.",
+      emptyNote: "This device has no stored reading yet, so there is nothing to show. Open the app once while online and the last reading will be kept here.",
+      retry: "Try again",
+      wbgt: "Shade WBGT",
+      temperature: "Air temperature",
+      humidity: "Humidity",
+      thermal: "Thermal risk then",
+      bands: { LOW: "LOW", ELEVATED: "ELEVATED", HIGH: "HIGH", VERY_HIGH: "VERY HIGH" }
+    },
+    sw: {
+      tagline: "Ujasusi wa Hatari ya Mazingira na Hatua za Mapema",
+      title: "Uko nje ya mtandao",
+      intro: "Kifaa hiki hakiwezi kufikia AFYA MAZINGIRA kwa sasa. Hakuna kilicho hapa chini kinachoonyesha hali ya sasa.",
+      stamp: "Usomaji wa mwisho unaojulikana",
+      asOf: "Ulirekodiwa {time}",
+      staleNote: "Huu ni usomaji wa mwisho uliohifadhiwa kwenye kifaa hiki, si hali ilivyo sasa. Hali inaweza kuwa imebadilika tangu wakati huo.",
+      emptyNote: "Kifaa hiki hakina usomaji uliohifadhiwa bado, hivyo hakuna cha kuonyesha. Fungua programu mara moja ukiwa mtandaoni na usomaji wa mwisho utahifadhiwa hapa.",
+      retry: "Jaribu tena",
+      wbgt: "WBGT kivulini",
+      temperature: "Joto la hewa",
+      humidity: "Unyevu",
+      thermal: "Hatari ya joto wakati huo",
+      bands: { LOW: "CHINI", ELEVATED: "IMEINUKA", HIGH: "JUU", VERY_HIGH: "JUU SANA" }
+    }
+  };
+
+  function chosenLang() {
+    var stored = null;
+    try { stored = localStorage.getItem("afya_lang"); } catch (err) { stored = null; }
+    if (!stored) {
+      var match = document.cookie.match(/(?:^|;\s*)afya_lang=(en|sw)/);
+      stored = match ? match[1] : null;
+    }
+    return stored === "sw" ? "sw" : "en";
+  }
+
+  var lang = chosenLang();
+  var text = TEXT[lang];
+  document.documentElement.lang = lang;
+
+  function set(id, value) { document.getElementById(id).textContent = value; }
+  set("tagline", text.tagline);
+  set("title", text.title);
+  set("intro", text.intro);
+  set("stamp", text.stamp);
+  set("stale-note", text.staleNote);
+  set("empty-note", text.emptyNote);
+  set("retry", text.retry);
+  document.getElementById("retry").addEventListener("click", function () { location.reload(); });
+
+  // "14:30 EAT", or "8 Sep, 14:30 EAT" when the reading is from another day.
+  var MONTHS = {
+    en: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+    sw: ["Jan", "Feb", "Mac", "Apr", "Mei", "Jun", "Jul", "Ago", "Sep", "Okt", "Nov", "Des"]
+  };
+  function nairobiDay(ms) { return new Date(ms + 3 * 3600000).toISOString().slice(0, 10); }
+  function formatTaken(iso) {
+    var ms = Date.parse(iso);
+    if (isNaN(ms)) return iso;
+    var day = nairobiDay(ms);
+    var parts = day.split("-");
+    var clock = new Date(ms).toLocaleTimeString("en-KE", {
+      hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Africa/Nairobi"
+    }) + " EAT";
+    if (day === nairobiDay(Date.now())) return clock;
+    return Number(parts[2]) + " " + MONTHS[lang][Number(parts[1]) - 1] + ", " + clock;
+  }
+
+  function number(value, digits, suffix) {
+    return typeof value === "number" && isFinite(value) ? value.toFixed(digits) + suffix : "—";
+  }
+
+  function addReading(list, label, value, className) {
+    var item = document.createElement("div");
+    item.className = "reading";
+    var term = document.createElement("dt");
+    term.textContent = label;
+    var detail = document.createElement("dd");
+    detail.textContent = value;
+    if (className) detail.className = className;
+    item.appendChild(term);
+    item.appendChild(detail);
+    list.appendChild(item);
+  }
+
+  function render(situation) {
+    var current = situation.current || {};
+    var taken = current.time || situation.generated_at;
+    document.getElementById("as-of").textContent =
+      text.asOf.replace("{time}", taken ? formatTaken(taken) : "—");
+
+    var list = document.getElementById("readings");
+    addReading(list, text.wbgt, number(current.wbgt_c, 1, "°C"));
+    addReading(list, text.temperature, number(current.temperature_c, 1, "°C"));
+    addReading(list, text.humidity, number(current.humidity_pct, 0, "%"));
+    var band = situation.risk && situation.risk.thermal;
+    if (band && text.bands[band]) {
+      addReading(list, text.thermal, text.bands[band], "band band-" + band.toLowerCase().replace("_", "-"));
+    }
+    document.getElementById("reading-card").hidden = false;
+  }
+
+  function showEmpty() {
+    document.getElementById("empty-card").hidden = false;
+  }
+
+  function lastSituation() {
+    if (!("caches" in window)) return Promise.resolve(null);
+    return caches.open(DATA_CACHE)
+      // The situation is cached under whichever activity the page asked for.
+      .then(function (cache) { return cache.match("/api/situation", { ignoreSearch: true }); })
+      .then(function (res) { return res && res.ok ? res.json() : null; })
+      .catch(function () { return null; });
+  }
+
+  lastSituation().then(function (situation) {
+    if (situation && situation.current) render(situation);
+    else showEmpty();
+  });
+})();
+</script>
+</body>
+</html>

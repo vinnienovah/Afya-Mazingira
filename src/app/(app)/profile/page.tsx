@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/contexts/auth";
 import { ACTIVITY_PROFILES } from "@/lib/afya/constants";
 import { parseActivityKey, setPreferredActivity } from "@/lib/preferred-activity";
 import { Card, CardTitle } from "@/components/ui/Card";
+import { DatabaseNotice } from "@/components/auth/DatabaseNotice";
 import { cn } from "@/lib/utils";
 import { CheckCircle2, RefreshCw, LogOut, Globe } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -64,7 +65,8 @@ export default function ProfilePage() {
 
   if (!user) {
     return (
-      <div className="max-w-md mx-auto mt-8">
+      <div className="max-w-md mx-auto mt-8 space-y-4">
+        <DatabaseNotice />
         <Card>
           <div className="text-center py-8 space-y-3">
             <p className="font-semibold text-afya-charcoal">{t("protected_route")}</p>
@@ -85,6 +87,8 @@ export default function ProfilePage() {
         <h1 className="text-2xl font-bold text-afya-charcoal">{t("profile_title")}</h1>
         <p className="text-sm text-afya-muted mt-0.5">{t("profile_subtitle")}</p>
       </div>
+
+      <DatabaseNotice />
 
       {/* User card */}
       <Card>

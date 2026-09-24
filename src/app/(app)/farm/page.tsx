@@ -1,11 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useSyncExternalStore } from "react";
 import { useLanguage } from "@/lib/contexts/language";
 import {
-  CROP_PROFILES, type Et0Source, type FarmAdvisory, type GrowthStage, type IrrigationAction, type MmRange, type RainSource,
+  BALANCE_DAYS, CROP_PROFILES, type Et0Source, type FarmAdvisory, type GrowthStage, type IrrigationAction,
+  type MmRange, type RainSource,
 } from "@/lib/afya/farm-engine";
-import { fmtWindow } from "@/lib/afya/format";
+import { tf } from "@/lib/afya/i18n";
+import type { Lang } from "@/lib/afya/types";
+import { MAX_ENTRY_MM, normaliseLog, type IrrigationEntry } from "@/lib/afya/irrigation-log";
+import { readLog, readServerLog, subscribe, writeLog } from "@/lib/afya/irrigation-store";
+import { nairobiDate } from "@/lib/afya/nairobi-time";
+import { fill, fmtWindow } from "@/lib/afya/format";
 import { Card, CardTitle, CardMeta } from "@/components/ui/Card";
 import { Skeleton, SkeletonCard } from "@/components/ui/Skeleton";
 import { QualityDot } from "@/components/ui/QualityDot";
@@ -13,8 +19,10 @@ import AiPanel from "@/components/ai/AiPanel";
 import { cn } from "@/lib/utils";
 import {
   Droplets, Sprout, SprayCan, Sun, CloudRain, Thermometer,
-  AlertTriangle, CheckCircle2, Clock, RefreshCw, Leaf, Info, TrendingDown,
+  AlertTriangle, CheckCircle2, Clock, RefreshCw, Leaf, Info, TrendingDown, X,
 } from "lucide-react";
+
+const nairobiToday = () => nairobiDate(Date.now());
 
 const STAGES: { key: GrowthStage; en: string; sw: string }[] = [
   { key: "establishment", en: "Establishment", sw: "Kuota" },
@@ -27,6 +35,7 @@ const ACTION_STYLE: Record<IrrigationAction, { bg: string; border: string; text:
   IRRIGATE_NOW: { bg: "bg-[#C62828]/8", border: "border-[#C62828]/40", text: "text-[#C62828]", dot: "#C62828" },
   HOLD_RAIN_EXPECTED: { bg: "bg-[#3786B5]/8", border: "border-[#3786B5]/40", text: "text-[#3786B5]", dot: "#3786B5" },
   NO_IRRIGATION: { bg: "bg-[#006B3C]/8", border: "border-[#006B3C]/40", text: "text-[#006B3C]", dot: "#006B3C" },
+  DATA_TOO_THIN: { bg: "bg-[#F2B705]/10", border: "border-[#F2B705]/50", text: "text-[#8A6A00]", dot: "#F2B705" },
 };
 
 const ET0_SOURCE_KEY: Record<Et0Source, string> = {
@@ -68,22 +77,124 @@ function fmtDay(date: string, lang: string): string {
   });
 }
 
+/**
+ * The record of what the farmer actually put on the field. It is held on this
+ * device only, so the wording never implies an account has it.
+ */
+function AppliedWater({
+  entries, onAdd, onForget, t, lang,
+}: {
+  entries: IrrigationEntry[];
+  onAdd: (entry: IrrigationEntry) => void;
+  onForget: (date: string) => void;
+  t: (key: string) => string;
+  lang: Lang;
+}) {
+  const today = nairobiToday();
+  const [date, setDate] = useState(today);
+  const [mm, setMm] = useState("");
+  const depth = Number(mm);
+  const valid = Number.isFinite(depth) && depth > 0 && depth <= MAX_ENTRY_MM && date <= today;
+  const total = entries.reduce((sum, e) => sum + e.mm, 0);
+
+  return (
+    <div className="mt-4 rounded-xl border border-afya-border bg-afya-canvas/40 p-3">
+      <div className="flex items-baseline justify-between gap-2 flex-wrap">
+        <p className="text-xs font-semibold text-afya-charcoal">{t("farm_applied_title")}</p>
+        <p className="text-[11px] text-afya-muted">{t("farm_applied_device_note")}</p>
+      </div>
+
+      {entries.length > 0 && (
+        <>
+          <ul className="mt-2 flex flex-wrap gap-1.5">
+            {entries.map((e) => (
+              <li key={e.date}>
+                <button
+                  type="button"
+                  onClick={() => onForget(e.date)}
+                  aria-label={`${t("farm_applied_forget")}: ${fmtDay(e.date, lang)}, ${e.mm} mm`}
+                  className="flex items-center gap-1.5 rounded-lg border border-afya-border bg-white px-2 py-1 text-[11px] text-afya-charcoal hover:border-afya-orange hover:text-afya-orange"
+                >
+                  <span className="tabular-nums">{fmtDay(e.date, lang)} · {e.mm} mm</span>
+                  <X className="w-3 h-3" strokeWidth={2} aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-[11px] text-afya-muted">
+            {tf(lang, entries.length === 1 ? "farm_applied_total_one" : "farm_applied_total", {
+              mm: Math.round(total * 10) / 10,
+              days: entries.length,
+            })}
+          </p>
+        </>
+      )}
+
+      <form
+        className="mt-2.5 flex flex-wrap items-end gap-2"
+        onSubmit={(ev) => {
+          ev.preventDefault();
+          if (!valid) return;
+          onAdd({ date, mm: depth });
+          setMm("");
+          setDate(today);
+        }}
+      >
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] text-afya-muted">{t("farm_applied_depth")}</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            min={1}
+            max={MAX_ENTRY_MM}
+            step="any"
+            value={mm}
+            onChange={(ev) => setMm(ev.target.value)}
+            className="w-24 rounded-lg border border-afya-border bg-white px-2 py-1.5 text-sm tabular-nums"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] text-afya-muted">{t("farm_applied_date")}</span>
+          <input
+            type="date"
+            max={today}
+            value={date}
+            onChange={(ev) => setDate(ev.target.value)}
+            className="rounded-lg border border-afya-border bg-white px-2 py-1.5 text-sm"
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={!valid}
+          className="rounded-lg bg-afya-green px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+        >
+          {t("farm_applied_add")}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 export default function FarmPage() {
   const { t, lang } = useLanguage();
   const [crop, setCrop] = useState("maize");
   const [stage, setStage] = useState<GrowthStage>("vegetative");
+  const stored = useSyncExternalStore(subscribe, readLog, readServerLog);
+  const today = nairobiToday();
+  const log = useMemo(() => normaliseLog(stored, today, BALANCE_DAYS), [stored, today]);
   // One result, tagged with the crop and stage it answers, so a slow reply
   // for an earlier choice never shows under a later one.
   const [result, setResult] = useState<{ key: string; data: FarmResponse | null; unavailable: boolean } | null>(null);
-  const key = `${crop}|${stage}`;
+  const logKey = log.map((e) => `${e.date}:${e.mm}`).join(",");
+  const key = `${crop}|${stage}|${logKey}`;
 
   useEffect(() => {
     let active = true;
-    const answering = `${crop}|${stage}`;
+    const answering = `${crop}|${stage}|${logKey}`;
     fetch("/api/farm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ crop, stage }),
+      body: JSON.stringify({ crop, stage, applied: log }),
     })
       .then(async (res) => ({
         data: res.ok ? ((await res.json()) as FarmResponse) : null,
@@ -96,7 +207,13 @@ export default function FarmPage() {
     return () => {
       active = false;
     };
-  }, [crop, stage]);
+    // log is carried by logKey, which is what the answer is tagged with
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [crop, stage, logKey]);
+
+  const record = (entry: IrrigationEntry) => writeLog(normaliseLog([...log, entry], today, BALANCE_DAYS));
+
+  const forget = (date: string) => writeLog(log.filter((e) => e.date !== date));
 
   const loading = result?.key !== key;
   const data = loading ? null : result.data;
@@ -226,20 +343,43 @@ export default function FarmPage() {
                 {t(`farm_action_${irr.action.toLowerCase()}`)}
               </h2>
 
-              {irr.depth_range_mm ? (
+              {irr.action === "IRRIGATE_NOW" ? (
                 <p className="text-afya-charcoal text-base mb-4">
                   {t("farm_apply")}{" "}
-                  <strong className="text-xl tabular-nums">{fmtRange(irr.depth_range_mm)} mm</strong>
-                  <span className="text-afya-muted"> · {fmtRange(irr.depth_range_mm)} {t("farm_litres_m2")}</span>
+                  <strong className="text-xl tabular-nums">{irr.depth_mm} mm</strong>
+                  <span className="text-afya-muted"> · {irr.depth_mm} {t("farm_litres_m2")}</span>
+                  {irr.remaining_mm > 0 && (
+                    <span className="block text-sm text-afya-muted mt-1">
+                      {fill(t("farm_still_wanted"), { mm: irr.remaining_mm })}
+                    </span>
+                  )}
                 </p>
               ) : irr.action === "HOLD_RAIN_EXPECTED" ? (
                 <p className="text-afya-charcoal text-base mb-4">
                   {t("farm_forecast_rain_48h")}:{" "}
                   <strong className="text-xl tabular-nums">{wb.forecast_rain_48h_mm} mm</strong>
-                  <span className="text-afya-muted"> · {t("farm_shortfall_7d")} {wb.net_irrigation_7d_mm} mm</span>
+                  <span className="text-afya-muted"> · {t("farm_depletion")} {wb.depletion_mm} mm</span>
+                </p>
+              ) : irr.action === "DATA_TOO_THIN" ? (
+                <p className="text-afya-charcoal text-base mb-4">
+                  {t("farm_weekly_requirement")}:{" "}
+                  <strong className="text-xl tabular-nums">{wb.weekly_requirement_mm} mm</strong>
+                  <span className="text-afya-muted"> · {t("farm_weekly_requirement_hint")}</span>
                 </p>
               ) : (
-                <p className="text-afya-muted text-base mb-4">{t("farm_no_water_needed")}</p>
+                <p className="text-afya-muted text-base mb-4">
+                  {t("farm_no_water_needed")}
+                  {irr.days_until_irrigation !== null && (
+                    <>
+                      {" "}
+                      <span className="text-afya-charcoal">
+                        {irr.days_until_irrigation === 1
+                          ? t("farm_next_irrigation_tomorrow")
+                          : tf(lang, "farm_next_irrigation", { days: irr.days_until_irrigation })}
+                      </span>
+                    </>
+                  )}
+                </p>
               )}
 
               {/* Reasons */}
@@ -252,12 +392,99 @@ export default function FarmPage() {
                 ))}
               </ul>
 
-              <div className="mt-4 flex items-start gap-2" role="note">
+              {wb.balance_available && (
+                <div className="mt-4 flex items-start gap-2" role="note">
+                  <Droplets className="w-3.5 h-3.5 text-afya-muted shrink-0 mt-0.5" strokeWidth={1.8} aria-hidden="true" />
+                  <p className="text-xs text-afya-muted leading-relaxed">
+                    {wb.irrigation_days > 0
+                      ? tf(lang, "farm_applied_counted_note", { mm: wb.irrigation_applied_mm, days: wb.irrigation_days, dr: wb.depletion_mm })
+                      : tf(lang, "farm_rain_only_note", { dr: wb.depletion_mm })}
+                  </p>
+                </div>
+              )}
+
+              <div className="mt-3 flex items-start gap-2" role="note">
                 <Info className="w-3.5 h-3.5 text-afya-muted shrink-0 mt-0.5" strokeWidth={1.8} aria-hidden="true" />
                 <p className="text-xs text-afya-muted leading-relaxed">{t("farm_indicative_note")}</p>
               </div>
             </div>
           </div>
+
+          {/* ROOT-ZONE DEPLETION, the figure the decision is made on */}
+          <Card>
+            <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
+              <div>
+                <CardTitle className="mb-0">{t("farm_depletion")}</CardTitle>
+                <CardMeta>{tf(lang, "farm_depletion_sub", { days: wb.balance_days })}</CardMeta>
+              </div>
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-afya-muted/70 border border-afya-border rounded px-2 py-1">
+                FAO-56 · ch. 8
+              </span>
+            </div>
+
+            {wb.balance_available ? (
+              <>
+                <div className="rounded-xl border border-afya-border bg-white p-4">
+                  <div className="flex justify-between gap-3 text-xs mb-2">
+                    <span className="text-afya-muted">
+                      {t("farm_depletion")}:{" "}
+                      <strong className={cn("tabular-nums", wb.depletion_mm >= wb.readily_available_mm ? "text-afya-orange" : "text-afya-green")}>
+                        {wb.depletion_mm} mm
+                      </strong>
+                    </span>
+                    <span className="text-afya-muted text-right">
+                      {t("farm_refill_point")}: <strong className="text-afya-charcoal tabular-nums">{wb.readily_available_mm} mm</strong>
+                    </span>
+                  </div>
+                  <div
+                    className="relative h-3 rounded-full bg-afya-canvas overflow-hidden"
+                    role="img"
+                    aria-label={`${t("farm_depletion")}: ${wb.depletion_mm} mm / ${wb.taw_mm} mm`}
+                  >
+                    <div
+                      className="absolute inset-y-0 left-0 rounded-full"
+                      style={{
+                        width: `${Math.min(100, (wb.depletion_mm / Math.max(1, wb.taw_mm)) * 100)}%`,
+                        background: wb.depletion_mm >= wb.readily_available_mm ? "#C62828" : "#006B3C",
+                      }}
+                    />
+                    <div
+                      className="absolute inset-y-0 w-0.5 bg-afya-charcoal/60"
+                      style={{ left: `${Math.min(100, (wb.readily_available_mm / Math.max(1, wb.taw_mm)) * 100)}%` }}
+                      aria-hidden="true"
+                    />
+                  </div>
+                  <div className="flex justify-between gap-3 mt-2 text-[11px] text-afya-muted tabular-nums">
+                    <span>{t("farm_root_zone_full")} · 0 mm</span>
+                    <span>TAW {wb.taw_mm} mm · p {wb.depletion_fraction_adjusted}</span>
+                  </div>
+                </div>
+                {wb.balance_days_with_rain < wb.balance_days && (
+                  <p className="text-xs text-afya-muted mt-3">
+                    {tf(lang, "farm_balance_gaps", {
+                      missing: wb.balance_days - wb.balance_days_with_rain,
+                      days: wb.balance_days,
+                    })}
+                  </p>
+                )}
+                {wb.balance_days < BALANCE_DAYS && (
+                  <p className="text-xs text-afya-muted mt-2">
+                    {tf(lang, "farm_balance_short_window", { days: wb.balance_days, full: BALANCE_DAYS })}
+                  </p>
+                )}
+                <AppliedWater entries={log} onAdd={record} onForget={forget} t={t} lang={lang} />
+              </>
+            ) : (
+              <div className="rounded-xl border border-afya-border bg-afya-canvas/50 p-4">
+                <div className="text-lg font-bold tabular-nums text-afya-charcoal">{wb.weekly_requirement_mm} mm</div>
+                <div className="text-[11px] text-afya-muted">{t("farm_weekly_requirement")}</div>
+                <p className="text-xs text-afya-muted mt-2 leading-relaxed">
+                  {tf(lang, "farm_balance_short_window", { days: wb.balance_days, full: BALANCE_DAYS })}{" "}
+                  {t("farm_weekly_requirement_hint")}
+                </p>
+              </div>
+            )}
+          </Card>
 
           {/* WATER BALANCE */}
           <Card>
@@ -436,16 +663,27 @@ export default function FarmPage() {
                 <Thermometer className="w-4 h-4 text-afya-muted" strokeWidth={1.8} aria-hidden="true" />
                 <CardTitle className="mb-0">{t("farm_crop_stress")}</CardTitle>
               </div>
-              <div className="flex items-baseline gap-3 mb-3">
+              <div className="flex items-baseline gap-3 flex-wrap mb-3">
                 <span className="text-2xl font-bold" style={{ color: STRESS_STYLE[adv.stress.level] }}>
                   {t(`farm_stress_${adv.stress.level.toLowerCase()}`)}
                 </span>
                 <span className="text-sm tabular-nums text-afya-muted">
                   {t("farm_peak_temp")} {adv.stress.peak_temp_c}°C
                 </span>
+                {adv.stress.hours_above_mild != null && (
+                  <span className="text-sm tabular-nums text-afya-muted">
+                    {tf(lang, "farm_stress_hours_above", {
+                      hours: adv.stress.hours_above_mild,
+                      temp: adv.stress.mild_threshold_c,
+                    })}
+                  </span>
+                )}
               </div>
-              <p className="text-[10px] uppercase tracking-wide text-afya-muted/60 -mt-2 mb-3">
+              <p className="text-[10px] uppercase tracking-wide text-afya-muted/60 -mt-2 mb-1">
                 {t(adv.stress.peak_source === "station" ? "farm_peak_src_station" : "farm_peak_src_regional")}
+              </p>
+              <p className="text-xs text-afya-muted mb-3">
+                {tf(lang, "farm_stress_threshold", { temp: adv.stress.mild_threshold_c })}
               </p>
               <ul className="space-y-1">
                 {adv.stress.reason_keys.map((r) => (
@@ -472,11 +710,17 @@ export default function FarmPage() {
                 </span>
               </div>
               <p className="text-sm text-afya-muted mb-3">{t(adv.planting.message_key)}</p>
-              <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 text-center">
                 {[
                   { v: `${adv.planting.rain_30d_mm}`, l: t("farm_rain_30d"), u: "mm" },
                   { v: `${adv.planting.required_mm}`, l: t("farm_required"), u: "mm" },
+                  { v: `${adv.planting.wetting_mm}`, l: t("farm_wetting"), u: "mm" },
                   { v: `${adv.planting.dry_spell_days}`, l: t("farm_dry_spell"), u: lang === "sw" ? "siku" : "days" },
+                  {
+                    v: adv.planting.forecast_rain_48h_mm != null ? `${adv.planting.forecast_rain_48h_mm}` : unavailable,
+                    l: t("farm_next_48h"),
+                    u: adv.planting.forecast_rain_48h_mm != null ? "mm" : "",
+                  },
                 ].map((s, i) => (
                   <div key={i} className="rounded-lg border border-afya-border bg-afya-canvas/50 px-2 py-2">
                     <div className="text-base font-bold tabular-nums text-afya-charcoal">{s.v}</div>
@@ -485,7 +729,11 @@ export default function FarmPage() {
                   </div>
                 ))}
               </div>
-              <p className="text-[9px] uppercase tracking-wide text-afya-muted/60 mt-2">
+              <p className="text-[10px] text-afya-muted/80 mt-2">
+                {t("farm_wetting")}: {t("farm_wetting_hint")} ({adv.planting.wetting_required_mm} mm)
+              </p>
+              <p className="text-[10px] text-afya-muted/80 mt-1">{t("farm_plant_basis_note")}</p>
+              <p className="text-[9px] uppercase tracking-wide text-afya-muted/60 mt-1">
                 {t(RAIN_SOURCE_KEY[adv.planting.rain_source])} · {adv.planting.rain_days_with_data}/30 {t("farm_days_with_data")}
               </p>
             </Card>

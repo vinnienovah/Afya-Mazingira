@@ -21,7 +21,7 @@ test("every command palette link opens a page that exists", () => {
   for (const link of PALETTE_LINKS) assert.ok(pageExists(link.href), `${link.id} -> ${link.href}`);
 });
 
-test("the palette reaches the Dashboard and Flood Risk, and Replay through the Dashboard tab", () => {
+test("the palette reaches the Dashboard and Flood Conditions, and Replay through the Dashboard tab", () => {
   const hrefs = PALETTE_LINKS.map((l) => l.href);
   assert.ok(hrefs.includes("/climate"));
   assert.ok(hrefs.includes("/flood"));

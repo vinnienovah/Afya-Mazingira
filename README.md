@@ -65,7 +65,7 @@ Afya Mazingira turns the station's readings into decisions, in English and Kiswa
 - **What is happening:** the current environmental state (cool and humid, rapid warming, hot, cooling), learned from 15 months of the station's own record and held for at least an hour before it counts as a change.
 - **What comes next:** WBGT every 15 minutes out to nine hours, from the usual daily cycle at the station and today's departure from it, with an uncertainty band tested on months the model never saw.
 - **What it means for you:** a risk band for the activity you choose (walking, sports, construction, field work, events) and the best daylight window to do it, never one that has passed or runs beyond the forecast.
-- **For farms:** irrigation from a seven-day water budget: crop water use worked out from the station's measured daily high and low, against the station's own rain gauge. Spraying and field-work windows, crop heat stress and a planting outlook come with it.
+- **For farms:** irrigation from a daily root-zone water balance: water when the zone has dried to what the crop can readily take up, with the depth to give and how much the zone still wants; otherwise the day it falls due. Crop water use comes from the station's measured daily high and low, against the station's own rain gauge. Spraying and field-work windows, crop heat stress and a planting outlook come with it.
 - **Around the region:** hourly air temperature and shade WBGT for ten neighbouring counties from a regional forecast model, labelled as regional, next to Kiambu, where the station stands.
 
 Every number is computed in code. Language models only reword results the code has already produced, and a checker rejects any reply that states a temperature, time or risk band the code did not.
@@ -86,21 +86,24 @@ Past days after the archive ends (replay, climate history, the 30 days the forec
 
 **Rain comes from the gauge's own counter.** A sampled minute's rain misses the other fourteen, so adding the samples up gives 76 mm over the archive. Gauge 1 also reports a running total for its day (reset at 06:00 UTC), and the rise in that total gives **1,185 mm**, against 1,199 mm from the gauge's own end-of-day totals (the difference fell before the archive's first row). The wettest day on record, 27 April 2026, had 95.2 mm. Gauge 2 is used only where gauge 1 has no reading, never added to it. Data quality is GOOD, DEGRADED (over an hour old, or a critical reading filled in) or POOR (over three hours old), and POOR suppresses recommendations.
 
-**Conduit Sentinel: station health first.** Conduit Sentinel is the quality-control core of the project: rules, audits and a daily health score written for this station's exports and applied here to the 15-minute data. Every reading passes it before the app uses it.
+**Conduit Sentinel: station health first.** Conduit Sentinel is the quality-control core of the project: rules, audits and a daily health score written for this station's exports and applied here to the 15-minute data. A reading that breaks a hard limit is dropped before the engines see it; the rest of the checks set the day's score and the data quality the app acts on.
 
 | Check | What it flags |
 |---|---|
-| R01 to R04 | Temperatures outside -5 to 45 °C, humidity at or below 0 %, pressure outside 800 to 900 hPa (the station is at 1,523 m), impossible wind or gusts. Such a reading is treated as missing |
+| R01 to R05 | Temperatures outside -5 to 45 °C, humidity outside 0 to 100 %, pressure outside 800 to 900 hPa (the station is at 1,523 m), impossible wind or gusts, rain outside 0 to 10 mm in a reading. Such a value is dropped before anything reads it, and marked |
 | R06 | Light readings below the sensor's dark floor of 240 counts |
-| R07 | Temperature jumping more than 5 °C in 15 minutes |
-| R08 | The same value for 2 hours (a thermometer, only while another thermometer moves by more than 0.5 °C; humidity) or 3 hours (pressure, non-zero wind) |
+| R07 | Any of the three thermometers jumping more than 5 °C in 15 minutes |
+| R08 | The same value for 2 hours (a thermometer, only while one of the other two moves by more than 0.5 °C; humidity) or 3 hours (pressure, non-zero wind) |
 | R09 | The three thermometers disagreeing by more than 2 °C |
-| R11 | In a rain day, one gauge's own total is 0.4 mm or more while the other's is zero |
-| R12 | A channel silent for a whole day (Nairobi time). On the CHORDS feed, which sends rain only while it rains, the gauges are not judged until one reports |
-| R13 | The gust-direction column copying the gust speed |
+| R10 | A gust reported below the wind speed it gusts above, caught on the reading itself |
+| R11 | In a rain day, one gauge's own total is 0.4 mm or more while the other's is zero. It is reported against the date the rain day starts, 06:00 UTC |
+| R12 | A channel silent for a whole day (Nairobi time), or flagged in every reading of it. On the CHORDS feed, which sends rain only while it rains, the gauges are not judged until one reports |
+| R13 | The gust-direction column copying the gust speed, judged on the readings that carry a gust |
+| R14 | Cadence: a reading arriving a whole interval late, or inside a gap. Reported, never scored |
+| R15 | A non-zero device health code. This export carries no such column, so the check reports itself as not reported rather than passing; where a feed sends one, a code is noted and never counted as a fault, its meaning being undocumented |
 | R16 | The firmware WBGT more than 1.5 °C below the wet bulb |
-| A01, A03, A05 | Audits: the firmware wet bulb against Stull (2011), the firmware WBGT against the wet bulb, and the three thermometers against each other |
-| Daily score | 100, less 10 for each group that is bad, 2 for each that is suspect, and 1 for every 14.4 minutes without data. Time without data counts only where readings are more than 20 minutes apart; the station's cadence drifts by a few seconds, which leaves some quarter hours empty without losing data |
+| A01 to A05 | Audits: the firmware wet bulb against Stull (2011), the firmware heat index against the NWS Rothfusz regression, the firmware WBGT against the wet bulb, the firmware WBGT against a standards-grade estimate (Liljegren et al. 2008), and the three thermometers against each other |
+| Daily score | 100, less 10 for each group that is bad, 2 for each that is suspect, and 1 for every 14.4 minutes without data. The groups are the three thermometers, humidity, pressure, wind, light, and each rain gauge on its own. Missing time follows the feed's own cadence: a gap opens when a reading is more than four minutes later than the spacing the feed keeps (906 s in the archive, 900 s from CHORDS, 61 s in the organisers' one-minute exports), and is charged from one interval after the last reading |
 
 Where it lives: the rules in `src/lib/afya/sentinel.ts`; `npm run station-report` runs them over the whole archive into `src/lib/afya/model/station-health.json`; `/api/station-health` serves that report and the same checks live on the last 24 hours; the **Station Health** page shows both; `tests/sentinel.test.ts` tests them.
 
@@ -113,15 +116,17 @@ What it changes in the app:
 
 Over the 466 days on record (Nairobi days):
 
-- a mean daily score of 89.5 and no day below 80. The gust-direction copy (R13) is bad every day, as the Sentinel specification counts it, so 90 is the best any day scores;
-- 313 minutes without data, on 10 days; two gaps longer than an hour, the longest 1.6 hours;
+- a mean daily score of 89.5 and no day below 80. The gust-direction copy (R13) is bad every day, as the Sentinel specification counts it, so 90 is the best any day scores. That score leaves out the battery, because this export carries no battery channel to judge; counting it as the specification does, the mean is 79.5, no day reaches above 80 and 112 fall below it. The page shows both;
+- 320 minutes without data, on 12 days; two gaps longer than an hour, the longest 1.6 hours (27 August 2026, 20:02 to 21:38 UTC);
 - the firmware WBGT is below the wet bulb in 63.5 % of readings and more than 1.5 °C below in 42.9 % (62.2 % at night, 26.8 % by day);
+- the firmware heat index matches the NWS Rothfusz regression to 0.101 °C on average, and to 0.034 °C over the readings at or above 27 °C the formula is built for (A02). The largest single difference, 1.058 °C, sits on the 80 °F switch between the simple form and the regression;
+- the firmware WBGT reads below a standards-grade estimate at every hour of the day (A04): about 2 °C at night, 8.6 °C at 09:00 EAT, 3.99 °C over the record. The gap follows the sun rather than the temperature peak. The estimate needs solar irradiance the station does not measure, inferred from the SI1145 infrared counts, so the daytime figures carry real uncertainty (held-out r² 0.674, RMSE 155 W/m², worth 1.1 to 2.0 °C of WBGT); the night-time gap uses no irradiance at all. The firmware's column matches none of the usual conventions: against the archive it differs from the wet bulb alone by 1.92 °C on average, from 0.7 × wet bulb + 0.3 × air (ISO 7243 without solar load) by 1.99 °C, and from the Liljegren estimate by 4.05 °C;
 - by each gauge's own daily totals, gauge 2 recorded nothing on 85 rain days when gauge 1 measured 0.4 mm or more, and gauge 1 nothing on 16 days when gauge 2 did;
 - since 1 July 2025 the records carry the UV index in gauge 2's running-total column, so gauge 2's running total is lost and only its daily totals remain;
 - the archive export has no battery channel; the CHORDS feed lists one but leaves it empty, which counts as bad (R12);
 - the firmware wet bulb agrees with Stull (2011) to 0.032 °C.
 
-These go on the page as findings to report to JHUB. The same checks also run live, unchanged, on other 3D-PAWS stations on the CHORDS portal: the page's station selector adds KALRO Thika, Machakos Stoni Athi and Embu.
+These go on the page as findings to report to JHUB. The same checks also run live, unchanged, on other 3D-PAWS stations on the CHORDS portal: the page's station selector adds KALRO Thika, Machakos Stoni Athi and Embu, and any other instrument on the portal would need only its id.
 
 **WBGT from the station's own sensors.** The station's firmware WBGT column reads below the wet bulb in 63.5 % of the archive, which a real WBGT cannot do. We do not use it. WBGT here is the ISO 7243 form without solar load, 0.7 x wet bulb + 0.3 x air temperature, from the station's wet bulb and its air temperature.
 
@@ -162,10 +167,14 @@ On a single split (fitted to May 2026, tested on June to September 2026, which t
 
 **Farm advisory.**
 
-- Reference evapotranspiration (ET₀) is Hargreaves (FAO-56) from the highest and lowest air temperature the station measured over the last 24 hours, and the sun's energy for JKUAT's latitude and the date. On 16 days in late August and September 2026 it tracked Open-Meteo's FAO-56 Penman-Monteith ET₀ with r = 0.90 and a mean absolute difference of 0.41 mm/day; the page shows both.
-- The irrigation advice is a seven-day water budget: crop water use (ET₀ times the FAO-56 crop coefficient for the stage) against effective rain (80 % of each day's rain above 2 mm). Rain comes from gauge 1 when it reported on at least 6 of the last 7 days, otherwise from Open-Meteo's regional model, and the page says which. The shortfall is the depth, rounded to 5 mm and capped at what a clay root zone of that stage's depth can hold. With 10 mm or more of rain forecast in the next 48 hours, the advice is to hold.
-- Regional soil moisture (ERA5-Land, 7 to 28 cm) is shown as context only, ranked against its own past year.
-- The page marks the advice as indicative.
+- Reference evapotranspiration (ET₀) is Hargreaves (FAO-56 eq. 52) from the highest and lowest air temperature the station measured over the last 24 hours, and the sun's energy for JKUAT's latitude and the date (eq. 21). Over the 465 days of the archive it runs 0.43 mm/day above Open-Meteo's FAO-56 Penman-Monteith ET₀ (mean absolute difference 0.51, RMSE 0.65), which is what Hargreaves does at a site whose measured daily range is wider than the reanalysis grid's; the page shows both figures side by side.
+- The irrigation advice is the FAO-56 chapter 8 root-zone balance, carried day by day over the last 60 days: depletion rises with crop water use (ET₀ times the crop coefficient for the stage) and falls with effective rain (80 % of each day's rain above 2 mm), held between an empty zone and a full one. Rain comes from gauge 1 when it reported on at least 6 of the last 7 days, otherwise from Open-Meteo's regional model, and the page says which.
+- Water is advised when the zone has dried to the readily available water it holds (FAO-56's p, corrected for the day's demand). The depth refills the zone, floored to 5 mm; a single pass is held to the readily available water, because more than that runs off clay or drains past the roots, and the page says how much the zone still wants. Below that point the page gives the day the watering falls due instead of a depth. A hold for rain needs a forecast that covers most of the refill, not any rain at all.
+- The balance also counts irrigation the farmer records on the page: a pass is entered as a date and a depth, and comes off the depletion that day. A recorded pass counts in full where rain counts at its effective share, because water put on the root zone loses only the surplus past field capacity. The record is held on the device that made it, so it works signed out and nothing about a field is stored on the server. Where the record is too thin to carry a balance, the page gives the week's requirement instead of an instruction.
+- Crops that dry down before harvest are not watered at maturity, and heat stress uses each crop's own heat-stress thresholds, set from its optimum range in FAO EcoCrop. Beside the level the page gives the measured hours the day held at or above the first of them.
+- The spray verdict is this page's own rule set, not the Best-Time engine: it holds spraying to the hours between the station's sunrise and sunset, weighs wind, rain chance and temperature against the project's own working limits, and is lowered when the wind speed or temperature behind it was filled in rather than measured.
+- Regional soil moisture (ERA5-Land, 7 to 28 cm) is shown as context only, ranked against its own past year. The page marks the whole advisory as indicative.
+- What it comes to: over 1 June to 8 September 2026, the dry season, the advice for maize in its vegetative stage is 320 mm in five waterings against 338 mm of crop demand, at an interval of 18.8 days where FAO-56's own figures give 19.7. Beans at maturity are left to dry down.
 
 **Regional outlook.** Kiambu, where the station stands, uses the station: its measured temperature for hours already past and its forecast WBGT for the outlook. The other ten counties use Open-Meteo's forecast model through the same shade WBGT (with Stull's wet bulb), labelled as regional. The Thermal layer colours each county by its air temperature at the chosen hour.
 
@@ -176,17 +185,17 @@ On a single split (fitted to May 2026, tested on June to September 2026, which t
 | **Situation** | The current state, readings (filled-in values marked), data quality with the time of the data, the risk band now beside the band forecast for +3 hours, the +1/+3/+6/+9 h forecast with each horizon's tested error, the best daylight window for an activity, and the AI explanation |
 | **Forecast** | The station's measured WBGT over the last 12 hours joined to the 15-minute forecast and its band, shaded by state |
 | **Plan Activity** | Best-time search for an activity, duration and time window: only windows still ahead, in daylight and fully covered by the forecast, with reasons that hold for that window, an alternative, and saved plans that can be edited and rerun |
-| **Farm Advisory** | Irrigate (with the depth), hold for rain, or no irrigation needed, from the seven-day water budget; spray and field-work windows, crop heat stress and planting outlook for 7 crops and 4 growth stages; marked indicative |
+| **Farm Advisory** | Water now (with the depth and what the zone still wants), hold for rain, nothing needed yet (with the day it falls due), or too little data (with the week's requirement), from the root-zone balance; spray and field-work windows, crop heat stress and planting outlook for 7 crops and 4 growth stages; marked indicative |
 | **Risk Map** | Leaflet on OpenStreetMap: 11 county boundaries with outlook, thermal (air temperature), rain and vegetation layers and a time slider; station-backed versus regional marked on each; grey where a source has no data |
 | **Dashboard** | Live station variables and daily station rain, a climate history explorer over any date range (station or ERA5), and historical replay of any day from June 2025 to yesterday: step through the day with the future hidden, then reveal each forecast against what the station recorded |
 | **Station Health** | Conduit Sentinel: sensor-group status for the last 24 hours at JKUAT or three nearby CHORDS stations, the daily health score since June 2025, firmware and thermometer audits, the rules, and findings to report to JHUB |
 | **Why?** | Data quality flags, the state timeline, what moves the +3 h forecast in °C, the model comparison table with test-month scores, and the regional context with the hours it compares |
 | **Operations** | A day's planned activities, saved in the browser, each judged on the part of its window still ahead and forecast, with a cooler daylight window suggested when there is one |
-| **Flood Risk** | Today's rainfall (so far plus forecast) and topsoil saturation by county from Open-Meteo. Conditions only; not a flood forecast |
+| **Flood Conditions** | Today's rainfall (so far plus forecast) and 0 to 7 cm soil saturation by county from Open-Meteo, with the thresholds printed on the page. Kiambu's rain is the station gauge where the gauge covered the day. Conditions only; not a flood forecast |
 | **Notifications** | Alert rules checked once a day at 08:00 EAT: the day's forecast heat peak for the rule's activity, a hot state ahead, or a saved plan moving into a higher band. Sent by email, and by browser push where the server has VAPID keys |
 | **Briefing** | A printable one-page summary, rendered on the server |
 
-Also: sign-in with email and password or Google, email verification, rate limits on sign-in, sign-up and the AI, a ⌘K command palette, and an installable app that shows the last known situation offline.
+Also: sign-in with email and password or Google, email verification, rate limits on sign-in, sign-up and the AI, a ⌘K command palette, and an installable app that, with no network, opens on the last station reading it cached and the time that reading was taken.
 
 ## 6. Technology stack
 
@@ -270,7 +279,7 @@ Open the app and start at **Situation**. Choose an activity to see its risk and 
 | Command | What it does |
 |---|---|
 | `npm run dev` | Development server on http://localhost:3000 |
-| `npm test` | 286 tests, no network |
+| `npm test` | 448 tests, no network |
 | `npm run typecheck` / `npm run lint` | Type check and lint |
 | `npm run fit` | Refit the forecast, the states and the rain chance from the archive |
 | `npm run evaluate` | Test the four forecasts month by month |
@@ -303,7 +312,7 @@ Main API routes (JSON):
 | ERA5-Land via the Open-Meteo archive API | Regional soil moisture at 7 to 28 cm, as context on the Farm page | Open-Meteo, CC BY 4.0. Contains modified Copernicus Climate Change Service information |
 | Open-Meteo forecast API | County map and Thermal layer, Flood page, rainfall context up to today, the farm's regional rain and Penman-Monteith ET₀, plans past the station forecast | Open-Meteo, CC BY 4.0 |
 | Copernicus Sentinel-2, via the Copernicus Data Space | NDVI and acquisition dates | Contains modified Copernicus Sentinel data |
-| County boundaries, `public/geo/counties.geojson` | Map | _Source to be added by the team_ |
+| County boundaries, `public/geo/counties.geojson` | Map | **TO DO (team): record where this file came from.** It holds 11 polygons carrying the official KNBS county codes, but its own origin is not recorded, so neither this table nor the map footer claims one |
 | Landing page photographs | Decoration | Unsplash licence |
 
 Methods: Stull (2011), *J. Appl. Meteor. Climatol.* 50, 2267-2269 (wet bulb); ISO 7243 (WBGT); Hargreaves and Samani (1985) and FAO-56, Allen et al. (1998) (reference evapotranspiration, extraterrestrial radiation, crop coefficients and water balance).
@@ -351,6 +360,8 @@ Between them the team covers the environmental science behind the heat and farm 
 
 MIT. See [LICENSE](LICENSE). Station and reanalysis data remain under their providers' terms (section 10).
 
+One file carries a second licence: `src/lib/afya/liljegren.ts` implements the heat-balance equations of WBGT version 1.1 by James C. Liljegren, Copyright © 2008 UChicago Argonne, LLC, and keeps that program's open-source notice in full at the head of the file, as its terms require.
+
 ---
 
 ## Known limitations
@@ -359,7 +370,7 @@ MIT. See [LICENSE](LICENSE). Station and reanalysis data remain under their prov
 - **The risk bands are our own.** 18, 21 and 24 °C WBGT and the activity adjustments are screening bands chosen by the project, not a published occupational or medical limit. In Juja's climate the top band is rare in shade (0.05 % of the archive).
 - **The forecast under-warns a little more in the hot season.** Tested month by month, it put the hour in too low a band at +3 hours 8.5 % of the time from January to March 2026, against 7.4 % in other months.
 - **Heat alerts use the 08:00 forecast of the day's peak,** which runs on average 0.85 °C below the peak the station then measures, so some days that turn out HIGH get no alert.
-- **Farm advice is indicative.** It assumes a clay soil typical of JKUAT, not a measurement in the field, and uses the regional model's rain when the gauge is short of data.
+- **Farm advice is indicative.** It assumes a clay soil typical of JKUAT, not a measurement in the field, and uses the regional model's rain when the gauge is short of data. The root-zone balance counts rain and whatever irrigation you record on the page; water you applied without recording is not in the depletion it shows.
 - **The flood page shows conditions,** rainfall and soil saturation, not a flood forecast.
 - **The Conduit API can lag by most of a day;** the CHORDS feed covers for it. CHORDS sends rain only while it rains, so its rain gauges are not judged on a dry day.
 - **Browser push needs VAPID keys** on the server; without them alerts go by email only.

@@ -31,8 +31,6 @@ const CountyLeafletMap = dynamic(() => import("@/components/map/CountyLeafletMap
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
-type MapMode = "summary" | "surface";
-
 const LAYER_META: { key: MapLayerKey; icon: React.ReactNode; label_en: string; label_sw: string }[] = [
   { key: "outlook",    icon: <Layers className="w-4 h-4" />,      label_en: "Environmental Outlook", label_sw: "Muonekano wa Mazingira" },
   { key: "thermal",    icon: <Thermometer className="w-4 h-4" />, label_en: "Thermal Context",       label_sw: "Muktadha wa Joto" },
@@ -41,6 +39,10 @@ const LAYER_META: { key: MapLayerKey; icon: React.ReactNode; label_en: string; l
 ];
 
 const TIMES = ["09:00", "12:00", "15:00", "18:00"];
+
+// Rain is a whole-day total and NDVI a 14-day mean, so neither moves with the
+// hour the strip selects.
+const HOURLY_LAYERS: MapLayerKey[] = ["outlook", "thermal"];
 
 export default function MapPage() {
   const { t, lang } = useLanguage();
@@ -51,7 +53,6 @@ export default function MapPage() {
     "/geo/counties.geojson", fetcher,
   );
 
-  const [mode, setMode] = useState<MapMode>("summary");
   const [layer, setLayer] = useState<MapLayerKey>("outlook");
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [timeIdx, setTimeIdx] = useState(1);
@@ -61,6 +62,10 @@ export default function MapPage() {
 
   const counties: CountyFeature[] = useMemo(() => data?.counties?.features ?? [], [data]);
   const satellites: SatelliteAcquisition[] = data?.satellites ?? [];
+  // The server says whether Copernicus is configured; the client does not infer
+  // it from an empty list, which an outage would produce too.
+  const satelliteConfigured: boolean = data?.satellite_configured ?? true;
+  const hourly = HOURLY_LAYERS.includes(layer);
 
   // Indicator lookup keyed by county name (boundaries are authoritative geometry)
   const indicators = useMemo(() => {
@@ -72,18 +77,23 @@ export default function MapPage() {
   const selectedCounty = selectedName ? indicators[selectedName] ?? null : null;
 
   useEffect(() => {
-    if (!playing) return;
+    if (!playing || !hourly) return;
     const id = setInterval(() => setTimeIdx((i) => (i + 1) % TIMES.length), 1800);
     return () => clearInterval(id);
-  }, [playing]);
+  }, [playing, hourly]);
 
   const currentTime = TIMES[timeIdx];
   const sat = satellites[satIdx];
+  // Without credentials every county's NDVI is null, so the scale would be a
+  // legend for a layer that has nothing in it.
+  const ndviEmpty = layer === "vegetation" && !satelliteConfigured;
 
   const legend: [string, string][] =
     layer === "outlook"
       ? (["LOW", "ELEVATED", "HIGH", "VERY_HIGH"] as const).map((lv) => [RISK_META[lv].color, lang === "sw" ? RISK_META[lv].sw : RISK_META[lv].en])
-      : (layer === "rain" ? RAIN_STEPS : layer === "vegetation" ? NDVI_STEPS : THERMAL_STEPS).map((s) => [s.colour, s.label]);
+      : ndviEmpty
+        ? []
+        : (layer === "rain" ? RAIN_STEPS : layer === "vegetation" ? NDVI_STEPS : THERMAL_STEPS).map((s) => [s.colour, s.label]);
 
   return (
     <div className="space-y-5">
@@ -102,93 +112,43 @@ export default function MapPage() {
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="flex flex-wrap gap-3">
-        <div className="flex items-center rounded-xl border border-afya-border bg-white overflow-hidden text-xs font-semibold">
+      {/* Layer control */}
+      <div className="rounded-xl border border-afya-border bg-white p-1 flex gap-0.5 flex-wrap w-fit">
+        {LAYER_META.map((lm) => (
           <button
-            onClick={() => setMode("summary")}
-            aria-pressed={mode === "summary"}
-            className={cn("px-4 py-2.5 transition-colors", mode === "summary" ? "bg-afya-deep text-white" : "text-afya-muted hover:text-afya-charcoal")}
+            key={lm.key}
+            onClick={() => setLayer(lm.key)}
+            aria-pressed={layer === lm.key}
+            title={lang === "sw" ? lm.label_sw : lm.label_en}
+            className={cn(
+              "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors",
+              layer === lm.key ? "bg-afya-deep text-white" : "text-afya-muted hover:text-afya-charcoal hover:bg-afya-canvas",
+            )}
           >
-            {t("county_summary")}
+            {lm.icon}
+            <span className="hidden sm:inline">{lang === "sw" ? lm.label_sw : lm.label_en}</span>
           </button>
-          <button
-            onClick={() => setMode("surface")}
-            aria-pressed={mode === "surface"}
-            className={cn("px-4 py-2.5 transition-colors", mode === "surface" ? "bg-afya-deep text-white" : "text-afya-muted hover:text-afya-charcoal")}
-          >
-            {t("environmental_surface")}
-          </button>
-        </div>
-
-        <div className="rounded-xl border border-afya-border bg-white p-1 flex gap-0.5 flex-wrap">
-          {LAYER_META.map((lm) => (
-            <button
-              key={lm.key}
-              onClick={() => setLayer(lm.key)}
-              aria-pressed={layer === lm.key}
-              title={lang === "sw" ? lm.label_sw : lm.label_en}
-              className={cn(
-                "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors",
-                layer === lm.key ? "bg-afya-deep text-white" : "text-afya-muted hover:text-afya-charcoal hover:bg-afya-canvas",
-              )}
-            >
-              {lm.icon}
-              <span className="hidden sm:inline">{lang === "sw" ? lm.label_sw : lm.label_en}</span>
-            </button>
-          ))}
-        </div>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* MAP */}
         <div className="lg:col-span-2 space-y-3">
           <Card padding={false} className="overflow-hidden">
-            {/* Time controls */}
-            <div className="flex items-center gap-3 px-4 pt-3.5 pb-3 border-b border-afya-border">
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => setTimeIdx((i) => Math.max(0, i - 1))}
-                  disabled={timeIdx === 0}
-                  className="p-1.5 rounded-lg text-afya-muted hover:bg-afya-canvas disabled:opacity-30 transition-colors"
-                  aria-label="Previous time step"
-                >
-                  <ChevronLeft className="w-4 h-4" strokeWidth={2} />
-                </button>
-                <button
-                  onClick={() => setPlaying((p) => !p)}
-                  className="p-1.5 rounded-lg text-afya-muted hover:bg-afya-canvas transition-colors"
-                  aria-label={playing ? t("pause") : t("play")}
-                  aria-pressed={playing}
-                >
-                  {playing ? <Pause className="w-4 h-4" strokeWidth={2} /> : <Play className="w-4 h-4" strokeWidth={2} />}
-                </button>
-                <button
-                  onClick={() => setTimeIdx((i) => Math.min(TIMES.length - 1, i + 1))}
-                  disabled={timeIdx === TIMES.length - 1}
-                  className="p-1.5 rounded-lg text-afya-muted hover:bg-afya-canvas disabled:opacity-30 transition-colors"
-                  aria-label="Next time step"
-                >
-                  <ChevronRight className="w-4 h-4" strokeWidth={2} />
-                </button>
-              </div>
-              <div className="flex-1 flex justify-around">
-                {TIMES.map((time, i) => (
-                  <button
-                    key={time}
-                    onClick={() => { setTimeIdx(i); setPlaying(false); }}
-                    aria-pressed={timeIdx === i}
-                    className={cn(
-                      "rounded-lg px-2 py-1 text-xs font-bold transition-colors",
-                      timeIdx === i ? "bg-afya-deep text-white" : "text-afya-muted hover:text-afya-charcoal",
-                    )}
-                  >
-                    {time}
-                  </button>
-                ))}
-              </div>
-              <span className="text-[11px] text-afya-muted font-mono">{currentTime} EAT</span>
-            </div>
+            {/* Time controls, only over the layers that vary by hour */}
+            {hourly ? (
+              <TimeStrip
+                timeIdx={timeIdx}
+                setTimeIdx={setTimeIdx}
+                playing={playing}
+                setPlaying={setPlaying}
+                t={t}
+              />
+            ) : (
+              <p className="px-4 pt-3.5 pb-3 border-b border-afya-border text-[11px] text-afya-muted">
+                {t("map_time_not_used")}
+              </p>
+            )}
 
             {/* Leaflet map */}
             <div className="relative">
@@ -199,7 +159,6 @@ export default function MapPage() {
                   boundaries={boundaries}
                   indicators={indicators}
                   layer={layer}
-                  mode={mode}
                   timeIdx={timeIdx}
                   selectedCounty={selectedName}
                   onSelectCounty={setSelectedName}
@@ -212,9 +171,12 @@ export default function MapPage() {
               )}
 
               {/* Legend overlay */}
-              <div className="absolute bottom-4 left-4 z-[500] rounded-xl bg-white/95 border border-afya-border px-3 py-2 backdrop-blur-sm shadow-sm">
+              <div className="absolute bottom-4 left-4 z-[500] max-w-[15rem] rounded-xl bg-white/95 border border-afya-border px-3 py-2 backdrop-blur-sm shadow-sm">
                 {layer === "thermal" && (
                   <p className="text-[10px] font-bold text-afya-charcoal mb-1">{t("map_air_temp")} · {currentTime} EAT</p>
+                )}
+                {ndviEmpty && (
+                  <p className="text-[10px] text-afya-muted mb-1 leading-snug">{t("map_satellite_not_configured")}</p>
                 )}
                 <div className="flex flex-col gap-1">
                   {legend.map(([c, l]) => (
@@ -258,53 +220,62 @@ export default function MapPage() {
           <Card>
             <div className="flex items-center justify-between mb-3">
               <CardTitle className="mb-0">{t("satellite_context")}</CardTitle>
-              <button
-                onClick={() => setShowSatTimeline((v) => !v)}
-                className="text-xs text-afya-muted hover:text-afya-charcoal flex items-center gap-1"
-                aria-expanded={showSatTimeline}
-              >
-                <Info className="w-3.5 h-3.5" strokeWidth={1.8} aria-hidden="true" />
-                {showSatTimeline ? t("hide_technical") : t("details")}
-              </button>
+              {satellites.length > 0 && (
+                <button
+                  onClick={() => setShowSatTimeline((v) => !v)}
+                  className="text-xs text-afya-muted hover:text-afya-charcoal flex items-center gap-1"
+                  aria-expanded={showSatTimeline}
+                >
+                  <Info className="w-3.5 h-3.5" strokeWidth={1.8} aria-hidden="true" />
+                  {showSatTimeline ? t("hide_technical") : t("details")}
+                </button>
+              )}
             </div>
 
-            <div className="flex items-center gap-2 overflow-x-auto pb-1">
-              <button
-                onClick={() => setSatIdx((i) => Math.max(0, i - 1))}
-                disabled={satIdx === 0}
-                className="p-1.5 rounded-lg text-afya-muted hover:bg-afya-canvas disabled:opacity-30 shrink-0"
-                aria-label="Previous acquisition"
-              >
-                <ChevronLeft className="w-4 h-4" strokeWidth={2} />
-              </button>
-              <div className="flex gap-2 flex-1">
-                {satellites.map((s, i) => (
-                  <button
-                    key={s.id}
-                    onClick={() => setSatIdx(i)}
-                    aria-pressed={satIdx === i}
-                    className={cn(
-                      "flex-1 min-w-[100px] rounded-xl border px-3 py-2.5 text-left transition-all shrink-0",
-                      satIdx === i ? "border-afya-green bg-afya-green/8" : "border-afya-border hover:border-afya-green/40",
-                    )}
-                  >
-                    <div className={cn("text-[10px] font-bold uppercase tracking-wide mb-0.5", s.sensor === "Sentinel-2" ? "text-afya-green" : "text-afya-rain")}>
-                      {s.sensor}
-                    </div>
-                    <div className="text-xs font-semibold text-afya-charcoal">{s.label}</div>
-                    <div className="text-[10px] text-afya-muted mt-0.5">{s.acquired}</div>
-                  </button>
-                ))}
+            {satellites.length === 0 ? (
+              // An empty strip behind two dead arrows said nothing about why.
+              <p className="text-xs text-afya-muted">
+                {satelliteConfigured ? t("context_unavailable") : t("map_satellite_not_configured")}
+              </p>
+            ) : (
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                <button
+                  onClick={() => setSatIdx((i) => Math.max(0, i - 1))}
+                  disabled={satIdx === 0}
+                  className="p-1.5 rounded-lg text-afya-muted hover:bg-afya-canvas disabled:opacity-30 shrink-0"
+                  aria-label="Previous acquisition"
+                >
+                  <ChevronLeft className="w-4 h-4" strokeWidth={2} />
+                </button>
+                <div className="flex gap-2 flex-1">
+                  {satellites.map((s, i) => (
+                    <button
+                      key={s.id}
+                      onClick={() => setSatIdx(i)}
+                      aria-pressed={satIdx === i}
+                      className={cn(
+                        "flex-1 min-w-[100px] rounded-xl border px-3 py-2.5 text-left transition-all shrink-0",
+                        satIdx === i ? "border-afya-green bg-afya-green/8" : "border-afya-border hover:border-afya-green/40",
+                      )}
+                    >
+                      <div className={cn("text-[10px] font-bold uppercase tracking-wide mb-0.5", s.sensor === "Sentinel-2" ? "text-afya-green" : "text-afya-rain")}>
+                        {s.sensor}
+                      </div>
+                      <div className="text-xs font-semibold text-afya-charcoal">{s.label}</div>
+                      <div className="text-[10px] text-afya-muted mt-0.5">{s.acquired}</div>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setSatIdx((i) => Math.min(satellites.length - 1, i + 1))}
+                  disabled={satIdx === satellites.length - 1}
+                  className="p-1.5 rounded-lg text-afya-muted hover:bg-afya-canvas disabled:opacity-30 shrink-0"
+                  aria-label="Next acquisition"
+                >
+                  <ChevronRight className="w-4 h-4" strokeWidth={2} />
+                </button>
               </div>
-              <button
-                onClick={() => setSatIdx((i) => Math.min(satellites.length - 1, i + 1))}
-                disabled={satIdx === satellites.length - 1}
-                className="p-1.5 rounded-lg text-afya-muted hover:bg-afya-canvas disabled:opacity-30 shrink-0"
-                aria-label="Next acquisition"
-              >
-                <ChevronRight className="w-4 h-4" strokeWidth={2} />
-              </button>
-            </div>
+            )}
 
             {sat && showSatTimeline && (
               <div className="mt-3 rounded-xl border border-afya-border bg-afya-canvas/50 px-4 py-3 space-y-1">
@@ -346,6 +317,70 @@ export default function MapPage() {
   );
 }
 
+// The four hours the outlook and thermal layers are drawn for
+function TimeStrip({
+  timeIdx, setTimeIdx, playing, setPlaying, t,
+}: {
+  timeIdx: number;
+  setTimeIdx: React.Dispatch<React.SetStateAction<number>>;
+  playing: boolean;
+  setPlaying: React.Dispatch<React.SetStateAction<boolean>>;
+  t: (k: string) => string;
+}) {
+  return (
+    <div className="flex items-center gap-3 px-4 pt-3.5 pb-3 border-b border-afya-border">
+      <div className="flex items-center gap-1.5">
+        <button
+          onClick={() => setTimeIdx((i) => Math.max(0, i - 1))}
+          disabled={timeIdx === 0}
+          className="p-1.5 rounded-lg text-afya-muted hover:bg-afya-canvas disabled:opacity-30 transition-colors"
+          aria-label="Previous time step"
+        >
+          <ChevronLeft className="w-4 h-4" strokeWidth={2} />
+        </button>
+        <button
+          onClick={() => setPlaying((p) => !p)}
+          className="p-1.5 rounded-lg text-afya-muted hover:bg-afya-canvas transition-colors"
+          aria-label={playing ? t("pause") : t("play")}
+          aria-pressed={playing}
+        >
+          {playing ? <Pause className="w-4 h-4" strokeWidth={2} /> : <Play className="w-4 h-4" strokeWidth={2} />}
+        </button>
+        <button
+          onClick={() => setTimeIdx((i) => Math.min(TIMES.length - 1, i + 1))}
+          disabled={timeIdx === TIMES.length - 1}
+          className="p-1.5 rounded-lg text-afya-muted hover:bg-afya-canvas disabled:opacity-30 transition-colors"
+          aria-label="Next time step"
+        >
+          <ChevronRight className="w-4 h-4" strokeWidth={2} />
+        </button>
+      </div>
+      <div className="flex-1 flex justify-around">
+        {TIMES.map((time, i) => (
+          <button
+            key={time}
+            onClick={() => { setTimeIdx(i); setPlaying(false); }}
+            aria-pressed={timeIdx === i}
+            className={cn(
+              "rounded-lg px-2 py-1 text-xs font-bold transition-colors",
+              timeIdx === i ? "bg-afya-deep text-white" : "text-afya-muted hover:text-afya-charcoal",
+            )}
+          >
+            {time}
+          </button>
+        ))}
+      </div>
+      <span className="text-[11px] text-afya-muted font-mono">{TIMES[timeIdx]} EAT</span>
+    </div>
+  );
+}
+
+/** What this county actually has behind it, rather than the full roster. */
+function regionalSubKey(p: CountyFeature["properties"]): string {
+  if (!p.sources.length) return "regional_intelligence_sub_none";
+  return p.ndvi_mean != null ? "regional_intelligence_sub_ndvi" : "regional_intelligence_sub";
+}
+
 // County detail panel
 function CountyPanel({
   county, timeIdx, onClose, lang, t,
@@ -380,7 +415,7 @@ function CountyPanel({
         {hasGround ? t("ground_regional_intelligence") : t("regional_intelligence")}
       </div>
       <p className="text-[10px] text-afya-muted/70 mb-3 -mt-2">
-        {hasGround ? t("ground_regional_sub") : t("regional_intelligence_sub")}
+        {hasGround ? t("ground_regional_sub") : t(regionalSubKey(p))}
       </p>
 
       {p.outlook_category ? (
@@ -430,7 +465,7 @@ function CountyPanel({
           {[
             { l: t("map_temp_vs_mean"), v: p.temperature_anomaly_c == null ? unavailable : `${p.temperature_anomaly_c >= 0 ? "+" : ""}${p.temperature_anomaly_c}°C` },
             { l: t("map_rain_today"), v: fmt(p.rain_today_mm, 1, " mm") },
-            { l: t("map_soil_0_1"), v: p.soil_moisture == null ? unavailable : `${(p.soil_moisture * 100).toFixed(0)}%` },
+            { l: t("map_soil_0_7"), v: p.soil_moisture == null ? unavailable : `${(p.soil_moisture * 100).toFixed(0)}%` },
             { l: "NDVI", v: p.ndvi_mean !== null ? p.ndvi_mean.toFixed(2) : "-" },
             { l: t("confidence"), v: p.confidence },
           ].map((ind, i) => (
@@ -503,7 +538,7 @@ function StationPanel({
           </div>
           <div className="flex items-center justify-between text-xs">
             <span className="text-afya-muted">{t("data_quality")}</span>
-            <span className="font-semibold text-afya-green">{situation.quality.status}</span>
+            <span className="font-semibold text-afya-green">{t(`quality_${situation.quality.status.toLowerCase()}`)}</span>
           </div>
           <Link
             href="/situation"
@@ -539,7 +574,7 @@ function ExplainOutlookWidget({ lang, t, county }: {
       const data = await res.json();
       setAnswer(data.explanation);
     } catch {
-      setAnswer(t("no_ai"));
+      setAnswer(t("error_generic"));
     } finally {
       setLoading(false);
     }

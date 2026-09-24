@@ -73,7 +73,7 @@ export function alignToStep(ms: number): number {
 }
 
 /** Spacing of a forecast series: 15 minutes for the station's, an hour for the regional one. */
-function seriesStepMs(series: ForecastPoint[]): number {
+export function seriesStepMs(series: ForecastPoint[]): number {
   let step = Infinity;
   for (let i = 1; i < series.length; i++) {
     const gap = Date.parse(series[i].time) - Date.parse(series[i - 1].time);
@@ -109,8 +109,11 @@ export function windowPoints(
 export interface BestTimeOptions {
   /** No window starts before this; it is rounded up to the next quarter hour. */
   nowIso?: string;
-  /** Chance of rain, 0 to 1: one value for the whole range, or one per forecast time. */
-  rainProbability?: number | ((iso: string) => number);
+  /**
+   * Chance of rain, 0 to 1: one value for the whole range, or one per forecast
+   * time, which returns null for a time its model does not reach.
+   */
+  rainProbability?: number | ((iso: string) => number | null);
   /** Keep every window between sunrise and sunset. On by default: all activity profiles are outdoors. */
   daylightOnly?: boolean;
 }
@@ -119,6 +122,8 @@ export interface BestTimeOptions {
 export interface JudgedWindow extends BestWindow {
   peak_wbgt_c: number;
   risk: RiskLevel;
+  /** Half the forecast interval, averaged over the window's points, in °C. */
+  band_c: number;
 }
 
 /** How the recommended window was covered: every point inside it, all present. */
@@ -197,12 +202,17 @@ export function findBestTime(
       riskRank: riskRank(risk),
       peak,
       mean: values.reduce((a, b) => a + b, 0) / values.length,
-      rain: rainAt ? Math.max(...points.map((p) => rainAt(p.time))) : null,
+      rain: rainAt ? windowRain(points, rainAt) : null,
       uncertainty: points.reduce((a, p) => a + (p.upper - p.lower), 0) / points.length,
       points,
     });
   }
   if (!candidates.length) return null;
+
+  // Rain ranks the windows only when the model reaches all of them. Ranking a
+  // mixed field on it would order windows by how much is known about them
+  // rather than by how much rain they hold.
+  const rankOnRain = candidates.every((c) => c.rain !== null);
 
   // Lexicographic ranking:
   // 1. avoid worse risk categories
@@ -213,9 +223,7 @@ export function findBestTime(
   const ranked = [...candidates].sort((a, b) => {
     if (a.riskRank !== b.riskRank) return a.riskRank - b.riskRank;
     if (Math.abs(a.peak - b.peak) > 0.05) return a.peak - b.peak;
-    const rainA = a.rain ?? 0;
-    const rainB = b.rain ?? 0;
-    if (Math.abs(rainA - rainB) > 0.01) return rainA - rainB;
+    if (rankOnRain && Math.abs(a.rain! - b.rain!) > 0.01) return a.rain! - b.rain!;
     if (Math.abs(a.uncertainty - b.uncertainty) > 0.1) return a.uncertainty - b.uncertainty;
     return a.mean - b.mean;
   });
@@ -234,6 +242,7 @@ export function findBestTime(
       reasons: reasonsFor(best, candidates, quality),
       peak_wbgt_c: best.peak,
       risk: best.risk,
+      band_c: Math.round((best.uncertainty / 2) * 100) / 100,
     },
     alternative: alt ? { start: iso(alt.startMs), end: iso(alt.endMs) } : null,
     activity: activityKey,
@@ -245,6 +254,21 @@ export function findBestTime(
       forecast_to: iso(lastPoint + stepMs),
     },
   };
+}
+
+/**
+ * The worst chance of rain over a window, and only when the rain model reaches
+ * every point in it: a window it reaches part of is left without a chance
+ * rather than given the lowest value it happens to cover.
+ */
+function windowRain(points: ForecastPoint[], rainAt: (iso: string) => number | null): number | null {
+  let worst = 0;
+  for (const p of points) {
+    const at = rainAt(p.time);
+    if (at === null) return null;
+    worst = Math.max(worst, at);
+  }
+  return worst;
 }
 
 // Only reasons that hold for this window.

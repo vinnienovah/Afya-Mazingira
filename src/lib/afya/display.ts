@@ -93,6 +93,9 @@ export function bandGeometry(
 }
 
 export const SLOT_MS = 15 * 60_000;
+// The grace sources.ts allows a feed past its own cadence before it charges
+// the time as missing.
+const GAP_GRACE_MINUTES = 4;
 
 export interface StateSpan {
   state_id: StateId;
@@ -155,6 +158,68 @@ export function timeOfDayGapHours(aIso: string, bIso: string): number {
   const hourOfDay = (iso: string) => (((Date.parse(iso) / 3600_000) % 24) + 24) % 24;
   const gap = Math.abs(hourOfDay(aIso) - hourOfDay(bIso));
   return Math.min(gap, 24 - gap);
+}
+
+/**
+ * Whole Nairobi days between two instants. The gap in time of day says nothing
+ * about this: a reanalysis published days behind can still land on the same
+ * hour of the clock and read as directly comparable.
+ */
+export function calendarGapDays(aIso: string, bIso: string): number {
+  const day = (iso: string) => Math.floor((Date.parse(iso) + EAT_OFFSET_MS) / 86400_000);
+  return Math.abs(day(aIso) - day(bIso));
+}
+
+export interface LiveWindow {
+  /** First and last reading the run covers, and the hours between them. */
+  from: string;
+  to: string;
+  hours: number;
+  /** Minutes since the last reading, once it is more than one slot late. */
+  silent_minutes: number;
+  /** Minutes with no reading: the gaps inside the run and the silence since it. */
+  missing_minutes: number;
+  /** Readings landing inside the `of_hours` before now, and how many a full window holds. */
+  read_slots: number;
+  of_slots: number;
+  of_hours: number;
+}
+
+/**
+ * What a run of readings covers, against the window it is meant to fill. A
+ * station that stops reporting leaves no gap behind its last reading, so the
+ * gaps inside the run never account for the silence since: without counting it
+ * a station that died yesterday reads as a full window with nothing missing.
+ */
+export function liveWindow(
+  series: { ts: string; gap_minutes?: number }[],
+  nowMs: number,
+  windowHours = 24,
+): LiveWindow | null {
+  if (!series.length) return null;
+  const from = series[0].ts;
+  const to = series[series.length - 1].ts;
+  const toMs = Date.parse(to);
+  // Each reading stands for the quarter hour around it, so a full run of
+  // `n` slots covers one slot more than its first and last are apart.
+  const hours = Math.max(1, Math.round((toMs - Date.parse(from) + SLOT_MS) / 3600_000));
+  // Silence runs from one slot after the last reading, and is charged only
+  // once it is further past that than the cadence grace the feed allows, so
+  // ordinary jitter between readings is not reported as missing time.
+  const overdue = (nowMs - toMs) / 60_000 - SLOT_MS / 60_000;
+  const silent = overdue > GAP_GRACE_MINUTES ? Math.round(overdue) : 0;
+  // On the slot grid, so a feed that is up to date reads as a full window.
+  const start = Math.floor((nowMs - windowHours * 3600_000) / SLOT_MS) * SLOT_MS;
+  return {
+    from,
+    to,
+    hours,
+    silent_minutes: silent,
+    missing_minutes: Math.round(series.reduce((s, o) => s + (o.gap_minutes ?? 0), 0) + silent),
+    read_slots: series.filter((o) => Date.parse(o.ts) >= start).length,
+    of_slots: Math.round((windowHours * 3600_000) / SLOT_MS),
+    of_hours: windowHours,
+  };
 }
 
 /** The days behind the rainfall totals, both ending today; null when rainfall is unavailable. */

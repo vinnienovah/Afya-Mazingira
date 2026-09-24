@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { usePreferredActivity, useSituation } from "@/lib/contexts/situation";
 import { useLanguage } from "@/lib/contexts/language";
-import { ACTIVITY_PROFILES, STATES } from "@/lib/afya/constants";
+import { ACTIVITY_PROFILES, RISK_META, STATES } from "@/lib/afya/constants";
 import { fill, fmtAsOf, fmtSigned, fmtTime } from "@/lib/afya/format";
+import { STRINGS } from "@/lib/afya/i18n";
 import { nextStateNote } from "@/lib/afya/display";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { StateChip } from "@/components/ui/StateChip";
@@ -69,12 +70,23 @@ export default function OperationsPage() {
   const era5Ok = !!era5 && era5.available !== false;
   const anomaly = era5Ok ? era5.local_temp_anomaly_c : null;
   const soil = era5Ok ? era5.era5_soil_moisture : null;
+  // The band and the quality status are codes, so each language takes its own
+  // label rather than the raw value.
+  const qualityKey = (status: string) => `quality_${status.toLowerCase()}`;
   const alerts = [
-    ...(situation && situation.risk.thermal === "HIGH" || situation?.risk.thermal === "VERY_HIGH"
-      ? [{ severity: "high", text_en: `Thermal exposure ${situation.risk.thermal} in forecast`, text_sw: `Kupatwa na joto ${situation.risk.thermal} katika utabiri` }]
+    ...(situation && (situation.risk.thermal === "HIGH" || situation.risk.thermal === "VERY_HIGH")
+      ? [{
+          severity: "high",
+          text_en: `Thermal exposure ${RISK_META[situation.risk.thermal].en} in forecast`,
+          text_sw: `Kupatwa na joto ${RISK_META[situation.risk.thermal].sw} katika utabiri`,
+        }]
       : []),
     ...(situation && situation.quality.status !== "GOOD"
-      ? [{ severity: "medium", text_en: `Data quality is ${situation.quality.status}`, text_sw: `Ubora wa data ni ${situation.quality.status}` }]
+      ? [{
+          severity: "medium",
+          text_en: `Data quality is ${STRINGS.en[qualityKey(situation.quality.status)]}`,
+          text_sw: `Ubora wa data ni ${STRINGS.sw[qualityKey(situation.quality.status)]}`,
+        }]
       : []),
     ...(situation && situation.risk.rain_probability > 0.4
       ? [{ severity: "medium", text_en: "Elevated rain signal in forecast", text_sw: "Ishara iliyoongezeka ya mvua katika utabiri" }]
@@ -156,7 +168,7 @@ export default function OperationsPage() {
           <div className="text-2xl font-bold text-afya-charcoal">{f3h ? `${f3h.value.toFixed(1)}°C` : "-"}</div>
           {f3h && (
             <div className="text-[11px] text-afya-muted mt-0.5">
-              {f3h.lower.toFixed(1)}–{f3h.upper.toFixed(1)}°C · {situation?.risk.thermal}
+              {f3h.lower.toFixed(1)}–{f3h.upper.toFixed(1)}°C · {situation ? (lang === "sw" ? RISK_META[situation.risk.thermal].sw : RISK_META[situation.risk.thermal].en) : ""}
             </div>
           )}
         </Card>

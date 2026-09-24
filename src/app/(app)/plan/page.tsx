@@ -5,7 +5,7 @@ import { useLanguage } from "@/lib/contexts/language";
 import { useAuth } from "@/lib/contexts/auth";
 import { ACTIVITY_PROFILES, RISK_META } from "@/lib/afya/constants";
 import { usePreferredActivity } from "@/lib/contexts/situation";
-import { fmtDate, fmtTime, fmtWindow } from "@/lib/afya/format";
+import { fmtDate, fmtDateTimeShort, fmtTime, fmtWindow } from "@/lib/afya/format";
 import { tf } from "@/lib/afya/i18n";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -19,6 +19,9 @@ import type { BestTimeResult, QualityStatus } from "@/lib/afya/types";
 import type { SavedResult } from "@/lib/afya/activity-plan";
 
 const DURATIONS = [30, 60, 90, 120, 180];
+// Today, tomorrow and the day after: the regional forecast runs three days
+// from midnight UTC, so the day after that is only reachable before sunrise.
+const DAY_KEYS = ["plan_day_today", "plan_day_tomorrow", "plan_day_after"];
 // From this hour little daylight is left, so the form starts on tomorrow.
 const LATE_HOUR = 17;
 const EAT_OFFSET_MS = 3 * 3600 * 1000;
@@ -85,7 +88,7 @@ export default function PlanPage() {
   const [duration, setDuration] = useState(90);
   const [chosenStart, setChosenStart] = useState<number | null>(null);
   const [endHour, setEndHour] = useState(18);
-  const [chosenDay, setChosenDay] = useState<number | null>(null); // 0 = today, 1 = tomorrow
+  const [chosenDay, setChosenDay] = useState<number | null>(null); // days ahead of today
   const [planName, setPlanName] = useState("");
 
   const dayOffset = chosenDay ?? (nowHour !== null && nowHour >= LATE_HOUR ? 1 : 0);
@@ -106,6 +109,8 @@ export default function PlanPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [editingPlan, setEditingPlan] = useState<SavedPlan | null>(null);
   const [rerunning, setRerunning] = useState<number | null>(null);
+  // Deleting is not undoable, so the row asks first.
+  const [confirmingDelete, setConfirmingDelete] = useState<number | null>(null);
 
   const profileOf = (key: string) => ACTIVITY_PROFILES.find((p) => p.key === key) ?? ACTIVITY_PROFILES[0];
   const labelOf = (key: string) => (lang === "sw" ? profileOf(key).label_sw : profileOf(key).label_en);
@@ -141,7 +146,13 @@ export default function PlanPage() {
     if (data.error === "quality_poor") return t("quality_poor_message");
     const key = `plan_error_${data.error}`;
     if (data.error && t(key) !== key) {
-      const times = Object.fromEntries(Object.entries(data.details ?? {}).map(([k, v]) => [k, fmtTime(v)]));
+      // A time on another day needs its date, or "03:00" reads as today.
+      const times = Object.fromEntries(
+        Object.entries(data.details ?? {}).map(([k, v]) => [
+          k,
+          eatDay(Date.parse(v)) === eatDay(Date.now()) ? fmtTime(v) : fmtDateTimeShort(v),
+        ]),
+      );
       return tf(lang, key, times);
     }
     return data.message ?? t("error_generic");
@@ -220,6 +231,7 @@ export default function PlanPage() {
   }
 
   async function deletePlan(id: number) {
+    setConfirmingDelete(null);
     await fetch(`/api/plans/${id}`, { method: "DELETE", credentials: "include" });
     if (editingPlan?.id === id) setEditingPlan(null);
     loadPlans();
@@ -236,7 +248,7 @@ export default function PlanPage() {
     setDuration(plan.duration_minutes);
     setChosenStart(eatHour(plan.available_start));
     setEndHour(eatHour(plan.available_end));
-    setChosenDay(Math.min(1, Math.max(0, eatDay(Date.parse(plan.available_start)) - eatDay(Date.now()))));
+    setChosenDay(Math.min(DAY_KEYS.length - 1, Math.max(0, eatDay(Date.parse(plan.available_start)) - eatDay(Date.now()))));
     setPlanName(plan.name);
     setResult(shown);
     setResultFor(shown ? {
@@ -356,24 +368,24 @@ export default function PlanPage() {
           <Card>
             <CardTitle>{t("when_available")}</CardTitle>
             <div className="flex gap-2 mb-3">
-              {[0, 1].map((offset) => (
+              {DAY_KEYS.map((key, offset) => (
                 <button
-                  key={offset}
+                  key={key}
                   onClick={() => changed(setChosenDay)(offset)}
                   aria-pressed={dayOffset === offset}
                   className={cn(
-                    "flex-1 rounded-xl border px-3 py-2 text-sm font-semibold transition-all",
+                    "flex-1 rounded-xl border px-2 py-2 text-sm font-semibold transition-all",
                     dayOffset === offset
                       ? "border-afya-green bg-afya-green text-white"
                       : "border-afya-border text-afya-charcoal hover:border-afya-green/50",
                   )}
                 >
-                  {offset === 0 ? t("plan_day_today") : t("plan_day_tomorrow")}
+                  {t(key)}
                 </button>
               ))}
             </div>
-            {dayOffset === 1 && (
-              <p className="text-xs text-afya-muted mb-3">{t("plan_day_tomorrow_note")}</p>
+            {dayOffset > 0 && (
+              <p className="text-xs text-afya-muted mb-3">{t("plan_day_ahead_note")}</p>
             )}
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -484,8 +496,15 @@ export default function PlanPage() {
                 style={{ background: "linear-gradient(135deg, #006B3C 0%, #054f2d 100%)" }}
               >
                 <div className="p-6 sm:p-7 text-white">
-                  <div className="text-xs font-bold text-white/60 uppercase tracking-widest mb-3">
-                    {t("best_window_result")}
+                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                    <span className="text-xs font-bold text-white/60 uppercase tracking-widest">
+                      {t("best_window_result")}
+                    </span>
+                    {result.source === "regional" && (
+                      <span className="rounded-full border border-afya-gold/50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-afya-gold">
+                        {t("plan_source_regional")}
+                      </span>
+                    )}
                   </div>
                   <div
                     className="text-4xl sm:text-5xl font-bold mb-1"
@@ -498,14 +517,25 @@ export default function PlanPage() {
                   </div>
 
                   {result.recommended.risk && result.recommended.peak_wbgt_c !== undefined && (
-                    <div className="flex flex-wrap items-center gap-2 mb-5">
-                      <RiskChip level={result.recommended.risk} size="sm" onDark />
-                      <span className="text-sm text-white/85">
-                        {tf(lang, "plan_window_peak", {
-                          wbgt: result.recommended.peak_wbgt_c.toFixed(1),
-                          band: bandLabel(result.recommended.risk),
-                        })}
-                      </span>
+                    <div className="mb-5 space-y-1.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <RiskChip level={result.recommended.risk} size="sm" onDark />
+                        <span className="text-sm text-white/85">
+                          {tf(lang, "plan_window_peak", {
+                            wbgt: result.recommended.peak_wbgt_c.toFixed(1),
+                            band: bandLabel(result.recommended.risk),
+                          })}
+                        </span>
+                      </div>
+                      {/* The band the peak was ranked on: the model's for the
+                          station, the wider judgement one for the regional. */}
+                      {result.recommended.band_c !== undefined && (
+                        <p className="text-xs text-white/60">
+                          {tf(lang, result.source === "regional" ? "plan_window_band_regional" : "plan_window_band_station", {
+                            spread: result.recommended.band_c.toFixed(1),
+                          })}
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -652,6 +682,24 @@ export default function PlanPage() {
                           </div>
                         )}
                       </div>
+                      {confirmingDelete === plan.id ? (
+                      <div className="flex items-center gap-2 shrink-0" role="group" aria-label={`${t("delete")} · ${plan.name}`}>
+                        <span className="text-xs text-afya-charcoal">{t("confirm")}</span>
+                        <button
+                          onClick={() => deletePlan(plan.id)}
+                          autoFocus
+                          className="rounded-lg bg-afya-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-afya-red/90 transition-colors"
+                        >
+                          {t("yes")}
+                        </button>
+                        <button
+                          onClick={() => setConfirmingDelete(null)}
+                          className="rounded-lg border border-afya-border px-3 py-1.5 text-xs font-semibold text-afya-muted hover:text-afya-charcoal transition-colors"
+                        >
+                          {t("no")}
+                        </button>
+                      </div>
+                      ) : (
                       <div className="flex gap-1.5 shrink-0">
                         <button
                           onClick={() => rerunPlan(plan)}
@@ -680,7 +728,7 @@ export default function PlanPage() {
                           <Copy className="w-4 h-4" strokeWidth={1.8} />
                         </button>
                         <button
-                          onClick={() => deletePlan(plan.id)}
+                          onClick={() => setConfirmingDelete(plan.id)}
                           title={t("delete")}
                           className="p-2 rounded-lg text-afya-muted hover:bg-afya-red/10 hover:text-afya-red transition-colors"
                           aria-label={t("delete")}
@@ -688,6 +736,7 @@ export default function PlanPage() {
                           <Trash2 className="w-4 h-4" strokeWidth={1.8} />
                         </button>
                       </div>
+                      )}
                     </div>
                   </Card>
                   );
@@ -741,7 +790,7 @@ function PlanWhySection({ result, lang, t }: {
       const data = await res.json();
       setAiText(data.explanation);
     } catch {
-      setAiText(t("no_ai"));
+      setAiText(t("error_generic"));
     } finally {
       setLoadingAi(false);
     }

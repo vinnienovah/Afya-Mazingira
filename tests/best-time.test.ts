@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   alignToStep, findBestTime, findBestWindowFromNow, isDaylight, sunTimes, windowPoints,
 } from "../src/lib/afya/best-time-engine";
+import { rainProbabilityAt } from "../src/lib/afya/risk-engine";
 import type { DataQuality, ForecastPoint } from "../src/lib/afya/types";
 
 const GOOD: DataQuality = { status: "GOOD", freshness_minutes: 10, flags: [], updated_at: "2026-09-01T06:00:00.000Z" };
@@ -122,6 +123,34 @@ test("low rain is only claimed when a rain chance is given and it is low", () =>
   const byTime = findBestTime("general", 60, eat("09:00"), eat("12:00"), points, GOOD, { rainProbability: wetLater })!;
   assert.equal(byTime.recommended.start, eat("09:00"));
   assert.ok(byTime.recommended.reasons.includes("reason_low_rain"));
+});
+
+test("a window the rain model does not reach in full is left without a rain claim", () => {
+  const points = series(Array.from({ length: 37 }, () => 20), Date.parse(eat("09:00")));
+  const rainProbability = rainProbabilityAt(0.05, eat("09:00")); // covers 09:00 to 12:00
+  const reasons = (from: string, to: string) =>
+    findBestTime("general", 60, from, to, points, GOOD, { rainProbability })!.recommended.reasons;
+  assert.ok(reasons(eat("09:00"), eat("10:00")).includes("reason_low_rain"));
+  // A window whose last forecast point is the model's last minute still holds.
+  assert.ok(reasons(eat("11:00"), eat("12:00")).includes("reason_low_rain"));
+  // One that starts past the model does not, and neither does one hours beyond it.
+  assert.ok(!reasons(eat("12:15"), eat("13:15")).includes("reason_low_rain"));
+  assert.ok(!reasons(eat("14:00"), eat("16:00")).includes("reason_low_rain"));
+});
+
+test("rain ranks the windows only when the model reaches every one of them", () => {
+  const points = series(Array.from({ length: 37 }, () => 20), Date.parse(eat("09:00")));
+  // Known and wet early, unknown later: the field is mixed, so rain is left
+  // out of the ranking and the earliest window still wins on the tie-breakers.
+  const wetEarly = (iso: string) => (Date.parse(iso) < Date.parse(eat("11:00")) ? 0.6 : null);
+  const mixed = findBestTime("general", 60, eat("09:00"), eat("13:00"), points, GOOD, { rainProbability: wetEarly })!;
+  assert.equal(mixed.recommended.start, eat("09:00"));
+  assert.ok(!mixed.recommended.reasons.includes("reason_low_rain"));
+  // Known throughout: the driest window wins.
+  const wetFirst = (iso: string) => (Date.parse(iso) < Date.parse(eat("11:00")) ? 0.6 : 0.05);
+  const known = findBestTime("general", 60, eat("09:00"), eat("13:00"), points, GOOD, { rainProbability: wetFirst })!;
+  assert.equal(known.recommended.start, eat("11:00"));
+  assert.ok(known.recommended.reasons.includes("reason_low_rain"));
 });
 
 test("lower exposure and data quality are only claimed when they hold", () => {

@@ -10,8 +10,10 @@ export default function ServiceWorkerRegister() {
     if (!("serviceWorker" in navigator)) return;
     // Register after load to avoid competing with critical resources
     const register = () => {
-      navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {
-        // Registration failure is non-fatal, app remains fully functional
+      // Non-fatal: the app still works, but offline support and push do not,
+      // and a silent failure leaves no way to tell that is why.
+      navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch((err: unknown) => {
+        console.warn("[afya] service worker registration failed, offline support and push are off:", err);
       });
     };
     if (document.readyState === "complete") register();

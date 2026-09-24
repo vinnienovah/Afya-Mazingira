@@ -7,6 +7,7 @@ import TopBar from "./TopBar";
 import MobileNav from "./MobileNav";
 import ServiceWorkerRegister from "@/components/pwa/ServiceWorkerRegister";
 import CommandPalette from "@/components/command/CommandPalette";
+import DocumentTitle from "./DocumentTitle";
 
 const AUTH_PATHS = ["/sign-in", "/sign-up"];
 
@@ -18,6 +19,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
     return (
       <>
         <ServiceWorkerRegister />
+        <DocumentTitle />
         {children}
       </>
     );
@@ -26,6 +28,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-screen overflow-hidden bg-afya-canvas">
       <ServiceWorkerRegister />
+      <DocumentTitle />
       {/* Desktop sidebar */}
       <div className="hidden lg:flex lg:shrink-0">
         <Sidebar />

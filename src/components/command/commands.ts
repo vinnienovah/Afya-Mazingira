@@ -18,7 +18,7 @@ export const PALETTE_LINKS: PaletteLink[] = [
   { id: "p-climate", group: "pages", labelKey: "nav_climate", href: "/climate", keywords: "dashboard climate history variables live dashibodi historia hali ya hewa" },
   { id: "p-intelligence", group: "pages", labelKey: "nav_intelligence", href: "/intelligence", keywords: "why intelligence model contributors ujasusi" },
   { id: "p-operations", group: "pages", labelKey: "nav_operations", href: "/operations", keywords: "operations institutional command uendeshaji" },
-  { id: "p-flood", group: "pages", labelKey: "nav_flood", href: "/flood", keywords: "flood rain soil saturation mafuriko mvua udongo" },
+  { id: "p-flood", group: "pages", labelKey: "nav_flood", href: "/flood", keywords: "flood conditions rain soil saturation mafuriko hali mvua udongo" },
   { id: "p-health", group: "pages", labelKey: "nav_health", href: "/health", keywords: "station health quality sensors sentinel afya kituo" },
   { id: "p-replay", group: "pages", labelKey: "nav_replay", href: "/climate?tab=replay", keywords: "replay historical simulation marudio" },
   { id: "p-stories", group: "pages", labelKey: "nav_stories", href: "/stories", keywords: "stories scenarios examples illustrative hadithi mifano" },

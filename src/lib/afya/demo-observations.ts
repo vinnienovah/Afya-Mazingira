@@ -36,16 +36,31 @@ export interface DemoObservation {
   // Fields in this slot that were carried forward or defaulted rather than
   // measured. Absent or empty when every value was observed.
   imputed?: string[];
-  // Channels whose reading here broke a hard limit (Sentinel R01 to R04). The
+  // Channels whose reading here broke a hard limit (Sentinel R01 to R05). The
   // reading was dropped and the slot filled like any other gap.
   rejected?: string[];
-  // Minutes of this slot inside a gap between readings: time from 15 minutes
-  // after one reading to the next, when they are more than 20 minutes apart.
+  // Channels whose raw reading broke a rule that only the raw reading shows,
+  // because combining a slot's readings would hide it (Sentinel R10).
+  raw_faults?: string[];
+  // Minutes of this slot inside a gap between readings: time from one cadence
+  // interval after a reading to the next one, when the two are further apart
+  // than the cadence plus four minutes.
   gap_minutes?: number;
+  // The readings either side of that silence, so it can be reported at the
+  // times it really ran between rather than at the slot boundaries.
+  gap?: { from: string; to: string };
+  // Readings in this slot that arrived a whole cadence interval or more after
+  // the one before, without leaving a gap behind them (Sentinel R14, "late").
+  // Absent when none did.
+  late_intervals?: number;
   // The gust-direction column, read only to check whether the export copies
   // the gust speed into it (Sentinel R13). Never used as a direction.
   wind_gust_dir?: number | null;
   battery_v?: number | null;
+  // The station's own device health code (Sentinel R15), where the export
+  // carries one. A code, not a measurement: never averaged or filled, and
+  // absent rather than zero where no export carries it.
+  health_code?: number | null;
 }
 
 // Seeded pseudo-random for reproducibility
